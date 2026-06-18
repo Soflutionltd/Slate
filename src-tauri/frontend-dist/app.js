@@ -10083,6 +10083,89 @@ window.addEventListener('resize', () => {
 	}
 });
 
+// ── Mise à jour automatique ─────────────────────────────────────────────
+let _updateInProgress = false;
+
+async function checkForUpdates() {
+	try {
+		const info = await invokeCommand('check_for_update');
+		if (info && info.version) showUpdateToast(info);
+	} catch (_) {
+		// Vérification silencieuse : aucune mise à jour ou réseau indisponible.
+	}
+}
+
+function showUpdateToast(info) {
+	if (document.getElementById('slate-update-toast')) return;
+	const fr = currentLocale() === 'fr';
+	const toast = document.createElement('div');
+	toast.id = 'slate-update-toast';
+	toast.className = 'slate-update-toast';
+	toast.setAttribute('role', 'alert');
+	toast.innerHTML = `
+		<div class="slate-update-toast-body">
+			<span class="slate-update-toast-icon" aria-hidden="true">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg>
+			</span>
+			<div class="slate-update-toast-text">
+				<div class="slate-update-toast-title">${fr ? 'Mise à jour disponible' : 'Update available'}</div>
+				<div class="slate-update-toast-sub">${fr ? `Slate ${info.version} est prêt à être installé.` : `Slate ${info.version} is ready to install.`}</div>
+			</div>
+		</div>
+		<div class="slate-update-toast-actions">
+			<button type="button" class="slate-update-later">${fr ? 'Plus tard' : 'Later'}</button>
+			<button type="button" class="slate-update-now">${fr ? 'Mettre à jour' : 'Update'}</button>
+		</div>
+		<div class="slate-update-progress" hidden><div class="slate-update-progress-bar"></div></div>
+	`;
+	document.body.appendChild(toast);
+	requestAnimationFrame(() => toast.classList.add('is-visible'));
+
+	toast.querySelector('.slate-update-later').addEventListener('click', () => dismissUpdateToast(toast));
+	toast.querySelector('.slate-update-now').addEventListener('click', () => void startUpdateInstall(toast));
+}
+
+function dismissUpdateToast(toast) {
+	toast.classList.remove('is-visible');
+	setTimeout(() => toast.remove(), 280);
+}
+
+async function startUpdateInstall(toast) {
+	if (_updateInProgress) return;
+	_updateInProgress = true;
+	const fr = currentLocale() === 'fr';
+	const actions = toast.querySelector('.slate-update-toast-actions');
+	const sub = toast.querySelector('.slate-update-toast-sub');
+	const progress = toast.querySelector('.slate-update-progress');
+	const bar = toast.querySelector('.slate-update-progress-bar');
+	if (actions) actions.remove();
+	if (progress) progress.hidden = false;
+	if (sub) sub.textContent = fr ? 'Téléchargement de la mise à jour…' : 'Downloading update…';
+
+	const tauriListen = window.__TAURI__?.event?.listen;
+	let unlisten = null;
+	if (tauriListen) {
+		unlisten = await tauriListen('slate-update-progress', (event) => {
+			const payload = event?.payload || {};
+			if (payload.total && bar) {
+				const pct = Math.min(100, Math.round((payload.downloaded / payload.total) * 100));
+				bar.style.width = `${pct}%`;
+			}
+		});
+	}
+
+	try {
+		// install_update télécharge, installe, puis redémarre l'app : on ne revient
+		// normalement jamais ici en cas de succès.
+		await invokeCommand('install_update');
+	} catch (err) {
+		_updateInProgress = false;
+		if (typeof unlisten === 'function') unlisten();
+		if (sub) sub.textContent = fr ? 'Échec de la mise à jour. Réessayez plus tard.' : 'Update failed. Please try again later.';
+		setStatus(fr ? 'La mise à jour a échoué.' : 'Update failed.', 'error');
+	}
+}
+
 bindTauriMenuEvents();
 setupTabsScrolling();
 setupPreciseSelectionOverlay();
@@ -10098,3 +10181,6 @@ renderHome();
 // Précharge le catalogue de polices au démarrage (liste prête dès la 1re ouverture
 // du panneau de mise en forme, et le backend a le temps de répondre).
 void ensureFontSelectPopulated();
+
+// Vérifie les mises à jour en arrière-plan, sans bloquer le démarrage.
+setTimeout(() => void checkForUpdates(), 3500);

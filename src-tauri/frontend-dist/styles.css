@@ -1432,6 +1432,7 @@ button:hover:not(:disabled),
 }
 
 .recent-card {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	text-align: left;
@@ -1442,6 +1443,41 @@ button:hover:not(:disabled),
 	overflow: hidden;
 	cursor: pointer;
 	transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.recent-card-remove {
+	position: absolute;
+	right: 8px;
+	bottom: 8px;
+	display: grid;
+	place-items: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: none;
+	border-radius: 999px;
+	background: rgba(20, 20, 22, 0.66);
+	color: #fff;
+	cursor: pointer;
+	opacity: 0;
+	transform: scale(0.8);
+	transition: opacity 0.15s ease, transform 0.15s ease, background 0.15s ease;
+	z-index: 4;
+}
+
+.recent-card-remove svg {
+	width: 13px;
+	height: 13px;
+}
+
+.recent-card:hover .recent-card-remove,
+.recent-card-remove:focus-visible {
+	opacity: 1;
+	transform: scale(1);
+}
+
+.recent-card-remove:hover {
+	background: #e5483f;
 }
 
 .recent-card:hover {
@@ -3751,4 +3787,122 @@ textarea {
 		flex-wrap: wrap;
 		height: auto;
 	}
+}
+
+/* ── Pop-up de mise à jour automatique ─────────────────────────────── */
+.slate-update-toast {
+	position: fixed;
+	left: 50%;
+	bottom: 28px;
+	z-index: 9999;
+	width: min(420px, calc(100vw - 32px));
+	transform: translate(-50%, 24px);
+	opacity: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	padding: 18px 20px;
+	border-radius: 18px;
+	background: rgba(18, 18, 20, 0.92);
+	-webkit-backdrop-filter: blur(20px);
+	backdrop-filter: blur(20px);
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 12px 40px rgba(0, 0, 0, 0.38);
+	color: #f4f4f5;
+	transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.slate-update-toast.is-visible {
+	opacity: 1;
+	transform: translate(-50%, 0);
+}
+
+.slate-update-toast-body {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+}
+
+.slate-update-toast-icon {
+	display: grid;
+	place-items: center;
+	width: 40px;
+	height: 40px;
+	flex: 0 0 auto;
+	border-radius: 12px;
+	background: var(--accent, #d2261c);
+	color: #fff;
+}
+
+.slate-update-toast-icon svg {
+	width: 20px;
+	height: 20px;
+}
+
+.slate-update-toast-text {
+	min-width: 0;
+}
+
+.slate-update-toast-title {
+	font-size: 15px;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+}
+
+.slate-update-toast-sub {
+	margin-top: 2px;
+	font-size: 13px;
+	color: rgba(244, 244, 245, 0.62);
+	line-height: 1.4;
+}
+
+.slate-update-toast-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 10px;
+}
+
+.slate-update-toast-actions button {
+	font: inherit;
+	font-size: 14px;
+	font-weight: 600;
+	padding: 9px 18px;
+	border-radius: 11px;
+	border: none;
+	cursor: pointer;
+	transition: all 0.18s ease;
+}
+
+.slate-update-later {
+	background: rgba(255, 255, 255, 0.08);
+	color: rgba(244, 244, 245, 0.85);
+}
+
+.slate-update-later:hover {
+	background: rgba(255, 255, 255, 0.14);
+}
+
+.slate-update-now {
+	background: var(--accent, #d2261c);
+	color: #fff;
+}
+
+.slate-update-now:hover {
+	transform: scale(1.03);
+	box-shadow: 0 6px 18px rgba(210, 38, 28, 0.4);
+}
+
+.slate-update-progress {
+	height: 6px;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.1);
+	overflow: hidden;
+}
+
+.slate-update-progress-bar {
+	height: 100%;
+	width: 0;
+	border-radius: 999px;
+	background: var(--accent, #d2261c);
+	transition: width 0.2s ease;
 }

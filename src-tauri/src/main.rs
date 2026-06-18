@@ -13,6 +13,10 @@ use sofdocs_desktop::{
     llm, ocr, pdf_compress, pdf_engine, pdf_forms, pdf_ops, pdf_sign, pdf_tools, system_fonts,
 };
 
+// Module local au binaire (pas dans la lib partagée) : l'auto-update n'est utile
+// qu'à l'app Tauri, pas au sidecar `alto-mcp`.
+mod updater;
+
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -819,6 +823,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(PendingOpens::default())
         .manage(DocCache::default())
         .setup(|app| {
@@ -1166,7 +1171,9 @@ fn main() {
             set_bookmarks,
             llm::llm_get_config,
             llm::llm_set_config,
-            llm::llm_chat
+            llm::llm_chat,
+            updater::check_for_update,
+            updater::install_update
         ])
         .build(tauri::generate_context!())
         .expect("error while building Alto desktop")
