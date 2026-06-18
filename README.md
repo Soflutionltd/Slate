@@ -48,6 +48,14 @@ or slow Electron apps wrapping a JavaScript renderer. Slate is different:
 
 ## ⬇️ Download
 
+<div align="center">
+  <a href="https://github.com/Soflutionltd/Slate/releases/latest">
+    <img src="docs/assets/download-button.png" alt="Download Slate for macOS" width="440">
+  </a>
+</div>
+
+<br>
+
 | Platform | Architecture | Status | Link |
 | --- | --- | --- | --- |
 | **macOS** | Apple Silicon (aarch64) | ✅ Signed & notarized | [**Download `.dmg`**](https://github.com/Soflutionltd/Slate/releases/latest) |
