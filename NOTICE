@@ -1,15 +1,18 @@
-Alto / SofDocs
+Slate
 Copyright (c) 2026 Soflution LTD
 
 This project is licensed under the GNU Affero General Public License v3.0
-or later.
+or later. See the LICENSE file for the full text.
 
-Portions of the office engine are intended to be derived from ONLYOFFICE
-source code and behavior. ONLYOFFICE source files are copyright Ascensio
-System SIA and are distributed under the GNU Affero General Public License
-v3.0. Any Rust module derived from ONLYOFFICE source must retain an explicit
-source reference and AGPL notice.
+--------------------------------------------------------------------------
+Third-party components
 
-ONLYOFFICE trademarks, logos, icons, illustrations, and branded UI assets
-are not licensed for use as Alto branding and must not be copied into this
-repository.
+Slate is distributed with the following open-source libraries, redistributed
+under their respective licenses. These notices are provided to satisfy the
+attribution requirements of those licenses.
+
+- PDFium — Copyright The PDFium Authors. BSD 3-Clause License.
+- lopdf  — Copyright the lopdf authors. MIT License.
+
+Full upstream license texts are available in the respective project
+repositories.

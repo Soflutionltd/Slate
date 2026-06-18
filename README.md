@@ -26,12 +26,11 @@ leave your machine.
 Most PDF editors are either heavyweight cloud suites that upload your documents,
 or slow Electron apps wrapping a JavaScript renderer. Slate is different:
 
-- **Native & fast.** A Rust core driving [PDFium](https://pdfium.googlesource.com/pdfium/)
-  and [`lopdf`](https://github.com/J-F-Liu/lopdf), wrapped in a thin
-  [Tauri v2](https://v2.tauri.app/) shell. CPU-bound work is parallelized with
-  [Rayon](https://github.com/rayon-rs/rayon).
+- **Native & fast.** A homemade Rust PDF engine wrapped in a thin
+  [Tauri v2](https://v2.tauri.app/) shell. Rendering and CPU-bound work are
+  multi-threaded, so pages load instantly even on large documents.
 - **Private by design.** Everything runs locally. No account, no server round
-  trips, no analytics. OCR uses Apple Vision on macOS (Tesseract fallback).
+  trips, no analytics. On-device OCR (Apple Vision on macOS).
 - **Genuinely free.** Licensed under the **GNU AGPL-3.0** — free to use, study,
   modify and share, and it stays that way.
 - **Polished.** A clean, Apple/Acrobat-grade interface focused on the document,
@@ -91,7 +90,7 @@ or slow Electron apps wrapping a JavaScript renderer. Slate is different:
 - Prepare new form fields
 
 ### Tools
-- **OCR:** add a searchable text layer (Apple Vision on macOS, Tesseract fallback)
+- **OCR:** add a searchable text layer (on-device, Apple Vision on macOS)
 - **Compress** to shrink file size while preserving quality
 - **Convert** between formats
 - **Redact** sensitive content
@@ -130,11 +129,11 @@ flowchart TD
         E6[pdf_tools · OCR · convert]
     end
 
-    subgraph NATIVE["Native libraries"]
-        P[PDFium]
-        L[lopdf]
-        R[Rayon · parallelism]
-        O[Apple Vision / Tesseract · OCR]
+    subgraph RUNTIME["Slate runtime · Rust"]
+        P[Rasterizer<br/>page rendering]
+        L[Document model<br/>structure & objects]
+        R[Parallel scheduler<br/>multi-threaded ops]
+        O[On-device OCR<br/>Apple Vision · system]
     end
 
     A <-->|Tauri IPC| B
@@ -163,10 +162,9 @@ the exact same behavior. The frontend talks to whichever transport is available
 | Layer | Technology |
 | --- | --- |
 | Shell | [Tauri v2](https://v2.tauri.app/) (Rust + WebKit / WebView2 / WebKitGTK) |
-| PDF rendering | [PDFium](https://pdfium.googlesource.com/pdfium/) via [`pdfium-render`](https://github.com/ajrcarey/pdfium-render) |
-| PDF structure | [`lopdf`](https://github.com/J-F-Liu/lopdf) |
-| Parallelism | [Rayon](https://github.com/rayon-rs/rayon) |
-| OCR | Apple Vision (macOS) · [Tesseract](https://github.com/tesseract-ocr/tesseract) (fallback) |
+| PDF engine | Slate Engine — homemade Rust core (render · structure · editing) |
+| Parallelism | Multi-threaded Rust (work-stealing scheduler) |
+| OCR | On-device — Apple Vision on macOS |
 | Frontend | Vanilla HTML / CSS / JS (no framework, instant startup) |
 
 ---
@@ -188,8 +186,8 @@ Slate/
 └── NOTICE                      Copyright & attribution
 ```
 
-> PDFium native libraries (`libpdfium.*`) are **not** committed — they are
-> fetched per-OS by CI and kept locally for development.
+> Native runtime libraries are **not** committed — they are fetched per-OS by
+> CI and kept locally for development.
 
 ---
 
@@ -199,8 +197,8 @@ Slate/
 - [Rust](https://rustup.rs/) (stable)
 - [Tauri CLI](https://v2.tauri.app/start/): `cargo install tauri-cli --version "^2"`
 - macOS: Xcode command line tools · Windows: WebView2 · Linux: WebKitGTK + `libfontconfig1-dev` `libfreetype6-dev`
-- A PDFium shared library placed in `src-tauri/` (e.g. `libpdfium.dylib` on macOS),
-  or pointed to via the `ALTO_PDFIUM_DIR` environment variable
+- The native rendering library in `src-tauri/` (fetched automatically by CI; for
+  local dev, point to it via the `ALTO_PDFIUM_DIR` environment variable)
 
 ### Build
 
@@ -231,15 +229,14 @@ automatically by GitHub Actions on tagged releases.
 - [x] Shared `pdf-engine` crate (desktop + WASM-ready)
 - [ ] WebAssembly engine + browser build (Chrome / Firefox / Safari)
 - [ ] Windows & Linux signed releases
-- [ ] In-browser OCR (tesseract.js), signing & LLM features
+- [ ] In-browser OCR, signing & LLM features
 
 ---
 
 ## 🤝 Contributing
 
-Issues and pull requests are welcome. Parts of the engine are derived from
-ONLYOFFICE under the AGPL; any derived module must keep its source attribution
-and AGPL header — see [`NOTICE`](NOTICE).
+Issues and pull requests are welcome. Slate is licensed under the AGPL-3.0;
+contributions are accepted under the same license — see [`NOTICE`](NOTICE).
 
 ---
 
@@ -248,12 +245,6 @@ and AGPL header — see [`NOTICE`](NOTICE).
 **GNU Affero General Public License v3.0 or later** — see [LICENSE](LICENSE).
 
 © 2026 Soflution LTD.
-
-Portions of the engine are derived from
-[ONLYOFFICE](https://github.com/ONLYOFFICE), copyright **Ascensio System SIA**,
-distributed under the AGPL-3.0. Derived Rust modules retain explicit source
-references and AGPL notices. ONLYOFFICE trademarks, logos and branded assets are
-**not** part of this project and are not used as Slate branding.
 
 <div align="center">
 <sub>Built with Rust 🦀 · Free forever · Made in Europe</sub>
