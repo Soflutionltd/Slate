@@ -21,6 +21,18 @@ leave your machine.
 
 ---
 
+<div align="center">
+
+<a href="https://github.com/Soflutionltd/Slate/releases/latest"><img src="docs/assets/download-mac.png" alt="Download Slate for macOS" height="62"></a>
+&nbsp;&nbsp;
+<a href="https://github.com/Soflutionltd/Slate/releases"><img src="docs/assets/download-win.png" alt="Download Slate for Windows" height="62"></a>
+&nbsp;&nbsp;
+<a href="https://github.com/Soflutionltd/Slate/releases"><img src="docs/assets/download-linux.png" alt="Download Slate for Linux" height="62"></a>
+
+</div>
+
+---
+
 ## ✨ Why Slate
 
 Most PDF editors are either heavyweight cloud suites that upload your documents,
@@ -47,14 +59,6 @@ or slow Electron apps wrapping a JavaScript renderer. Slate is different:
 ---
 
 ## ⬇️ Download
-
-<div align="center">
-  <a href="https://github.com/Soflutionltd/Slate/releases/latest">
-    <img src="docs/assets/download-button.png" alt="Download Slate for macOS" width="440">
-  </a>
-</div>
-
-<br>
 
 | Platform | Architecture | Status | Link |
 | --- | --- | --- | --- |
