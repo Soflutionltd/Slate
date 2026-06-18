@@ -51,16 +51,16 @@ or slow Electron apps wrapping a JavaScript renderer. Slate is different:
 
 | Platform | Architecture | Status | Link |
 | --- | --- | --- | --- |
-| **macOS** | Apple Silicon (aarch64) | ✅ Signed & notarized | [**Download `.dmg`**](https://github.com/Soflution1/Slate/releases/latest) |
+| **macOS** | Apple Silicon (aarch64) | ✅ Signed & notarized | [**Download `.dmg`**](https://github.com/Soflutionltd/Slate/releases/latest) |
 | **macOS** | Intel (x86_64) | 🛠 Build from source | [Instructions](#-build-from-source) |
-| **Windows** | x86_64 | 🔄 Via CI | [Releases](https://github.com/Soflution1/Slate/releases) |
-| **Linux** | x86_64 | 🔄 Via CI | [Releases](https://github.com/Soflution1/Slate/releases) |
+| **Windows** | x86_64 | 🔄 Via CI | [Releases](https://github.com/Soflutionltd/Slate/releases) |
+| **Linux** | x86_64 | 🔄 Via CI | [Releases](https://github.com/Soflutionltd/Slate/releases) |
 
 > **macOS:** download the `.dmg`, open it, and drag **Slate** to *Applications*.
 > The build is signed with a Developer ID and notarized by Apple, so it launches
 > without security warnings.
 
-➡️ **Latest release:** [github.com/Soflution1/Slate/releases/latest](https://github.com/Soflution1/Slate/releases/latest)
+➡️ **Latest release:** [github.com/Soflutionltd/Slate/releases/latest](https://github.com/Soflutionltd/Slate/releases/latest)
 
 ---
 
@@ -205,7 +205,7 @@ Slate/
 ### Build
 
 ```bash
-git clone https://github.com/Soflution1/Slate.git
+git clone https://github.com/Soflutionltd/Slate.git
 cd Slate
 
 # Development build
