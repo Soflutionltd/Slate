@@ -8140,7 +8140,28 @@ function renderHome() {
 		meta.textContent = bits.filter(Boolean).join(' · ');
 		info.append(name, meta);
 
-		card.append(thumb, info);
+		const remove = document.createElement('span');
+		remove.className = 'recent-card-remove';
+		remove.setAttribute('role', 'button');
+		remove.tabIndex = 0;
+		remove.title = currentLocale() === 'fr' ? 'Retirer des récents' : 'Remove from recents';
+		remove.setAttribute('aria-label', remove.title);
+		remove.innerHTML =
+			'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg>';
+		const doRemove = (event) => {
+			event.stopPropagation();
+			event.preventDefault();
+			const matches = (it) =>
+				item.path ? it.path === item.path : it.name === item.name && it.at === item.at;
+			saveRecentFiles(loadRecentFiles().filter((it) => !matches(it)));
+			renderHome();
+		};
+		remove.addEventListener('click', doRemove);
+		remove.addEventListener('keydown', (event) => {
+			if (event.key === 'Enter' || event.key === ' ') doRemove(event);
+		});
+
+		card.append(thumb, info, remove);
 		card.addEventListener('click', () => void openRecentFile(item));
 		body.append(card);
 	}
