@@ -1,0 +1,13 @@
+src-tauri/target/
+
+# PDFium native libraries — fetched per-OS by CI, kept local for dev
+src-tauri/libpdfium.dylib
+src-tauri/libpdfium.so
+src-tauri/pdfium.dll
+
+# Sidecar binaries — rebuilt per-OS by CI
+src-tauri/binaries/
+
+# PDFium extraction temp
+src-tauri/pdfium-extract/
+src-tauri/pdfium.tgz

@@ -1,0 +1,72 @@
+[package]
+name = "sofdocs-desktop"
+version = "0.1.0"
+edition = "2021"
+description = "Alto desktop application — native file access and offline editing"
+license = "AGPL-3.0-or-later"
+
+[lib]
+name = "sofdocs_desktop"
+path = "src/lib.rs"
+
+[[bin]]
+name = "sofdocs-desktop"
+path = "src/main.rs"
+
+[[bin]]
+name = "alto-mcp"
+path = "src/bin/alto_mcp.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# devtools n'est PAS forcé ici : Tauri l'active déjà automatiquement en debug
+# (`cargo tauri dev`). On évite donc d'embarquer l'inspecteur dans le build release.
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-updater = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Moteur PDF partagé (extrait de src-tauri) : même code natif ici et WASM côté web.
+alto-pdf-engine = { path = "../crates/pdf-engine" }
+pdfium-render = "0.9.1"
+dirs = "6.0.0"
+lopdf = "0.40"
+rand = "0.9"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg"] }
+underskrift = "0.1"
+rayon = "1"
+# Énumération des polices installées (cross-OS : CoreText macOS / DirectWrite
+# Windows / fontconfig Linux). Sert à peupler le sélecteur de police de l'éditeur.
+font-kit = "0.14"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.10"
+# underskrift (signature PAdES) tire openssl. Sans vendored, macOS lie la dylib
+# Homebrew (/opt/homebrew/.../libssl.3.dylib), que le hardened runtime refuse de
+# charger (Team ID différent) → crash au lancement. On lie OpenSSL en statique.
+openssl = { version = "0.10", features = ["vendored"] }
+
+# Windows n'a pas d'OpenSSL système : underskrift tire openssl.
+# On force la compilation vendored (le runner Windows a Perl + NASM).
+[target.'cfg(windows)'.dependencies]
+openssl = { version = "0.10", features = ["vendored"] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+# Build release optimisé taille + vitesse. On NE met PAS panic = "abort" : PDFium
+# et le décodage d'images traitent des fichiers non fiables et s'appuient sur le
+# déroulement de pile pour remonter des erreurs proprement (robustesse > ~5% de taille).
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+opt-level = 3

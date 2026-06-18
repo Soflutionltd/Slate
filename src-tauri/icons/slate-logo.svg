@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="g" x1="190" y1="150" x2="834" y2="884" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ED4B41" />
+      <stop offset="1" stop-color="#B3120B" />
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="120" x2="0" y2="540" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff" stop-opacity="0.18" />
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="30" flood-color="#5a0703" flood-opacity="0.34" />
+    </filter>
+  </defs>
+  <g filter="url(#sh)">
+    <rect x="140" y="120" width="744" height="744" rx="176" fill="url(#g)" />
+    <rect x="140" y="120" width="744" height="744" rx="176" fill="url(#sheen)" />
+  </g>
+  <g fill="#ffffff">
+    <rect x="320" y="356" width="384" height="64" rx="32" />
+    <rect x="320" y="464" width="384" height="64" rx="32" opacity="0.85" />
+    <rect x="320" y="572" width="236" height="64" rx="32" opacity="0.66" />
+  </g>
+</svg>

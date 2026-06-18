@@ -1,0 +1,15 @@
+Alto / SofDocs
+Copyright (c) 2026 Soflution LTD
+
+This project is licensed under the GNU Affero General Public License v3.0
+or later.
+
+Portions of the office engine are intended to be derived from ONLYOFFICE
+source code and behavior. ONLYOFFICE source files are copyright Ascensio
+System SIA and are distributed under the GNU Affero General Public License
+v3.0. Any Rust module derived from ONLYOFFICE source must retain an explicit
+source reference and AGPL notice.
+
+ONLYOFFICE trademarks, logos, icons, illustrations, and branded UI assets
+are not licensed for use as Alto branding and must not be copied into this
+repository.

@@ -1,0 +1,25 @@
+[package]
+name = "alto-pdf-engine"
+version = "0.1.0"
+edition = "2021"
+description = "Moteur PDF partagé d'Alto/Slate (PDFium + lopdf) — natif (desktop) et WASM (navigateur)"
+license = "AGPL-3.0-or-later"
+
+[lib]
+name = "alto_pdf_engine"
+path = "src/lib.rs"
+
+[dependencies]
+pdfium-render = "0.9.1"
+lopdf = "0.40"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg"] }
+rand = "0.9"
+regex = "1"
+tracing = "0.1"
+
+# rayon n'existe pas sur wasm32-unknown-unknown (pas de threads). On ne le lie
+# qu'en natif ; les modules basculent sur un parcours séquentiel en WASM (Phase 2).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rayon = "1"

@@ -1,0 +1,110 @@
+name: Build desktop (Windows & Linux)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+env:
+  PDFIUM_TAG: "chromium/7891"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            triple: x86_64-pc-windows-msvc
+            pdfium_asset: pdfium-win-x64.tgz
+            pdfium_src: bin/pdfium.dll
+            pdfium_file: pdfium.dll
+            sidecar_ext: ".exe"
+          - os: ubuntu-22.04
+            triple: x86_64-unknown-linux-gnu
+            pdfium_asset: pdfium-linux-x64.tgz
+            pdfium_src: lib/libpdfium.so
+            pdfium_file: libpdfium.so
+            sidecar_ext: ""
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Linux system dependencies
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libfontconfig1-dev \
+            libfreetype6-dev \
+            libssl-dev \
+            pkg-config \
+            build-essential \
+            file \
+            wget \
+            curl
+
+      - name: Fetch PDFium binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd src-tauri
+          curl -L --fail -o pdfium.tgz \
+            "https://github.com/bblanchon/pdfium-binaries/releases/download/${PDFIUM_TAG}/${{ matrix.pdfium_asset }}"
+          mkdir -p pdfium-extract
+          tar -xzf pdfium.tgz -C pdfium-extract
+          cp "pdfium-extract/${{ matrix.pdfium_src }}" "${{ matrix.pdfium_file }}"
+          rm -rf pdfium-extract pdfium.tgz
+          ls -la "${{ matrix.pdfium_file }}"
+
+      - name: Build sidecar (alto-mcp)
+        shell: bash
+        env:
+          # openssl-src (vendored, Windows) doit utiliser Strawberry Perl, pas le
+          # perl incomplet de Git Bash. Ignoré sur Linux (OpenSSL système).
+          OPENSSL_SRC_PERL: C:\Strawberry\perl\bin\perl.exe
+        run: |
+          set -euo pipefail
+          cd src-tauri
+          # tauri build.rs valide externalBin pendant la compilation : un
+          # placeholder doit exister avant de builder le sidecar lui-même.
+          mkdir -p binaries
+          touch "binaries/alto-mcp-${{ matrix.triple }}${{ matrix.sidecar_ext }}"
+          cargo build --release --bin alto-mcp
+          cp "target/release/alto-mcp${{ matrix.sidecar_ext }}" \
+            "binaries/alto-mcp-${{ matrix.triple }}${{ matrix.sidecar_ext }}"
+          ls -la binaries
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          OPENSSL_SRC_PERL: C:\Strawberry\perl\bin\perl.exe
+        with:
+          projectPath: "."
+
+      - name: Upload bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: slate-${{ matrix.triple }}
+          path: |
+            src-tauri/target/release/bundle/**/*
+          if-no-files-found: error
