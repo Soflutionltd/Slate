@@ -5212,7 +5212,15 @@ function renderEditBlocksForPage(pageNumber) {
 					) {
 						event.preventDefault();
 						event.stopPropagation();
-						insertPdfTextAtCaret(block, event.key === 'Enter' ? '\n' : event.key);
+						const typed = event.key === 'Enter' ? '\n' : event.key;
+						// Si du texte est sélectionné, la frappe le REMPLACE (comme un
+						// traitement de texte) au lieu de s'insérer après la sélection.
+						const range = selectionTextRange(element);
+						if (range) {
+							replacePdfTextRange(block, range.start, range.end, typed);
+						} else {
+							insertPdfTextAtCaret(block, typed);
+						}
 						return;
 					}
 					if (event.key === 'Escape') {

@@ -1,6 +1,6 @@
 [package]
 name = "sofdocs-desktop"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 description = "Alto desktop application — native file access and offline editing"
 license = "AGPL-3.0-or-later"
