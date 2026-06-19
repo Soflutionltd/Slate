@@ -123,17 +123,12 @@ const elements = {
 	emptyState: document.getElementById('empty-state'),
 	pagesStack: document.getElementById('pages-stack'),
 	status: document.getElementById('status'),
-	documentName: document.getElementById('document-name'),
-	documentMeta: document.getElementById('document-meta'),
 	pageLabel: document.getElementById('page-label'),
 	zoomLabel: document.getElementById('zoom-label'),
 	prevPage: document.getElementById('prev-page'),
 	nextPage: document.getElementById('next-page'),
-	zoomOut: document.getElementById('zoom-out'),
-	zoomIn: document.getElementById('zoom-in'),
 	railZoomOut: document.getElementById('rail-zoom-out'),
 	railZoomIn: document.getElementById('rail-zoom-in'),
-	fitWidth: document.getElementById('fit-width'),
 	railFitWidth: document.getElementById('rail-fit-width'),
 	railLayoutSingle: document.getElementById('rail-layout-single'),
 	undoButton: document.getElementById('undo-button'),
@@ -1004,9 +999,6 @@ function localizeUi() {
 	setText(elements.toggleMoreTools, elements.moreTools.classList.contains('hidden') ? 'showMore' : 'showLess');
 	setText('.panel-note strong', 'localOnly');
 	setText('.panel-note span', 'localOnlyDesc');
-	setText(elements.prevPage, 'previous');
-	setText(elements.nextPage, 'next');
-	setText(elements.fitWidth, 'fitWidth');
 	setText('.empty-card h1', 'emptyTitle');
 	setText('.empty-card p', 'emptyDesc');
 	setText(elements.drawerKicker, state.activeDrawer);
@@ -6632,14 +6624,10 @@ function updateUi(renderPanels = true) {
 	elements.app.classList.toggle('has-pdf', hasPdf);
 	elements.app.classList.toggle('tools-hidden', !state.settings.showTools);
 	elements.app.classList.toggle('rail-hidden', !state.settings.showRail);
-	elements.documentName.textContent = state.fileName || t('noPdfOpen');
-	elements.documentMeta.textContent = hasPdf
-		? `${state.pdf.numPages} pages · ${bytesToMb(state.fileBytes.byteLength)}`
-		: t('dropPdf');
 	elements.openButton.textContent = hasPdf ? t('openAnother') : t('open');
 	elements.openButton.setAttribute('aria-label', hasPdf ? 'Open another PDF' : 'Open PDF');
 	elements.chooseEmpty.querySelector('span:last-child').textContent = hasPdf ? t('openAnother') : t('openPdf');
-	elements.pageLabel.textContent = hasPdf ? `${state.page} / ${state.pdf.numPages}` : '0 / 0';
+	elements.pageLabel.textContent = hasPdf ? `${state.page}/${state.pdf.numPages}` : '0/0';
 	elements.zoomLabel.textContent = `${Math.round(state.zoom * 100)}%`;
 	elements.pageSummaryTitle.textContent = hasPdf ? state.fileName : t('noDocument');
 	elements.pageSummaryMeta.textContent = hasPdf
@@ -6651,11 +6639,8 @@ function updateUi(renderPanels = true) {
 	for (const control of [
 		elements.prevPage,
 		elements.nextPage,
-		elements.zoomOut,
-		elements.zoomIn,
 		elements.railZoomOut,
 		elements.railZoomIn,
-		elements.fitWidth,
 		elements.railFitWidth,
 		elements.railLayoutSingle,
 		elements.downloadOriginal,
@@ -6683,7 +6668,6 @@ function updateUi(renderPanels = true) {
 	const layout = state.settings.pageLayout === 'single' ? 'single' : 'continuous';
 	elements.railLayoutSingle.classList.toggle('active', layout === 'single');
 	elements.railFitWidth.classList.toggle('active', state.fitMode === 'page');
-	elements.fitWidth?.classList.toggle('active', state.fitMode === 'width');
 	if (renderPanels) {
 		renderResults();
 		renderNotes();
@@ -9457,16 +9441,8 @@ elements.fileInput.addEventListener('change', (event) => {
 
 elements.prevPage.addEventListener('click', () => goToPage(state.page - 1));
 elements.nextPage.addEventListener('click', () => goToPage(state.page + 1));
-elements.zoomOut.addEventListener('click', () => zoomBy(-0.1));
-elements.zoomIn.addEventListener('click', () => zoomBy(0.1));
 elements.railZoomOut.addEventListener('click', () => zoomBy(-0.1));
 elements.railZoomIn.addEventListener('click', () => zoomBy(0.1));
-elements.fitWidth.addEventListener('click', () => {
-	state.fitMode = 'width';
-	state.settings.fitWidth = true;
-	saveSettings();
-	void fitPageWidth();
-});
 elements.railFitWidth.addEventListener('click', () => {
 	// Bouton « ajuster » du rail : on montre la PAGE ENTIÈRE (largeur ET hauteur),
 	// déterministe → cliquer plusieurs fois donne toujours le même zoom (stable).

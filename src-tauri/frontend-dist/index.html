@@ -358,24 +358,6 @@
 			</aside>
 
 			<section class="reader">
-				<div class="reader-toolbar">
-					<div class="document-meta">
-						<strong id="document-name">No PDF open</strong>
-						<span id="document-meta">Drop a PDF anywhere.</span>
-					</div>
-					<div class="page-controls">
-						<button id="prev-page" type="button" disabled>Previous</button>
-						<span id="page-label">0 / 0</span>
-						<button id="next-page" type="button" disabled>Next</button>
-					</div>
-					<div class="zoom-controls">
-						<button id="zoom-out" type="button" disabled>-</button>
-						<button id="fit-width" type="button" disabled>Fit width</button>
-						<span id="zoom-label">115%</span>
-						<button id="zoom-in" type="button" disabled>+</button>
-					</div>
-				</div>
-
 				<div class="canvas-stage" id="drop-zone">
 					<div class="empty-state" id="empty-state">
 						<div class="home" id="home">
@@ -477,10 +459,31 @@
 				<button class="rail-button" type="button" data-open-panel="notes" aria-label="Notes">C</button>
 				<button class="rail-button" type="button" data-open-panel="pages" aria-label="Pages">P</button>
 				<button class="rail-button" type="button" data-open-panel="outline" aria-label="Marque-pages">B</button>
+
+				<div class="rail-sep" aria-hidden="true"></div>
+
+				<div class="rail-group" aria-label="Navigation page">
+					<button class="rail-button" type="button" id="prev-page" aria-label="Page précédente" title="Page précédente" disabled>
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 15 6-6 6 6" /></svg>
+					</button>
+					<span class="rail-value" id="page-label">0/0</span>
+					<button class="rail-button" type="button" id="next-page" aria-label="Page suivante" title="Page suivante" disabled>
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+					</button>
+				</div>
+
+				<div class="rail-sep" aria-hidden="true"></div>
+
+				<div class="rail-group" aria-label="Zoom">
+					<button class="rail-button" type="button" id="rail-zoom-in" aria-label="Zoom avant" title="Zoom avant" disabled>+</button>
+					<span class="rail-value" id="zoom-label">100%</span>
+					<button class="rail-button" type="button" id="rail-zoom-out" aria-label="Zoom arrière" title="Zoom arrière" disabled>−</button>
+				</div>
 				<button class="rail-button" type="button" id="rail-fit-width" aria-label="Ajuster la page" title="Ajuster la page" disabled>W</button>
-				<button class="rail-button" type="button" id="rail-zoom-in" aria-label="Zoom in" disabled>+</button>
-				<button class="rail-button" type="button" id="rail-zoom-out" aria-label="Zoom out" disabled>-</button>
 				<button class="rail-button page-layout-toggle" type="button" id="rail-layout-single" aria-label="Page unique" data-layout="single" disabled></button>
+
+				<div class="rail-sep" aria-hidden="true"></div>
+
 				<button class="rail-button" type="button" data-tool-disabled="Rotate pages is not available yet" aria-label="Rotate">R</button>
 				<button class="rail-button" type="button" data-open-settings aria-label="Settings">S</button>
 			</aside>

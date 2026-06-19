@@ -2613,6 +2613,31 @@ canvas {
 	color: var(--text);
 }
 
+.rail-sep {
+	width: 22px;
+	height: 1px;
+	flex: 0 0 auto;
+	background: var(--border);
+	margin: 2px 0;
+}
+
+.rail-group {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+}
+
+.rail-value {
+	font-size: 10px;
+	font-weight: 650;
+	line-height: 1;
+	letter-spacing: -0.02em;
+	color: var(--muted);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
 .page-layout-toggle.active {
 	background: #3f3f3d;
 	color: #ffffff;
