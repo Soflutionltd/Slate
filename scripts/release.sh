@@ -22,6 +22,16 @@ set -euo pipefail
 
 REPO="Soflutionltd/Slate"
 KEY_PATH="$HOME/.tauri/slate_updater.key"
+
+# Par défaut on NE construit PAS le DMG : sa création monte le disque et ouvre une
+# fenêtre Finder « glisser dans Applications » (inutile pour une mise à jour, qui
+# passe par le paquet .app.tar.gz signé). Passer --dmg pour générer un installeur
+# (utile seulement pour les NOUVEAUX utilisateurs qui téléchargent à la main).
+BUILD_DMG=0
+if [[ "${1:-}" == "--dmg" ]]; then
+  BUILD_DMG=1
+  shift
+fi
 NOTES="${1:-}"
 
 # Se placer à la racine du projet desktop (dossier parent de scripts/).
@@ -45,12 +55,19 @@ ARCH="aarch64"
 echo "▶ Release Slate ${TAG} (${ARCH}) → ${REPO}"
 
 # ── Build signé + artefacts updater ──────────────────────────────────────
-cargo tauri build
+# --bundles app : on ne produit que le .app (+ .app.tar.gz/.sig pour l'updater),
+# pas de DMG → aucune fenêtre Finder qui s'ouvre. Avec --dmg on génère aussi le DMG.
+if [[ "$BUILD_DMG" -eq 1 ]]; then
+  cargo tauri build
+else
+  cargo tauri build --bundles app
+fi
 
 BUNDLE_DIR="src-tauri/target/release/bundle"
 TAR_FILE="${BUNDLE_DIR}/macos/Slate.app.tar.gz"
 SIG_FILE="${TAR_FILE}.sig"
 DMG_FILE="${BUNDLE_DIR}/dmg/Slate_${VERSION}_${ARCH}.dmg"
+[[ "$BUILD_DMG" -eq 1 && -f "$DMG_FILE" ]] || DMG_FILE=""
 
 if [[ ! -f "$TAR_FILE" || ! -f "$SIG_FILE" ]]; then
   echo "ERREUR : artefacts updater manquants (createUpdaterArtifacts activé ?)." >&2

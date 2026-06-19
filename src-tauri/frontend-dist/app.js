@@ -124,6 +124,7 @@ const elements = {
 	pagesStack: document.getElementById('pages-stack'),
 	status: document.getElementById('status'),
 	pageLabel: document.getElementById('page-label'),
+	docSize: document.getElementById('doc-size'),
 	zoomLabel: document.getElementById('zoom-label'),
 	prevPage: document.getElementById('prev-page'),
 	nextPage: document.getElementById('next-page'),
@@ -6628,6 +6629,7 @@ function updateUi(renderPanels = true) {
 	elements.openButton.setAttribute('aria-label', hasPdf ? 'Open another PDF' : 'Open PDF');
 	elements.chooseEmpty.querySelector('span:last-child').textContent = hasPdf ? t('openAnother') : t('openPdf');
 	elements.pageLabel.textContent = hasPdf ? `${state.page}/${state.pdf.numPages}` : '0/0';
+	if (elements.docSize) elements.docSize.textContent = hasPdf ? bytesToMb(state.fileBytes.byteLength) : '';
 	elements.zoomLabel.textContent = `${Math.round(state.zoom * 100)}%`;
 	elements.pageSummaryTitle.textContent = hasPdf ? state.fileName : t('noDocument');
 	elements.pageSummaryMeta.textContent = hasPdf

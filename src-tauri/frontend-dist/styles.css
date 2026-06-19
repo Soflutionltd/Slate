@@ -2638,6 +2638,21 @@ canvas {
 	white-space: nowrap;
 }
 
+.rail-size {
+	max-width: 38px;
+	text-align: center;
+	font-size: 9px;
+	font-weight: 600;
+	line-height: 1.2;
+	color: var(--muted);
+	font-variant-numeric: tabular-nums;
+	word-break: break-word;
+}
+
+.rail-size:empty {
+	display: none;
+}
+
 .page-layout-toggle.active {
 	background: #3f3f3d;
 	color: #ffffff;
