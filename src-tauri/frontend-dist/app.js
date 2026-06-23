@@ -5349,7 +5349,10 @@ function renderEditBlocksForPage(pageNumber) {
 					const raw =
 						(event.clipboardData && event.clipboardData.getData('text/plain')) || '';
 					if (!raw) return;
-					const clean = raw.replace(/\r\n?/g, '\n');
+					// Les copies de ligne unique embarquent souvent un \n final : il
+					// créerait un <br> vide (= ligne en trop qui pousse le contenu hors
+					// du cadre). On le retire quand on remplace une sélection sur place.
+					const clean = raw.replace(/\r\n?/g, '\n').replace(/\n+$/, '');
 					const glyphMode =
 						Array.isArray(block.pdfChars) && block.pdfChars.length && !isBlockTextEdited(block);
 					if (glyphMode) {
