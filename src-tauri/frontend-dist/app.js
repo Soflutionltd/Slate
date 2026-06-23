@@ -5127,11 +5127,10 @@ function renderEditBlocksForPage(pageNumber) {
 				element.style.top = `${block.y}px`;
 				element.style.width = `${Math.max(block.width, 8)}px`;
 				element.style.height = `${Math.max(block.height, 8)}px`;
-				// pre-wrap (et non normal) : on préserve les sauts de ligne explicites (\n)
-				// pour que l'état "sélection" affiche EXACTEMENT les mêmes lignes que l'état
-				// "édition" (.editing.multiline = pre). Le texte wrap quand même dans la
-				// largeur pilotée par l'utilisateur pour les paragraphes longs.
-				element.style.whiteSpace = multiline ? 'pre-wrap' : 'nowrap';
+				// pre (et non pre-wrap/normal) : on n'enroule QUE sur les \n explicites,
+				// jamais sur la largeur de la boîte → l'état "sélection" affiche EXACTEMENT
+				// les mêmes lignes que l'état "édition" (.editing.multiline = pre).
+				element.style.whiteSpace = multiline ? 'pre' : 'nowrap';
 				element.style.overflow = 'visible';
 			}
 
@@ -8929,8 +8928,11 @@ async function renderFlattenedPage(pageNumber) {
 				return `${run.italic ? 'italic' : 'normal'} ${run.bold ? '700' : '400'} ${fontPx}px ${runFamily}`;
 			};
 
-			// Largeur de colonne + interligne pour le retour à la ligne (paragraphes).
-			const colWidth = block.multiline ? Math.max(20, width) : Infinity;
+			// Largeur de colonne pour le retour à la ligne. Pour un bloc ÉDITÉ on
+			// n'enroule QUE sur les \n explicites (colWidth infini) afin que le PDF
+			// exporté corresponde exactement à l'écran (white-space: pre). Un paragraphe
+			// natif non touché garde le wrap à sa largeur (sécurité ligne trop longue).
+			const colWidth = block.multiline && !textEdited ? Math.max(20, width) : Infinity;
 			// Interligne : pour du texte édité/collé, dérivé de la police (le bloc a pu
 			// changer de nombre de lignes). Pour un paragraphe natif, hauteur/lignes.
 			const lineHeightPx = block.multiline

@@ -2508,10 +2508,14 @@ body.sign-arming .sign-layer {
 	text-rendering: geometricPrecision;
 }
 
-/* Bloc-paragraphe : le texte reflue dans la largeur de colonne. */
+/* Bloc multiligne : on n'enroule QUE sur les \n explicites (pas de reflux sur la
+   largeur), pour rester identique au mode édition. */
 .edit-block.multiline {
-	white-space: pre-wrap;
-	word-break: break-word;
+	/* pre (et non pre-wrap) : on n'enroule QUE sur les \n explicites, jamais sur la
+	   largeur de la boîte. L'état sélection/repos rend ainsi EXACTEMENT comme l'état
+	   édition (.editing.multiline = pre) : pas de mot qui retombe à la ligne. */
+	white-space: pre;
+	word-break: normal;
 	overflow: visible;
 }
 
