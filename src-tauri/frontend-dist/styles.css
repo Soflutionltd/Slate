@@ -3858,10 +3858,38 @@ textarea {
 	transform: translate(-50%, 0);
 }
 
+.slate-update-toast-close {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	display: grid;
+	place-items: center;
+	width: 26px;
+	height: 26px;
+	padding: 0;
+	border: none;
+	border-radius: 8px;
+	background: transparent;
+	color: rgba(244, 244, 245, 0.55);
+	cursor: pointer;
+	transition: background 0.16s ease, color 0.16s ease;
+}
+
+.slate-update-toast-close svg {
+	width: 15px;
+	height: 15px;
+}
+
+.slate-update-toast-close:hover {
+	background: rgba(255, 255, 255, 0.1);
+	color: #f4f4f5;
+}
+
 .slate-update-toast-body {
 	display: flex;
 	align-items: center;
 	gap: 14px;
+	padding-right: 26px;
 }
 
 .slate-update-toast-icon {

@@ -10612,6 +10612,9 @@ window.addEventListener('resize', () => {
 // ── Mise à jour automatique ─────────────────────────────────────────────
 let _updateInProgress = false;
 let _lastUpdateCheck = 0;
+// Version rejetée par l'utilisateur DANS CETTE SESSION (clic sur la croix / « Plus
+// tard ») : on ne la re-propose plus jusqu'au prochain lancement de l'app.
+let _updateDismissedVersion = null;
 
 async function checkForUpdates() {
 	try {
@@ -10634,12 +10637,18 @@ function maybeCheckForUpdates() {
 
 function showUpdateToast(info) {
 	if (document.getElementById('slate-update-toast')) return;
+	// Rejetée pour cette session : on attend le prochain lancement pour la reproposer.
+	if (info && info.version && _updateDismissedVersion === info.version) return;
 	const fr = currentLocale() === 'fr';
 	const toast = document.createElement('div');
 	toast.id = 'slate-update-toast';
 	toast.className = 'slate-update-toast';
 	toast.setAttribute('role', 'alert');
+	toast.dataset.version = info.version || '';
 	toast.innerHTML = `
+		<button type="button" class="slate-update-toast-close" aria-label="${fr ? 'Ignorer' : 'Dismiss'}" title="${fr ? 'Ignorer jusqu’au prochain lancement' : 'Dismiss until next launch'}">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+		</button>
 		<div class="slate-update-toast-body">
 			<span class="slate-update-toast-icon" aria-hidden="true">
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg>
@@ -10658,11 +10667,17 @@ function showUpdateToast(info) {
 	document.body.appendChild(toast);
 	requestAnimationFrame(() => toast.classList.add('is-visible'));
 
+	toast.querySelector('.slate-update-toast-close').addEventListener('click', () => dismissUpdateToast(toast));
 	toast.querySelector('.slate-update-later').addEventListener('click', () => dismissUpdateToast(toast));
 	toast.querySelector('.slate-update-now').addEventListener('click', () => void startUpdateInstall(toast));
 }
 
 function dismissUpdateToast(toast) {
+	// On mémorise la version rejetée : elle ne réapparaîtra pas tant que l'app
+	// tourne, mais reviendra au prochain lancement (la variable est réinitialisée).
+	if (toast && toast.dataset && toast.dataset.version) {
+		_updateDismissedVersion = toast.dataset.version;
+	}
 	toast.classList.remove('is-visible');
 	setTimeout(() => toast.remove(), 280);
 }
@@ -10727,7 +10742,7 @@ setInterval(() => {
 	// Pas de re-vérification pendant un téléchargement, ni si le pop-up est déjà là.
 	if (_updateInProgress || document.getElementById('slate-update-toast')) return;
 	void checkForUpdates();
-}, 15 * 60 * 1000);
+}, 3 * 60 * 1000);
 
 // Dès que l'utilisateur revient sur l'app, on revérifie (throttlé à 1/min) → le
 // pop-up apparaît tout seul sans attendre l'intervalle ni relancer l'application.
