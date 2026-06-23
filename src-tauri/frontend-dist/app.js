@@ -183,6 +183,7 @@ const elements = {
 	formatItalic: document.getElementById('format-italic'),
 	formatUnderline: document.getElementById('format-underline'),
 	formatAlignButtons: Array.from(document.querySelectorAll('.format-align [data-align]')),
+	formatListButtons: Array.from(document.querySelectorAll('.format-list [data-list]')),
 	settingsButton: document.getElementById('settings-button'),
 	settingsBackdrop: document.getElementById('settings-backdrop'),
 	settingsModal: document.getElementById('settings-modal'),
@@ -5126,7 +5127,11 @@ function renderEditBlocksForPage(pageNumber) {
 				element.style.top = `${block.y}px`;
 				element.style.width = `${Math.max(block.width, 8)}px`;
 				element.style.height = `${Math.max(block.height, 8)}px`;
-				element.style.whiteSpace = multiline ? 'normal' : 'nowrap';
+				// pre-wrap (et non normal) : on préserve les sauts de ligne explicites (\n)
+				// pour que l'état "sélection" affiche EXACTEMENT les mêmes lignes que l'état
+				// "édition" (.editing.multiline = pre). Le texte wrap quand même dans la
+				// largeur pilotée par l'utilisateur pour les paragraphes longs.
+				element.style.whiteSpace = multiline ? 'pre-wrap' : 'nowrap';
 				element.style.overflow = 'visible';
 			}
 
@@ -5217,6 +5222,27 @@ function renderEditBlocksForPage(pageNumber) {
 						}
 						block.inlineEditDirty = true;
 						resizeEditingElementToContent(element, block);
+						return;
+					}
+					// Entrée dans une liste (mode texte) : auto-continuation. On insère le
+					// marqueur suivant (• ou « N. »), ou on sort de la liste si la ligne
+					// courante est un marqueur vide. Shift+Entrée reste un saut natif.
+					if (
+						block.listType &&
+						!glyphMode &&
+						event.key === 'Enter' &&
+						!event.shiftKey &&
+						!event.metaKey &&
+						!event.ctrlKey &&
+						!event.altKey
+					) {
+						event.preventDefault();
+						event.stopPropagation();
+						const text = (element.textContent || '').replace(/\r\n?/g, '\n');
+						const caret = caretTextOffset(element);
+						const at = caret == null ? text.length : caret;
+						const { newText, newCaret } = listEnter(text, at, block.listType);
+						commitGlyphEdit(block, newText, newCaret);
 						return;
 					}
 					// Suppr/Retour sont gérés par le handler document (phase capture)
@@ -5979,7 +6005,7 @@ function finishInlineEdit(id, newText) {
 		// On ne touche JAMAIS la géométrie du bloc si le texte n'a pas changé,
 		// sinon le padding d'édition ferait grossir le bloc à chaque entrée/sortie.
 		if (textChanged) {
-			block.text = trimmed;
+			block.text = block.listType ? renumberList(trimmed, block.listType) : trimmed;
 			block.textEdited = true;
 			block.snapshotDataUrl = null;
 			elements.editText.value = block.text;
@@ -6085,7 +6111,8 @@ function updateFormatPanel(block) {
 		elements.formatBold,
 		elements.formatItalic,
 		elements.formatUnderline,
-		...elements.formatAlignButtons
+		...elements.formatAlignButtons,
+		...elements.formatListButtons
 	];
 	for (const control of controls) {
 		if (control) control.disabled = !active;
@@ -6113,6 +6140,9 @@ function updateFormatPanel(block) {
 	const align = block.align || 'left';
 	for (const button of elements.formatAlignButtons) {
 		button.classList.toggle('active', button.dataset.align === align);
+	}
+	for (const button of elements.formatListButtons) {
+		button.classList.toggle('active', button.dataset.list === block.listType);
 	}
 }
 
@@ -6245,6 +6275,85 @@ function applyFormatChange(mutator) {
 	}
 }
 
+// ── Listes (puces / numérotées) ─────────────────────────────────────────
+const LIST_MARKER_RE = /^(\u2022\s|\d+[.)]\s)/;
+
+// Retire le marqueur de liste (• ou « N. ») en début de chaque ligne.
+function stripListMarkers(text) {
+	return (text || '')
+		.split('\n')
+		.map((line) => line.replace(LIST_MARKER_RE, ''))
+		.join('\n');
+}
+
+// Préfixe chaque ligne NON VIDE d'un marqueur de liste. Les lignes vides restent
+// vides (et ne consomment pas de numéro).
+function applyListMarkers(text, type) {
+	let n = 0;
+	return (text || '')
+		.split('\n')
+		.map((line) => {
+			if (line.trim() === '') return line;
+			if (type === 'bullet') return `\u2022 ${line}`;
+			n += 1;
+			return `${n}. ${line}`;
+		})
+		.join('\n');
+}
+
+// Renumérote / re-puce un texte déjà markué (utilisé après édition).
+function renumberList(text, type) {
+	if (!type) return text;
+	return applyListMarkers(stripListMarkers(text), type);
+}
+
+// Bascule un type de liste sur le bloc sélectionné (toggle si déjà actif).
+function applyListType(type) {
+	const block = selectedEditBlock();
+	if (!block || block.kind === 'image') return;
+	applyFormatChange((target) => {
+		const stripped = stripListMarkers(target.text || '');
+		if (target.listType === type) {
+			target.listType = null;
+			target.text = stripped;
+		} else {
+			target.listType = type;
+			target.text = applyListMarkers(stripped, type);
+			target.multiline = true;
+		}
+		// Les listes repartent en texte simple (pas de styles HTML par caractère).
+		target.html = null;
+		target.htmlEdited = false;
+	});
+}
+
+// Calcule la transformation du texte quand on presse Entrée dans une liste :
+// continuation (marqueur suivant) ou sortie de liste si la ligne courante est un
+// marqueur vide. Renvoie { newText, newCaret }.
+function listEnter(text, caret, type) {
+	const before = text.slice(0, caret);
+	const after = text.slice(caret);
+	const lineStart = before.lastIndexOf('\n') + 1;
+	const currentLine = before.slice(lineStart);
+	const content = currentLine.replace(LIST_MARKER_RE, '');
+	// Ligne « marqueur seul » → on sort de la liste : ligne vide, pas de nouveau marqueur.
+	if (LIST_MARKER_RE.test(currentLine) && content.trim() === '') {
+		const newText = before.slice(0, lineStart) + after;
+		return { newText, newCaret: lineStart };
+	}
+	let marker;
+	if (type === 'bullet') {
+		marker = '\u2022 ';
+	} else {
+		// Numéro = nombre de lignes-liste avant (incluse la courante) + 1.
+		const linesBefore = before.split('\n');
+		const count = linesBefore.filter((l) => LIST_MARKER_RE.test(l)).length;
+		marker = `${count + 1}. `;
+	}
+	const newText = `${before}\n${marker}${after}`;
+	return { newText, newCaret: (before + '\n' + marker).length };
+}
+
 // Applique un style (gras/italique/souligné) UNIQUEMENT à la portion de texte
 // sélectionnée dans le bloc en cours d'édition, via execCommand. Renvoie true si
 // l'opération a porté sur une vraie sélection (sinon on retombe sur le toggle global).
@@ -6294,7 +6403,7 @@ function applySelectedText() {
 	const nextText = activePanelText.trim();
 	if (!nextText || nextText === block.text) return;
 	pushHistory();
-	block.text = nextText;
+	block.text = block.listType ? renumberList(nextText, block.listType) : nextText;
 	block.textEdited = true;
 	block.snapshotDataUrl = null;
 	elements.editText.value = block.text;
@@ -10123,6 +10232,12 @@ for (const button of elements.formatAlignButtons) {
 		applyFormatChange((block) => {
 			block.align = button.dataset.align;
 		});
+	});
+}
+for (const button of elements.formatListButtons) {
+	button.addEventListener('mousedown', (event) => event.preventDefault());
+	button.addEventListener('click', () => {
+		applyListType(button.dataset.list);
 	});
 }
 elements.editText.addEventListener('keydown', (event) => {
