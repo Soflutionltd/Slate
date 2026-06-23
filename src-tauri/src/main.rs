@@ -664,6 +664,22 @@ fn hide_app(app: tauri::AppHandle) -> Result<(), String> {
     }
 }
 
+/// Force la langue des panneaux et menus natifs macOS (impression, enregistrer…)
+/// pour qu'ils suivent le réglage de langue de Slate. Effet au prochain lancement
+/// (AppKit lit `AppleLanguages` au démarrage). Passer "auto"/"" suit le système.
+#[tauri::command]
+fn set_native_language(lang: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        mac_print::set_apple_languages(&lang);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = lang;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn open_external(url: String) -> Result<(), String> {
     if !(url.starts_with("https://") || url.starts_with("http://")) {
@@ -1200,6 +1216,7 @@ fn main() {
             open_external,
             print_pdf,
             hide_app,
+            set_native_language,
             watermark_pdf,
             add_page_numbers,
             images_to_pdf,

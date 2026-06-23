@@ -946,6 +946,20 @@ function currentLocale() {
 	return navigator.language?.toLowerCase().startsWith('fr') ? 'fr' : 'en';
 }
 
+// Aligne la langue des panneaux et menus NATIFS macOS (impression, enregistrer…)
+// sur le réglage de Slate. Le panneau d'impression natif suit `AppleLanguages`,
+// pas notre UI web : on l'écrit côté Rust. Effet au prochain lancement (AppKit
+// lit cette clé au démarrage). En mode "auto", on résout vers la locale détectée
+// pour que le natif corresponde quand même à ce que l'utilisateur voit.
+let _lastNativeLang = null;
+function syncNativeLanguage() {
+	const setting = state.settings.language || 'auto';
+	const lang = setting === 'auto' ? currentLocale() : setting;
+	if (lang === _lastNativeLang) return;
+	_lastNativeLang = lang;
+	void invokeCommand('set_native_language', { lang }).catch(() => {});
+}
+
 function t(key, ...args) {
 	const value = translations[currentLocale()][key] ?? translations.en[key] ?? key;
 	return typeof value === 'function' ? value(...args) : value;
@@ -4984,17 +4998,36 @@ function renderEditBlocksForPage(pageNumber) {
 			block.multiline = multiline;
 
 			if ((dirty && !localGlyphEdited) || (isEditing && block.kind !== 'image' && editTouched)) {
-				const mask = document.createElement('div');
-				mask.className = 'edit-block-mask';
-				// Marge de 1.5px : couvre l'anti-aliasing et les couches de texte
-				// estampées avec un léger décalage (faux gras des logos).
-				mask.style.left = `${block.originalX - 1.5}px`;
-				mask.style.top = `${block.originalY - 1.5}px`;
-				// Le masque doit couvrir l'étendue D'ORIGINE du texte PDF (sinon, si le
-				// texte édité est plus étroit, l'ancien glyphe dépasse et laisse un résidu).
-				mask.style.width = `${Math.max(block.width, block.originalWidth || block.width, 18) + 3}px`;
-				mask.style.height = `${Math.max(block.height, block.originalHeight || block.height, 14) + 3}px`;
-				editLayer.append(mask);
+				const originalChars = Array.isArray(block.pdfChars) ? block.pdfChars : [];
+				if (originalChars.length) {
+					// Masque SERRÉ : un petit masque par glyphe d'origine plutôt qu'un
+					// gros rectangle de la cellule. On cache exactement l'ancien texte
+					// sans recouvrir les traits du tableau (qui sont aux bords de la
+					// cellule, donc hors de l'encre des glyphes).
+					for (const ch of originalChars) {
+						const mx = ch.maskX ?? ch.x;
+						const my = ch.maskY ?? ch.y;
+						const mw = ch.maskWidth ?? ch.width;
+						const mh = ch.maskHeight ?? ch.height;
+						const gm = document.createElement('div');
+						gm.className = 'edit-block-mask glyph-mask';
+						gm.style.left = `${Math.max(0, mx - 0.4)}px`;
+						gm.style.top = `${Math.max(0, my - 0.4)}px`;
+						gm.style.width = `${mw + 0.8}px`;
+						gm.style.height = `${mh + 0.8}px`;
+						editLayer.append(gm);
+					}
+				} else {
+					// Pas de données par-glyphe : on retombe sur le rectangle d'origine
+					// (évite qu'un ancien texte PDF non masqué réapparaisse sous l'édition).
+					const mask = document.createElement('div');
+					mask.className = 'edit-block-mask';
+					mask.style.left = `${block.originalX - 1.5}px`;
+					mask.style.top = `${block.originalY - 1.5}px`;
+					mask.style.width = `${Math.max(block.width, block.originalWidth || block.width, 18) + 3}px`;
+					mask.style.height = `${Math.max(block.height, block.originalHeight || block.height, 14) + 3}px`;
+					editLayer.append(mask);
+				}
 			}
 
 			if (localGlyphEdited && Array.isArray(block.pdfChars)) {
@@ -5242,6 +5275,30 @@ function renderEditBlocksForPage(pageNumber) {
 						const at = caret == null ? text.length : caret;
 						const { newText, newCaret } = listEnter(text, at, block.listType);
 						commitGlyphEdit(block, newText, newCaret);
+						return;
+					}
+					// Entrée en mode TEXTE (hors liste) : on insère un vrai saut de ligne
+					// nous-mêmes. Le comportement natif du contenteditable (insertion d'un
+					// <div>/<br>) est incohérent ici (le caret bouge mais le \n n'est pas
+					// fiable), donc on pilote l'insertion comme pour l'espace.
+					if (
+						!glyphMode &&
+						event.key === 'Enter' &&
+						!event.metaKey &&
+						!event.ctrlKey &&
+						!event.altKey
+					) {
+						event.preventDefault();
+						event.stopPropagation();
+						insertPlainTextAtCaret(element, '\n');
+						block.multiline = true;
+						element.classList.add('multiline');
+						if (!block.inlineEditDirty) {
+							ensureEditMask(element, block);
+							element.classList.remove('editing-pristine');
+						}
+						block.inlineEditDirty = true;
+						resizeEditingElementToContent(element, block);
 						return;
 					}
 					// Suppr/Retour sont gérés par le handler document (phase capture)
@@ -6285,45 +6342,104 @@ function stripListMarkers(text) {
 		.join('\n');
 }
 
-// Préfixe chaque ligne NON VIDE d'un marqueur de liste. Les lignes vides restent
-// vides (et ne consomment pas de numéro).
-function applyListMarkers(text, type) {
+// Renumérote UNIQUEMENT les lignes déjà numérotées (1., 2., …) pour rester
+// correct même quand seules certaines lignes du bloc sont en liste. Les puces
+// n'ont pas besoin de renumérotation.
+function renumberList(text, type) {
+	if (type !== 'number') return text;
 	let n = 0;
 	return (text || '')
 		.split('\n')
 		.map((line) => {
-			if (line.trim() === '') return line;
-			if (type === 'bullet') return `\u2022 ${line}`;
+			if (!/^\d+[.)]\s/.test(line)) return line;
 			n += 1;
-			return `${n}. ${line}`;
+			return line.replace(/^\d+[.)]\s/, `${n}. `);
 		})
 		.join('\n');
 }
 
-// Renumérote / re-puce un texte déjà markué (utilisé après édition).
-function renumberList(text, type) {
-	if (!type) return text;
-	return applyListMarkers(stripListMarkers(text), type);
+// Lit le texte LIVE de l'élément en cours d'édition et le recopie dans block.text
+// (sinon une modif non encore "commitée" — ex. texte effacé — serait ignorée et
+// ressusciterait au moment d'appliquer une liste). Renvoie l'élément éditable.
+function syncEditingTextToBlock(block) {
+	if (state.editingBlockId !== block.id) return null;
+	const element = elements.pagesStack.querySelector(
+		`.edit-block.editing[data-block-id="${block.id}"]`
+	);
+	if (element) {
+		block.text = (element.innerText || '').replace(/\r\n?/g, '\n');
+	}
+	return element;
 }
 
-// Bascule un type de liste sur le bloc sélectionné (toggle si déjà actif).
+// Bascule un type de liste sur les LIGNES SÉLECTIONNÉES du bloc (ou tout le bloc
+// si aucune sélection). Toggle : si toutes les lignes ciblées portent déjà ce
+// type, on retire les marqueurs.
 function applyListType(type) {
 	const block = selectedEditBlock();
 	if (!block || block.kind === 'image') return;
-	applyFormatChange((target) => {
-		const stripped = stripListMarkers(target.text || '');
-		if (target.listType === type) {
-			target.listType = null;
-			target.text = stripped;
-		} else {
-			target.listType = type;
-			target.text = applyListMarkers(stripped, type);
-			target.multiline = true;
+
+	// 1) Synchronise le texte live AVANT toute mutation (anti-résurrection).
+	const element = syncEditingTextToBlock(block);
+	// 2) Plage de lignes ciblée : sélection courante, sinon tout le bloc.
+	const range = element ? selectionTextRange(element) : null;
+
+	pushHistory();
+	const text = block.text || '';
+	const lines = text.split('\n');
+	let firstLine = 0;
+	let lastLine = lines.length - 1;
+	if (range) {
+		firstLine = text.slice(0, range.start).split('\n').length - 1;
+		lastLine = text.slice(0, range.end).split('\n').length - 1;
+	}
+
+	const markerRe = type === 'bullet' ? /^\u2022\s/ : /^\d+[.)]\s/;
+	const targeted = [];
+	for (let i = firstLine; i <= lastLine; i++) targeted.push(i);
+	const nonEmpty = targeted.filter((i) => lines[i].trim() !== '');
+	const allMarked = nonEmpty.length > 0 && nonEmpty.every((i) => markerRe.test(lines[i]));
+
+	let counter = 0;
+	for (const i of targeted) {
+		const stripped = lines[i].replace(LIST_MARKER_RE, '');
+		if (stripped.trim() === '') {
+			lines[i] = stripped;
+			continue;
 		}
-		// Les listes repartent en texte simple (pas de styles HTML par caractère).
-		target.html = null;
-		target.htmlEdited = false;
-	});
+		if (allMarked) {
+			lines[i] = stripped;
+		} else if (type === 'bullet') {
+			lines[i] = `\u2022 ${stripped}`;
+		} else {
+			counter += 1;
+			lines[i] = `${counter}. ${stripped}`;
+		}
+	}
+
+	block.text = lines.join('\n');
+	block.listType = allMarked ? null : type;
+	if (!allMarked) block.multiline = true;
+	block.textEdited = true;
+	block.html = null;
+	block.htmlEdited = false;
+	block.snapshotDataUrl = null;
+	markDirty();
+	renderEditBlocks();
+	updateSelectedEditField();
+
+	// Si on éditait, on rétablit le focus pour rester en saisie.
+	if (state.editingBlockId === block.id) {
+		requestAnimationFrame(() => {
+			const next = elements.pagesStack.querySelector(
+				`.edit-block.editing[data-block-id="${block.id}"]`
+			);
+			if (next) {
+				next.focus();
+				placeCaretAtEnd(next);
+			}
+		});
+	}
 }
 
 // Calcule la transformation du texte quand on presse Entrée dans une liste :
@@ -8900,8 +9016,22 @@ async function renderFlattenedPage(pageNumber) {
 		const srcH = Math.max((block.originalHeight ?? block.height) * blockScaleY, 2);
 		const width = Math.max(block.width * blockScaleX, 2);
 		const height = Math.max(block.height * blockScaleY, 2);
+		const originalChars = Array.isArray(block.pdfChars) ? block.pdfChars : [];
 		context.fillStyle = '#ffffff';
-		context.fillRect(originalX - 1, originalY - 1, srcW + 2, srcH + 2);
+		if (!block.hidden && textEdited && block.kind !== 'image' && originalChars.length) {
+			// Masque SERRÉ par glyphe (comme à l'écran) : on cache pile l'ancien
+			// texte sans recouvrir les traits du tableau. Le nouveau texte est
+			// redessiné juste après (textEdited), donc rien ne disparaît.
+			for (const ch of originalChars) {
+				const mx = (ch.maskX ?? ch.x) * blockScaleX;
+				const my = (ch.maskY ?? ch.y) * blockScaleY;
+				const mw = (ch.maskWidth ?? ch.width) * blockScaleX;
+				const mh = (ch.maskHeight ?? ch.height) * blockScaleY;
+				context.fillRect(mx - 0.5, my - 0.5, mw + 1, mh + 1);
+			}
+		} else {
+			context.fillRect(originalX - 1, originalY - 1, srcW + 2, srcH + 2);
+		}
 
 		if (block.hidden) continue;
 
@@ -9429,6 +9559,7 @@ function applySettingsFromForm() {
 	state.settings.identityName = elements.settingIdentityName.value.trim();
 	state.settings.identityEmail = elements.settingIdentityEmail.value.trim();
 	saveSettings();
+	syncNativeLanguage();
 	localizeUi();
 	updateUi();
 	renderPageNotes();
@@ -10728,6 +10859,7 @@ setupSignFeature();
 setupAiAssistant();
 setupToolsResize();
 syncSettingsForm();
+syncNativeLanguage();
 applyIcons();
 localizeUi();
 updateUi();

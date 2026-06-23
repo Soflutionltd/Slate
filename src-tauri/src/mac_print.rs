@@ -627,6 +627,78 @@ unsafe extern "C" fn print_did_run_imp(
     emit_print_finished(success != 0);
 }
 
+/// Crée une `NSString` à partir d'un &str.
+unsafe fn make_nsstring(s: &str) -> id {
+    let cstr = std::ffi::CString::new(s).unwrap_or_default();
+    let cls = objc_getClass(c"NSString".as_ptr());
+    let make: unsafe extern "C" fn(Class, SEL, *const c_char) -> id =
+        std::mem::transmute(objc_msgSend as unsafe extern "C" fn());
+    make(
+        cls,
+        sel_registerName(c"stringWithUTF8String:".as_ptr()),
+        cstr.as_ptr(),
+    )
+}
+
+/// Force la langue des panneaux natifs AppKit (impression, enregistrer…) et des
+/// menus en écrivant `AppleLanguages` dans les NSUserDefaults de l'app. Prend
+/// effet au (re)lancement : AppKit lit cette clé au démarrage. `lang` vide ou
+/// "auto" retire l'override (l'app suit alors les préférences système).
+pub fn set_apple_languages(lang: &str) {
+    unsafe {
+        let defaults_class = objc_getClass(c"NSUserDefaults".as_ptr());
+        if defaults_class.is_null() {
+            return;
+        }
+        let cls_to_id: unsafe extern "C" fn(Class, SEL) -> id =
+            std::mem::transmute(objc_msgSend as unsafe extern "C" fn());
+        let defaults = cls_to_id(
+            defaults_class,
+            sel_registerName(c"standardUserDefaults".as_ptr()),
+        );
+        if defaults.is_null() {
+            return;
+        }
+        let key = make_nsstring("AppleLanguages");
+        if key.is_null() {
+            return;
+        }
+
+        if lang.is_empty() || lang == "auto" {
+            let remove: unsafe extern "C" fn(id, SEL, id) =
+                std::mem::transmute(objc_msgSend as unsafe extern "C" fn());
+            remove(
+                defaults,
+                sel_registerName(c"removeObjectForKey:".as_ptr()),
+                key,
+            );
+        } else {
+            let lang_str = make_nsstring(lang);
+            let arr_class = objc_getClass(c"NSArray".as_ptr());
+            let make_arr: unsafe extern "C" fn(Class, SEL, id) -> id =
+                std::mem::transmute(objc_msgSend as unsafe extern "C" fn());
+            let arr = make_arr(
+                arr_class,
+                sel_registerName(c"arrayWithObject:".as_ptr()),
+                lang_str,
+            );
+            let set_obj: unsafe extern "C" fn(id, SEL, id, id) =
+                std::mem::transmute(objc_msgSend as unsafe extern "C" fn());
+            set_obj(
+                defaults,
+                sel_registerName(c"setObject:forKey:".as_ptr()),
+                arr,
+                key,
+            );
+        }
+
+        let sync: unsafe extern "C" fn(id, SEL) -> i8 =
+            std::mem::transmute(objc_msgSend as unsafe extern "C" fn());
+        sync(defaults, sel_registerName(c"synchronize".as_ptr()));
+        log(&format!("set_apple_languages: '{}'", lang));
+    }
+}
+
 /// Masque Slate (→ icône dans le Dock), façon Acrobat après impression quand
 /// des documents étaient déjà ouverts. La session reste intacte.
 pub fn hide_app_native(app: &AppHandle) -> Result<(), String> {

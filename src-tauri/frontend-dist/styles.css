@@ -2384,7 +2384,11 @@ body.sign-arming .sign-layer {
 }
 
 .edit-block.dirty {
-	background: #ffffff;
+	/* Fond transparent : l'ancien texte PDF est caché par les masques serrés
+	   (un par glyphe) en dessous, pas par un grand carré blanc. Ainsi le bloc ne
+	   recouvre plus les traits du tableau, et un bloc déplacé ne laisse pas de
+	   rectangle blanc derrière lui. */
+	background: transparent;
 	color: #161616;
 	border-color: transparent;
 	outline-color: transparent;
@@ -2486,7 +2490,9 @@ body.sign-arming .sign-layer {
 
 .edit-block.editing {
 	cursor: text;
-	background: #ffffff;
+	/* Transparent : le texte d'origine est masqué par les masques serrés en
+	   dessous ; on n'ajoute pas de carré blanc qui couperait le tableau. */
+	background: transparent;
 	color: #161616;
 	border-color: transparent;
 	outline: 1px solid #2271b1;
