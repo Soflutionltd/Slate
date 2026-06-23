@@ -893,19 +893,19 @@ const railIconNames = [
 ];
 
 const icons = {
-	open: '<path d="M12 5v14M5 12h14"/>',
-	save: '<path d="M5 5h12l2 2v12H5z"/><path d="M8 5v6h8V5M8 19v-5h8v5"/>',
-	search: '<circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/>',
-	comment: '<path d="M5 6h14v10H9l-4 4z"/>',
-	edit: '<path d="M4 20h4l11-11-4-4L4 16z"/><path d="m13 7 4 4"/>',
-	export: '<path d="M12 4v12"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/>',
-	merge: '<path d="M7 4v7a5 5 0 0 0 5 5h5"/><path d="M17 12v4h-4"/><path d="M17 4v4a4 4 0 0 1-4 4H7"/>',
+	open: '<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/>',
+	save: '<path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/>',
+	search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+	comment: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+	edit: '<path d="M12.5 22H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h7l5 5v3"/><path d="M14 2v4a1 1 0 0 0 1 1h4"/><path d="M10.4 12.6a2 2 0 1 1 3 3L8 21l-4 1 1-4z"/>',
+	export: '<path d="M14 2v4a1 1 0 0 0 1 1h4"/><path d="M4 7V4a2 2 0 0 1 2-2h8l6 6v12a2 2 0 0 1-2 2h-6"/><path d="M2 15h8"/><path d="m6 11-4 4 4 4"/>',
+	merge: '<path d="M20 7h-3a2 2 0 0 1-2-2V2"/><path d="M9 18a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h6l5 5v9a2 2 0 0 1-2 2z"/><path d="M3 8v12a2 2 0 0 0 2 2h10"/>',
 	pages: '<path d="M7 4h9l3 3v13H7z"/><path d="M16 4v4h4"/><path d="M4 8v12h3"/>',
-	sign: '<path d="M4 17c4-6 5 5 8-1 2-4 4 0 8-3"/><path d="M15 5l4 4"/>',
-	ocr: '<path d="M5 5h14v14H5z"/><path d="M8 12h8M12 8v8"/>',
+	sign: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+	ocr: '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8h10M7 12h10M7 16h6"/>',
 	lock: '<rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V8a4 4 0 0 1 8 0v2"/>',
 	redact: '<path d="M4 7h16M4 12h16M4 17h10"/><path d="M15 15h5v5h-5z"/>',
-	compress: '<path d="M8 4v6H4M16 20v-6h4M4 10l4-4M20 14l-4 4"/>',
+	compress: '<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
 	form: '<path d="M6 4h12v16H6z"/><path d="M9 8h6M9 12h6M9 16h3"/>',
 	convert: '<path d="M7 7h9l3 3v10H7z"/><path d="M16 7v4h4"/><path d="M4 4h9"/>',
 	stamp: '<path d="M9 4h6v6l3 4v2H6v-2l3-4z"/><path d="M5 20h14"/>',
@@ -1124,10 +1124,14 @@ function getInvoke() {
 
 async function invokeCommand(command, args) {
 	const invoke = getInvoke();
-	if (!invoke) {
-		throw new Error('Native Tauri commands are unavailable in this window.');
+	if (invoke) {
+		return invoke(command, args);
 	}
-	return invoke(command, args);
+	const bridge = window.slatePdfBridge;
+	if (bridge?.invoke) {
+		return bridge.invoke(command, args);
+	}
+	throw new Error('Native Tauri commands are unavailable in this window.');
 }
 
 // Pour les commandes qui renvoient des octets bruts (PDF, fichiers) : côté Rust
@@ -5080,7 +5084,9 @@ function renderEditBlocksForPage(pageNumber) {
 			// double-clic), seulement à l'affichage de la boîte. Les blocs ré-écrits
 			// (texte/police modifiés) sont recalés APRÈS rendu par recenterDirtyTextBox,
 			// à partir des métriques RÉELLES de la police choisie (pas de l'ancienne).
-			if (block.kind !== 'image' && !isEditing && !dirty && !multiline) {
+			// Sélectionné : on NE resserre PAS sur l'encre, pour que le cadre (et donc
+			// les poignées) épouse la boîte réelle du bloc (géométrie de redimensionnement).
+			if (block.kind !== 'image' && !isEditing && !dirty && !multiline && !isSelected) {
 				const inkBox = textInkBox(block);
 				if (inkBox) {
 					element.style.top = `${inkBox.top}px`;
@@ -5110,6 +5116,18 @@ function renderEditBlocksForPage(pageNumber) {
 				element.style.minHeight = `${boxHeight}px`;
 				const maxWidth = Math.max(boxWidth, (block.pageWidth || data.viewportWidth) - block.x - 4 + padX * 2);
 				element.style.maxWidth = `${maxWidth}px`;
+			}
+
+			// Bloc redimensionné manuellement (poignées texte) : la boîte épouse EXACTEMENT
+			// la géométrie pilotée par l'utilisateur (WYSIWYG). Le texte reflowe dans cette
+			// largeur (wrap pour les paragraphes, une ligne sinon).
+			if (block.boxResized && !isEditing && block.kind !== 'image') {
+				element.style.left = `${block.x}px`;
+				element.style.top = `${block.y}px`;
+				element.style.width = `${Math.max(block.width, 8)}px`;
+				element.style.height = `${Math.max(block.height, 8)}px`;
+				element.style.whiteSpace = multiline ? 'normal' : 'nowrap';
+				element.style.overflow = 'visible';
 			}
 
 			const textEdited = isBlockTextEdited(block);
@@ -5165,44 +5183,48 @@ function renderEditBlocksForPage(pageNumber) {
 			if (isEditing) {
 				element.contentEditable = 'true';
 				element.spellcheck = false;
+				// Neutralise les substitutions macOS (autocorrection, double-espace →
+				// point, guillemets typographiques) qui parasitent l'édition de texte PDF.
+				element.setAttribute('autocorrect', 'off');
+				element.setAttribute('autocapitalize', 'off');
+				element.setAttribute('autocomplete', 'off');
 				element.addEventListener('pointerdown', (event) => event.stopPropagation());
 				element.addEventListener('click', (event) => {
+					// On laisse le caret NATIF du contenteditable se placer là où
+					// l'utilisateur clique : c'est lui qui pilote l'insertion. Aucun
+					// re-render ici (sinon le caret natif retomberait au début du bloc).
 					event.stopPropagation();
-					if (Array.isArray(block.pdfChars) && block.pdfChars.length && !isBlockTextEdited(block)) {
-						// Plage sélectionnée (clic de fin de glisser) : ne pas replacer le
-						// caret, sinon le re-render annulerait la sélection avant suppression.
-						if (selectionTextRange(element)) return;
-						setPdfCaretFromPointer(event, block);
-					}
 				});
 				element.addEventListener('keydown', (event) => {
 					const glyphMode =
 						Array.isArray(block.pdfChars) && block.pdfChars.length && !isBlockTextEdited(block);
-					// Plage de texte sélectionnée + Suppr/Retour : on efface tout d'un coup.
-					if (glyphMode && (event.key === 'Backspace' || event.key === 'Delete')) {
-						const sel = selectionTextRange(element);
-						if (sel) {
-							event.preventDefault();
-							event.stopPropagation();
-							deletePdfTextRange(block, sel.start, sel.end);
-							return;
+					// Espace en mode TEXTE (bloc déjà réécrit) : on insère l'espace nous-mêmes
+					// pour neutraliser la substitution macOS « double-espace → point ». En
+					// mode glyphe, l'espace est déjà géré plus bas (commitGlyphEdit).
+					if (
+						!glyphMode &&
+						event.key === ' ' &&
+						!event.metaKey &&
+						!event.ctrlKey &&
+						!event.altKey
+					) {
+						event.preventDefault();
+						event.stopPropagation();
+						insertPlainTextAtCaret(element, ' ');
+						if (!block.inlineEditDirty) {
+							ensureEditMask(element, block);
+							element.classList.remove('editing-pristine');
 						}
-					}
-					if (glyphMode && event.key === 'Backspace') {
-						event.preventDefault();
-						event.stopPropagation();
-						deletePdfTextBeforeCaret(block);
+						block.inlineEditDirty = true;
+						resizeEditingElementToContent(element, block);
 						return;
 					}
-					if (glyphMode && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
-						event.preventDefault();
-						event.stopPropagation();
-						movePdfCaret(block, event.key === 'ArrowLeft' ? -1 : 1);
-						return;
-					}
-					// Frappe d'un caractère en mode glyphe : on bascule le bloc en
-					// édition texte complète (le texte reconstruit inclut les
-					// suppressions locales, et la lettre tapée est insérée au caret).
+					// Suppr/Retour sont gérés par le handler document (phase capture)
+					// pour qu'un seul chemin pilote la suppression. Les flèches restent
+					// natives : le caret natif est la source de vérité de la position.
+					// Frappe d'un caractère / Entrée en mode glyphe : on insère à l'offset
+					// du caret NATIF dans block.text (ce que l'utilisateur voit), puis on
+					// bascule le bloc en édition texte. Une sélection est remplacée.
 					if (
 						glyphMode &&
 						!event.metaKey &&
@@ -5212,7 +5234,23 @@ function renderEditBlocksForPage(pageNumber) {
 					) {
 						event.preventDefault();
 						event.stopPropagation();
-						insertPdfTextAtCaret(block, event.key === 'Enter' ? '\n' : event.key);
+						const typed = event.key === 'Enter' ? '\n' : event.key;
+						const range = selectionTextRange(element);
+						if (range) {
+							commitGlyphEdit(
+								block,
+								block.text.slice(0, range.start) + typed + block.text.slice(range.end),
+								range.start + typed.length
+							);
+						} else {
+							const off = caretTextOffset(element);
+							const at = off == null ? block.text.length : off;
+							commitGlyphEdit(
+								block,
+								block.text.slice(0, at) + typed + block.text.slice(at),
+								at + typed.length
+							);
+						}
 						return;
 					}
 					if (event.key === 'Escape') {
@@ -5233,8 +5271,24 @@ function renderEditBlocksForPage(pageNumber) {
 					const glyphMode =
 						Array.isArray(block.pdfChars) && block.pdfChars.length && !isBlockTextEdited(block);
 					if (glyphMode) {
-						// Mode glyphe (texte PDF non ré-écrit) : on reconstruit via le pipeline texte.
-						insertPdfTextAtCaret(block, clean);
+						// Mode glyphe (texte PDF non ré-écrit) : on insère dans block.text à
+						// l'offset du caret NATIF. Sélection présente => remplacement.
+						const range = selectionTextRange(element);
+						if (range) {
+							commitGlyphEdit(
+								block,
+								block.text.slice(0, range.start) + clean + block.text.slice(range.end),
+								range.start + clean.length
+							);
+						} else {
+							const off = caretTextOffset(element);
+							const at = off == null ? block.text.length : off;
+							commitGlyphEdit(
+								block,
+								block.text.slice(0, at) + clean + block.text.slice(at),
+								at + clean.length
+							);
+						}
 						return;
 					}
 					const selection = window.getSelection();
@@ -5299,31 +5353,21 @@ function renderEditBlocksForPage(pageNumber) {
 			if (!isEditing && isResizableBlock(block)) {
 				element.classList.add('resizable');
 				if (isSelected) appendBlockResizeHandles(editLayer, block);
+			} else if (!isEditing && isSelected && block.kind !== 'image') {
+				// Bloc texte sélectionné (simple clic) : poignées de redimensionnement de
+				// boîte (8) + rond de rotation, façon Adobe. Le cadre épouse la boîte.
+				appendTextHandles(editLayer, block);
 			}
 
-			if (
-				isEditing &&
-				block.kind !== 'image' &&
-				Array.isArray(block.pdfChars) &&
-				block.pdfChars.length &&
-				!textEdited
-			) {
-				const caret = caretBoxForBlock(block);
-				if (caret) {
-					// Clamp dans le cadre du bloc : les loose bounds d'un glyphe
-					// (ascendantes/descendantes) peuvent dépasser la boîte du paragraphe.
-					const frameTop = block.y - 1;
-					const frameBottom = block.y + Math.max(block.height, 14) + 1;
-					const top = Math.max(caret.y, frameTop);
-					const bottom = Math.min(caret.y + Math.max(8, caret.height), frameBottom);
-					const caretNode = document.createElement('div');
-					caretNode.className = 'alto-pdf-caret';
-					caretNode.style.left = `${caret.x}px`;
-					caretNode.style.top = `${top}px`;
-					caretNode.style.height = `${Math.max(8, bottom - top)}px`;
-					editLayer.append(caretNode);
-				}
+			// Rotation du bloc (texte) : transform CSS centré. Les poignées sont
+			// repositionnées en conséquence dans appendTextHandles.
+			if (block.rotation) {
+				element.style.transformOrigin = 'center center';
+				element.style.transform = `rotate(${block.rotation}deg)`;
 			}
+
+			// Le caret est désormais le caret NATIF du contenteditable (visible en mode
+			// glyphe via caret-color). Plus de caret custom à dessiner.
 
 			if ((showAsText || (showAsSnapshot && element.textContent)) && block.kind !== 'image') {
 				matchFontFromTextLayer(element, block, data);
@@ -5332,7 +5376,9 @@ function renderEditBlocksForPage(pageNumber) {
 
 			// Bloc texte ré-écrit (police/texte modifiés) : recaler la boîte sur la
 			// hauteur RÉELLE de la police choisie, ancrée à la ligne de base d'origine.
-			if (showAsText && !isEditing && !multiline && block.kind !== 'image') {
+			// On NE recale PAS un bloc redimensionné manuellement (boxResized) : sa
+			// géométrie est pilotée par l'utilisateur (WYSIWYG avec les poignées).
+			if (showAsText && !isEditing && !multiline && block.kind !== 'image' && !block.boxResized) {
 				recenterDirtyTextBox(element, block);
 			}
 		});
@@ -5414,6 +5460,26 @@ function placeCaretAtEnd(element) {
 	range.selectNodeContents(element);
 	range.collapse(false);
 	const selection = window.getSelection();
+	selection.removeAllRanges();
+	selection.addRange(range);
+}
+
+// Insère du texte brut à la position du caret natif (remplace la sélection si
+// présente). Utilisé pour insérer un espace sans passer par la saisie native,
+// ce qui contourne les substitutions macOS (double-espace → point).
+function insertPlainTextAtCaret(element, text) {
+	const selection = window.getSelection();
+	if (!selection || !selection.rangeCount) {
+		element.appendChild(document.createTextNode(text));
+		placeCaretAtEnd(element);
+		return;
+	}
+	const range = selection.getRangeAt(0);
+	range.deleteContents();
+	const node = document.createTextNode(text);
+	range.insertNode(node);
+	range.setStartAfter(node);
+	range.collapse(true);
 	selection.removeAllRanges();
 	selection.addRange(range);
 }
@@ -5524,6 +5590,49 @@ function caretBoxForBlock(block) {
 	return null;
 }
 
+// Offset (collapsed) du caret natif DANS le texte de l'élément éditable. C'est
+// la source de vérité pour l'édition en mode glyphe : le navigateur place le
+// caret là où l'utilisateur clique, et l'offset indexe directement block.text
+// (== textContent de l'élément). Plus fiable que le mapping index-glyphe.
+function caretTextOffset(element) {
+	const sel = window.getSelection();
+	if (!sel || sel.rangeCount === 0) return null;
+	const range = sel.getRangeAt(0);
+	if (!element.contains(range.startContainer)) return null;
+	const pre = range.cloneRange();
+	pre.selectNodeContents(element);
+	pre.setEnd(range.startContainer, range.startOffset);
+	return pre.toString().length;
+}
+
+// Bascule un bloc « glyphe » (texte PDF non encore ré-écrit) en édition texte
+// HTML, avec block.text remplacé par newText et le caret natif replacé à
+// caretOffset. Utilisé par l'insertion / la suppression en mode glyphe : on
+// part TOUJOURS de block.text (ce que l'utilisateur voit dans l'éditable) et
+// d'offsets natifs, donc rien ne se décale ni ne se duplique.
+function commitGlyphEdit(block, newText, caretOffset) {
+	pushHistory();
+	block.text = newText;
+	block.textEdited = true;
+	block.inlineEditDirty = true;
+	block.hiddenCharIndexes = [];
+	block.localGlyphEdited = false;
+	block.localCaretIndex = null;
+	block.snapshotDataUrl = null;
+	if (newText.includes('\n')) block.multiline = true;
+	state.selectedBlockId = block.id;
+	elements.editText.value = block.text;
+	elements.editTextPanel.value = block.text;
+	markDirty();
+	renderEditBlocks();
+	requestAnimationFrame(() => {
+		const next = elements.pagesStack.querySelector(`.edit-block.editing[data-block-id="${block.id}"]`);
+		if (!next) return;
+		next.focus({ preventScroll: true });
+		placeCaretAtTextOffset(next, Math.max(0, Math.min(caretOffset, block.text.length)));
+	});
+}
+
 // Décalages [start, end) de la sélection courante DANS le texte de l'élément
 // éditable (null si aucune sélection ou sélection vide). Sert à supprimer
 // plusieurs caractères d'un coup en mode glyphe.
@@ -5570,6 +5679,39 @@ function deletePdfTextRange(block, start, end) {
 		if (!next) return;
 		next.focus({ preventScroll: true });
 		placeCaretAtTextOffset(next, from);
+	});
+	return true;
+}
+
+// Remplacement d'une PLAGE sélectionnée par du texte (collage « par-dessus »)
+// en mode glyphe : on retire l'intervalle et on insère le texte à la place, en
+// basculant le bloc en édition texte (comme deletePdfTextRange).
+function replacePdfTextRange(block, start, end, insertText) {
+	if (!block || !Array.isArray(block.pdfChars) || !block.pdfChars.length) return false;
+	const lines = pdfCharLines(block);
+	if (!lines.length) return false;
+	const text = pdfLinesText(lines);
+	const from = Math.max(0, Math.min(start, text.length));
+	const to = Math.max(from, Math.min(end, text.length));
+	const inserted = insertText || '';
+	pushHistory();
+	block.text = text.slice(0, from) + inserted + text.slice(to);
+	block.textEdited = true;
+	block.inlineEditDirty = true;
+	block.hiddenCharIndexes = [];
+	block.localGlyphEdited = false;
+	block.localCaretIndex = null;
+	block.snapshotDataUrl = null;
+	state.selectedBlockId = block.id;
+	elements.editText.value = block.text;
+	elements.editTextPanel.value = block.text;
+	markDirty();
+	renderEditBlocks();
+	requestAnimationFrame(() => {
+		const next = elements.pagesStack.querySelector(`.edit-block.editing[data-block-id="${block.id}"]`);
+		if (!next) return;
+		next.focus({ preventScroll: true });
+		placeCaretAtTextOffset(next, from + inserted.length);
 	});
 	return true;
 }
@@ -6320,6 +6462,200 @@ function startBlockResize(event, id, dir) {
 		}
 	};
 
+	window.addEventListener('pointermove', onMove);
+	window.addEventListener('pointerup', onUp);
+}
+
+// Fait tourner un point (px,py) de `deg` degrés autour de (cx,cy).
+function rotatePoint(px, py, cx, cy, deg) {
+	if (!deg) return { x: px, y: py };
+	const r = (deg * Math.PI) / 180;
+	const dx = px - cx;
+	const dy = py - cy;
+	return {
+		x: cx + dx * Math.cos(r) - dy * Math.sin(r),
+		y: cy + dx * Math.sin(r) + dy * Math.cos(r)
+	};
+}
+
+// Taille de police effective d'un bloc texte (override > base > police PDF > déduite).
+function effectiveFontSize(block) {
+	return (
+		block.fontSizeOverride ||
+		block.baseFontSize ||
+		(block.pdfFontSize > 0
+			? block.pdfFontSize
+			: Math.max(8, Math.min(48, Math.round((block.originalHeight || block.height || 14) * 0.78))))
+	);
+}
+
+// Poignées d'un bloc TEXTE sélectionné : 8 poignées de redimensionnement de boîte
+// + un rond de rotation au-dessus (façon Adobe). Les positions suivent la rotation
+// du bloc. Posées comme frères dans l'editLayer (pas d'interférence avec le contenu).
+function appendTextHandles(editLayer, block) {
+	const left = block.x;
+	const top = block.y;
+	const w = Math.max(block.width, 18);
+	const h = Math.max(block.height, 14);
+	const cx = left + w / 2;
+	const cy = top + h / 2;
+	const rot = block.rotation || 0;
+
+	for (const dir of RESIZE_HANDLE_DIRS) {
+		let hx = left + w / 2;
+		if (dir.includes('e')) hx = left + w;
+		else if (dir.includes('w')) hx = left;
+		let hy = top + h / 2;
+		if (dir.includes('s')) hy = top + h;
+		else if (dir.includes('n')) hy = top;
+		const p = rotatePoint(hx, hy, cx, cy, rot);
+		const handle = document.createElement('div');
+		handle.className = `block-resize-handle handle-${dir}`;
+		handle.style.left = `${p.x}px`;
+		handle.style.top = `${p.y}px`;
+		if (rot) handle.style.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
+		handle.dataset.dir = dir;
+		handle.addEventListener('pointerdown', (event) => startTextBoxResize(event, block.id, dir));
+		editLayer.append(handle);
+	}
+
+	// Rond de rotation au-dessus du milieu haut, relié par un fin trait.
+	const topCenter = rotatePoint(left + w / 2, top, cx, cy, rot);
+	const knob = rotatePoint(left + w / 2, top - 22, cx, cy, rot);
+	const dx = knob.x - topCenter.x;
+	const dy = knob.y - topCenter.y;
+	const len = Math.hypot(dx, dy);
+	const ang = (Math.atan2(dy, dx) * 180) / Math.PI;
+	const line = document.createElement('div');
+	line.className = 'block-rotate-line';
+	line.style.left = `${topCenter.x}px`;
+	line.style.top = `${topCenter.y}px`;
+	line.style.height = `${len}px`;
+	line.style.transform = `rotate(${ang - 90}deg)`;
+	editLayer.append(line);
+	const rh = document.createElement('div');
+	rh.className = 'block-rotate-handle';
+	rh.style.left = `${knob.x}px`;
+	rh.style.top = `${knob.y}px`;
+	rh.addEventListener('pointerdown', (event) => startTextBoxRotate(event, block.id));
+	editLayer.append(rh);
+}
+
+// Redimensionne la BOÎTE d'un bloc texte (box_only : la taille de police ne change
+// pas). Rotation-aware : le côté opposé reste fixe dans le repère monde. Le bloc
+// passe en « texte vivant » (reflow) au premier déplacement réel.
+function startTextBoxResize(event, id, dir) {
+	if (!state.editMode) return;
+	event.preventDefault();
+	event.stopPropagation();
+	const block = state.editBlocks.find((candidate) => candidate.id === id);
+	if (!block) return;
+	selectEditBlock(id);
+
+	const snap = captureEditableSnapshot();
+	const startX = event.clientX;
+	const startY = event.clientY;
+	const ix = block.x;
+	const iy = block.y;
+	const iw = Math.max(8, block.width);
+	const ih = Math.max(8, block.height);
+	const rot = block.rotation || 0;
+	const minSize = 8;
+	const signX = dir.includes('e') ? 1 : dir.includes('w') ? -1 : 0;
+	const signY = dir.includes('s') ? 1 : dir.includes('n') ? -1 : 0;
+	const cx0 = ix + iw / 2;
+	const cy0 = iy + ih / 2;
+	const anchorWorld = rotatePoint(cx0 - signX * (iw / 2), cy0 - signY * (ih / 2), cx0, cy0, rot);
+	let converted = false;
+
+	const onMove = (moveEvent) => {
+		if (!converted) {
+			converted = true;
+			// box_only : police figée → on n'altère jamais la taille de police.
+			if (!block.fontSizeOverride) block.fontSizeOverride = effectiveFontSize(block);
+			// Bloc PDF d'origine → texte vivant pour autoriser le reflow.
+			if (Array.isArray(block.pdfChars) && block.pdfChars.length && !isBlockTextEdited(block)) {
+				block.textEdited = true;
+				block.snapshotDataUrl = null;
+				block.hiddenCharIndexes = [];
+			}
+			block.boxResized = true;
+		}
+		const rad = (-rot * Math.PI) / 180;
+		const rawdx = moveEvent.clientX - startX;
+		const rawdy = moveEvent.clientY - startY;
+		const ldx = rawdx * Math.cos(rad) - rawdy * Math.sin(rad);
+		const ldy = rawdx * Math.sin(rad) + rawdy * Math.cos(rad);
+		const w = Math.max(minSize, iw + signX * ldx);
+		const h = Math.max(minSize, ih + signY * ldy);
+		// L'ancre (côté opposé) reste fixe dans le monde → recalcule le centre.
+		const r = (rot * Math.PI) / 180;
+		const alX = -signX * (w / 2);
+		const alY = -signY * (h / 2);
+		const cx1 = anchorWorld.x - (alX * Math.cos(r) - alY * Math.sin(r));
+		const cy1 = anchorWorld.y - (alX * Math.sin(r) + alY * Math.cos(r));
+		block.width = w;
+		block.height = h;
+		block.x = Math.max(0, cx1 - w / 2);
+		block.y = Math.max(0, cy1 - h / 2);
+		renderEditBlocksForPage(block.page);
+	};
+	const onUp = () => {
+		window.removeEventListener('pointermove', onMove);
+		window.removeEventListener('pointerup', onUp);
+		if (converted && (Math.abs(block.width - iw) > 0.5 || Math.abs(block.height - ih) > 0.5)) {
+			commitSnapshot(snap);
+			markDirty();
+		}
+	};
+	window.addEventListener('pointermove', onMove);
+	window.addEventListener('pointerup', onUp);
+}
+
+// Rotation d'un bloc texte via le rond du haut. L'angle suit le pointeur autour du
+// centre du bloc ; aimantation à 0/45/90/… à 4° près (et au pas de 15° avec Maj).
+function startTextBoxRotate(event, id) {
+	if (!state.editMode) return;
+	event.preventDefault();
+	event.stopPropagation();
+	const block = state.editBlocks.find((candidate) => candidate.id === id);
+	if (!block) return;
+	selectEditBlock(id);
+
+	const el = document.querySelector(`.edit-block[data-block-id="${id}"]`);
+	if (!el) return;
+	const rect = el.getBoundingClientRect();
+	const ccx = rect.left + rect.width / 2;
+	const ccy = rect.top + rect.height / 2;
+	const snap = captureEditableSnapshot();
+	const startAngle = (Math.atan2(event.clientY - ccy, event.clientX - ccx) * 180) / Math.PI;
+	const initial = block.rotation || 0;
+	let moved = false;
+
+	const onMove = (moveEvent) => {
+		moved = true;
+		const a = (Math.atan2(moveEvent.clientY - ccy, moveEvent.clientX - ccx) * 180) / Math.PI;
+		let next = initial + (a - startAngle);
+		const step = moveEvent.shiftKey ? 15 : 1;
+		next = Math.round(next / step) * step;
+		// Aimantation douce aux quarts de tour.
+		for (const snapAngle of [-180, -90, 0, 90, 180, 270]) {
+			if (Math.abs(((next - snapAngle + 540) % 360) - 180) < 4) {
+				next = snapAngle;
+				break;
+			}
+		}
+		block.rotation = ((next % 360) + 360) % 360;
+		renderEditBlocksForPage(block.page);
+	};
+	const onUp = () => {
+		window.removeEventListener('pointermove', onMove);
+		window.removeEventListener('pointerup', onUp);
+		if (moved && block.rotation !== initial) {
+			commitSnapshot(snap);
+			markDirty();
+		}
+	};
 	window.addEventListener('pointermove', onMove);
 	window.addEventListener('pointerup', onUp);
 }
@@ -8100,7 +8436,28 @@ function renderHome() {
 		meta.textContent = bits.filter(Boolean).join(' · ');
 		info.append(name, meta);
 
-		card.append(thumb, info);
+		const remove = document.createElement('span');
+		remove.className = 'recent-card-remove';
+		remove.setAttribute('role', 'button');
+		remove.tabIndex = 0;
+		remove.title = currentLocale() === 'fr' ? 'Retirer des récents' : 'Remove from recents';
+		remove.setAttribute('aria-label', remove.title);
+		remove.innerHTML =
+			'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg>';
+		const doRemove = (event) => {
+			event.stopPropagation();
+			event.preventDefault();
+			const matches = (it) =>
+				item.path ? it.path === item.path : it.name === item.name && it.at === item.at;
+			saveRecentFiles(loadRecentFiles().filter((it) => !matches(it)));
+			renderHome();
+		};
+		remove.addEventListener('click', doRemove);
+		remove.addEventListener('keydown', (event) => {
+			if (event.key === 'Enter' || event.key === ' ') doRemove(event);
+		});
+
+		card.append(thumb, info, remove);
 		card.addEventListener('click', () => void openRecentFile(item));
 		body.append(card);
 	}
@@ -8505,6 +8862,18 @@ async function renderFlattenedPage(pageNumber) {
 				lineWidth += w;
 			}
 
+			// Rotation éventuelle du bloc texte : on tourne le repère autour du centre
+			// de la boîte (mêmes centre/angle que le rendu écran).
+			const rot = block.rotation || 0;
+			if (rot) {
+				const cx = block.x * blockScaleX + width / 2;
+				const cy = block.y * blockScaleY + height / 2;
+				context.save();
+				context.translate(cx, cy);
+				context.rotate((rot * Math.PI) / 180);
+				context.translate(-cx, -cy);
+			}
+
 			// Dessin ligne par ligne.
 			let lineY = block.y * blockScaleY;
 			for (const line of lines) {
@@ -8531,6 +8900,7 @@ async function renderFlattenedPage(pageNumber) {
 				}
 				lineY += lineHeightPx;
 			}
+			if (rot) context.restore();
 		} else if (originalCopy) {
 			// Source = étendue d'origine du contenu ; destination = position + taille
 			// actuelles (redimensionnées) → l'image/logo est mise à l'échelle proprement.
@@ -9082,8 +9452,45 @@ function bindTauriMenuEvents() {
 	tauriListen('alto-open-files-available', () => {
 		void drainPendingOpenFiles();
 	});
+	tauriListen('alto-print-files-available', () => {
+		void drainPendingPrintFiles();
+	});
+	// Fin du panneau d'impression (façon Acrobat) : on restaure la session.
+	tauriListen('alto-print-finished', () => {
+		const restore = state.printRestore;
+		state.printRestore = null;
+		if (!restore) return; // impression in-app : rien à restaurer
+		if (restore.hadDocs) {
+			// Des docs étaient ouverts → on réduit Slate (icône Dock), session intacte.
+			void invokeCommand('hide_app');
+		}
+		// Aucun doc → on reste sur la home (aucun onglet n'a été ouvert).
+	});
 
 	void drainPendingOpenFiles();
+	void drainPendingPrintFiles();
+}
+
+// Impression depuis le Finder : on ouvre chaque PDF empilé côté Rust, puis on
+// lance directement la fenêtre d'impression (sans manipulation de l'app).
+async function drainPendingPrintFiles() {
+	try {
+		const pending = await invokeCommand('take_pending_print_files');
+		if (!Array.isArray(pending) || !pending.length) return;
+		// Façon Acrobat : on n'ouvre PAS le PDF comme onglet (pas de pollution de
+		// session). On mémorise l'état pour le restaurer après le panneau.
+		state.printRestore = { hadDocs: state.tabs.length > 0 };
+		for (const file of pending) {
+			const fileName = file.fileName || file.file_name || 'document.pdf';
+			const bytes = Array.from(new Uint8Array(file.bytes));
+			await rememberRecentFile(file.path || '', fileName);
+			// Panneau d'impression natif (dans Slate) directement sur les octets.
+			await invokeCommand('print_pdf', { bytes });
+		}
+	} catch (error) {
+		console.warn('drainPendingPrintFiles failed', error);
+		state.printRestore = null;
+	}
 }
 
 async function drainPendingOpenFiles() {
@@ -9462,6 +9869,15 @@ elements.pagesStack.addEventListener('pointerdown', (event) => {
 	let marquee = null;
 	let dragging = false;
 
+	// Blocs (non masqués) de la page dont la boîte intersecte le rectangle courant.
+	const blocksInRect = (left, top, right, bottom) =>
+		state.editBlocks.filter((block) => {
+			if (block.page !== pageNumber || block.hidden) return false;
+			const bw = Math.max(block.width, 1);
+			const bh = Math.max(block.height, 1);
+			return block.x < right && block.x + bw > left && block.y < bottom && block.y + bh > top;
+		});
+
 	const onMove = (moveEvent) => {
 		const cur = toLocal(moveEvent);
 		const dx = cur.x - start.x;
@@ -9473,10 +9889,23 @@ elements.pagesStack.addEventListener('pointerdown', (event) => {
 			marquee.className = 'selection-marquee';
 			editLayer.append(marquee);
 		}
-		marquee.style.left = `${Math.min(start.x, cur.x)}px`;
-		marquee.style.top = `${Math.min(start.y, cur.y)}px`;
+		const selLeft = Math.min(start.x, cur.x);
+		const selTop = Math.min(start.y, cur.y);
+		marquee.style.left = `${selLeft}px`;
+		marquee.style.top = `${selTop}px`;
 		marquee.style.width = `${Math.abs(dx)}px`;
 		marquee.style.height = `${Math.abs(dy)}px`;
+
+		// Surbrillance PROGRESSIVE : on marque/démarque chaque bloc en direct selon
+		// qu'il touche le rectangle (sans re-render, pour ne pas détruire le marquee).
+		const hitIds = new Set(
+			blocksInRect(selLeft, selTop, Math.max(start.x, cur.x), Math.max(start.y, cur.y)).map((b) =>
+				String(b.id)
+			)
+		);
+		editLayer.querySelectorAll('.edit-block').forEach((el) => {
+			el.classList.toggle('selected', hitIds.has(el.dataset.blockId));
+		});
 	};
 
 	const onUp = (upEvent) => {
@@ -9490,13 +9919,7 @@ elements.pagesStack.addEventListener('pointerdown', (event) => {
 		const selBottom = Math.max(start.y, cur.y);
 		if (marquee) marquee.remove();
 
-		// Blocs de la page (non masqués) dont la boîte intersecte le rectangle.
-		const hits = state.editBlocks.filter((block) => {
-			if (block.page !== pageNumber || block.hidden) return false;
-			const bw = Math.max(block.width, 1);
-			const bh = Math.max(block.height, 1);
-			return block.x < selRight && block.x + bw > selLeft && block.y < selBottom && block.y + bh > selTop;
-		});
+		const hits = blocksInRect(selLeft, selTop, selRight, selBottom);
 
 		// Empêche le clic de fin de drag de vider la sélection qu'on vient de faire.
 		suppressNextPageClick = true;
@@ -9564,18 +9987,37 @@ document.addEventListener(
 			return;
 		}
 
-		// En édition « glyphe » (texte PDF non encore ré-écrit) : Backspace efface le
-		// caractère avant le caret. (Delete/sélection sont gérés au niveau du bloc.)
-		if (event.key !== 'Backspace') return;
+		// En édition « glyphe » (texte PDF non encore ré-écrit) : Backspace/Delete
+		// suppriment dans block.text à l'offset du caret NATIF (ou la sélection),
+		// puis le bloc bascule en édition texte. Tout part de ce que l'utilisateur
+		// voit dans l'éditable → aucun décalage.
 		const block = state.editBlocks.find((candidate) => candidate.id === state.editingBlockId);
 		if (!block || !Array.isArray(block.pdfChars) || !block.pdfChars.length) return;
-		// Bloc déjà converti en édition texte : le caret natif gère Backspace.
+		// Bloc déjà converti en édition texte : le caret natif gère Backspace/Delete.
 		if (isBlockTextEdited(block)) return;
 		if (isFormField) return;
+		const element = elements.pagesStack.querySelector(
+			`.edit-block.editing[data-block-id="${block.id}"]`
+		);
+		if (!element) return;
 
 		event.preventDefault();
 		event.stopPropagation();
-		deletePdfTextBeforeCaret(block);
+
+		const sel = selectionTextRange(element);
+		if (sel) {
+			commitGlyphEdit(block, block.text.slice(0, sel.start) + block.text.slice(sel.end), sel.start);
+			return;
+		}
+		const off = caretTextOffset(element);
+		if (off == null) return;
+		if (event.key === 'Backspace') {
+			if (off <= 0) return;
+			commitGlyphEdit(block, block.text.slice(0, off - 1) + block.text.slice(off), off - 1);
+		} else {
+			if (off >= block.text.length) return;
+			commitGlyphEdit(block, block.text.slice(0, off) + block.text.slice(off + 1), off);
+		}
 	},
 	true
 );
@@ -9583,13 +10025,29 @@ document.addEventListener('keydown', (event) => {
 	const key = event.key.toLowerCase();
 	const meta = event.metaKey || event.ctrlKey;
 	if (!meta) return;
+	// ⌘P / Ctrl+P : on imprime TOUJOURS le PDF (jamais l'impression native du
+	// WebView, qui imprimerait l'UI de l'app). Prioritaire, quel que soit le focus.
+	if (key === 'p' && !event.shiftKey && !event.altKey) {
+		event.preventDefault();
+		if (state.pdf) void handlePrintPdf();
+		else setStatus(t('needPdfOpen'), 'error');
+		return;
+	}
 	const target = event.target;
 	const isField =
 		target &&
 		(target.tagName === 'INPUT' ||
 			target.tagName === 'TEXTAREA' ||
 			target.isContentEditable);
-	if (isField) return;
+	// Dans nos blocs d'édition PDF (contenteditable), ⌘Z / ⌘⇧Z / ⌘Y doivent piloter
+	// l'historique de l'app — l'undo natif du contenteditable ne revient pas sur les
+	// modifications du PDF. Les vrais champs (recherche, réglages) gardent leur undo natif.
+	const inEditBlock =
+		target &&
+		target.isContentEditable &&
+		typeof target.closest === 'function' &&
+		target.closest('.edit-block');
+	if (isField && !inEditBlock) return;
 	if (key === 'z' && !event.shiftKey) {
 		event.preventDefault();
 		undoEdit();
@@ -9600,6 +10058,15 @@ document.addEventListener('keydown', (event) => {
 		event.preventDefault();
 		void handleSaveDocument();
 	}
+});
+
+// Curseur de texte (caret) : comme sur macOS/Windows/Linux, il ne doit PAS clignoter
+// tant qu'un morceau de texte est sélectionné (surlignage bleu). On masque alors le
+// caret custom du mode glyphe via une classe globale.
+document.addEventListener('selectionchange', () => {
+	const sel = window.getSelection();
+	const hasSelection = !!sel && sel.rangeCount > 0 && !sel.isCollapsed && String(sel).length > 0;
+	document.body.classList.toggle('has-text-selection', hasSelection);
 });
 elements.applyEditText.addEventListener('click', applySelectedText);
 elements.deleteEditBlock.addEventListener('click', hideSelectedBlock);
@@ -10027,6 +10494,100 @@ window.addEventListener('resize', () => {
 	}
 });
 
+// ── Mise à jour automatique ─────────────────────────────────────────────
+let _updateInProgress = false;
+let _lastUpdateCheck = 0;
+
+async function checkForUpdates() {
+	try {
+		_lastUpdateCheck = Date.now();
+		const info = await invokeCommand('check_for_update');
+		if (info && info.version) showUpdateToast(info);
+	} catch (_) {
+		// Vérification silencieuse : aucune mise à jour ou réseau indisponible.
+	}
+}
+
+// Vérification « opportuniste » : déclenchée quand l'utilisateur revient sur l'app
+// (focus / onglet visible), au plus une fois par minute, pour que le pop-up monte
+// tout seul sans attendre l'intervalle ni redémarrer.
+function maybeCheckForUpdates() {
+	if (_updateInProgress || document.getElementById('slate-update-toast')) return;
+	if (Date.now() - _lastUpdateCheck < 60 * 1000) return;
+	void checkForUpdates();
+}
+
+function showUpdateToast(info) {
+	if (document.getElementById('slate-update-toast')) return;
+	const fr = currentLocale() === 'fr';
+	const toast = document.createElement('div');
+	toast.id = 'slate-update-toast';
+	toast.className = 'slate-update-toast';
+	toast.setAttribute('role', 'alert');
+	toast.innerHTML = `
+		<div class="slate-update-toast-body">
+			<span class="slate-update-toast-icon" aria-hidden="true">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg>
+			</span>
+			<div class="slate-update-toast-text">
+				<div class="slate-update-toast-title">${fr ? 'Mise à jour disponible' : 'Update available'}</div>
+				<div class="slate-update-toast-sub">${fr ? `Slate ${info.version} est prêt à être installé.` : `Slate ${info.version} is ready to install.`}</div>
+			</div>
+		</div>
+		<div class="slate-update-toast-actions">
+			<button type="button" class="slate-update-later">${fr ? 'Plus tard' : 'Later'}</button>
+			<button type="button" class="slate-update-now">${fr ? 'Mettre à jour' : 'Update'}</button>
+		</div>
+		<div class="slate-update-progress" hidden><div class="slate-update-progress-bar"></div></div>
+	`;
+	document.body.appendChild(toast);
+	requestAnimationFrame(() => toast.classList.add('is-visible'));
+
+	toast.querySelector('.slate-update-later').addEventListener('click', () => dismissUpdateToast(toast));
+	toast.querySelector('.slate-update-now').addEventListener('click', () => void startUpdateInstall(toast));
+}
+
+function dismissUpdateToast(toast) {
+	toast.classList.remove('is-visible');
+	setTimeout(() => toast.remove(), 280);
+}
+
+async function startUpdateInstall(toast) {
+	if (_updateInProgress) return;
+	_updateInProgress = true;
+	const fr = currentLocale() === 'fr';
+	const actions = toast.querySelector('.slate-update-toast-actions');
+	const sub = toast.querySelector('.slate-update-toast-sub');
+	const progress = toast.querySelector('.slate-update-progress');
+	const bar = toast.querySelector('.slate-update-progress-bar');
+	if (actions) actions.remove();
+	if (progress) progress.hidden = false;
+	if (sub) sub.textContent = fr ? 'Téléchargement de la mise à jour…' : 'Downloading update…';
+
+	const tauriListen = window.__TAURI__?.event?.listen;
+	let unlisten = null;
+	if (tauriListen) {
+		unlisten = await tauriListen('slate-update-progress', (event) => {
+			const payload = event?.payload || {};
+			if (payload.total && bar) {
+				const pct = Math.min(100, Math.round((payload.downloaded / payload.total) * 100));
+				bar.style.width = `${pct}%`;
+			}
+		});
+	}
+
+	try {
+		// install_update télécharge, installe, puis redémarre l'app : on ne revient
+		// normalement jamais ici en cas de succès.
+		await invokeCommand('install_update');
+	} catch (err) {
+		_updateInProgress = false;
+		if (typeof unlisten === 'function') unlisten();
+		if (sub) sub.textContent = fr ? 'Échec de la mise à jour. Réessayez plus tard.' : 'Update failed. Please try again later.';
+		setStatus(fr ? 'La mise à jour a échoué.' : 'Update failed.', 'error');
+	}
+}
+
 bindTauriMenuEvents();
 setupTabsScrolling();
 setupPreciseSelectionOverlay();
@@ -10042,3 +10603,20 @@ renderHome();
 // Précharge le catalogue de polices au démarrage (liste prête dès la 1re ouverture
 // du panneau de mise en forme, et le backend a le temps de répondre).
 void ensureFontSelectPopulated();
+
+// Vérifie les mises à jour en arrière-plan, sans bloquer le démarrage, PUIS
+// régulièrement pendant l'utilisation : le pop-up apparaît dès qu'une nouvelle
+// version est publiée, sans avoir à redémarrer l'application.
+setTimeout(() => void checkForUpdates(), 3500);
+setInterval(() => {
+	// Pas de re-vérification pendant un téléchargement, ni si le pop-up est déjà là.
+	if (_updateInProgress || document.getElementById('slate-update-toast')) return;
+	void checkForUpdates();
+}, 15 * 60 * 1000);
+
+// Dès que l'utilisateur revient sur l'app, on revérifie (throttlé à 1/min) → le
+// pop-up apparaît tout seul sans attendre l'intervalle ni relancer l'application.
+window.addEventListener('focus', maybeCheckForUpdates);
+document.addEventListener('visibilitychange', () => {
+	if (!document.hidden) maybeCheckForUpdates();
+});

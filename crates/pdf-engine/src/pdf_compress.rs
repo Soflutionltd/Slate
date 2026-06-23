@@ -10,6 +10,8 @@ use std::io::Cursor;
 
 use image::{DynamicImage, ImageBuffer, ImageFormat, Luma, Rgb};
 use lopdf::{Document, Object, ObjectId, SaveOptions};
+
+#[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
 
 struct Level {
@@ -238,10 +240,15 @@ pub fn compress_pdf_images(bytes: Vec<u8>, level: &str) -> Result<Vec<u8>, Strin
         });
     }
 
-    // 2) Traitement parallèle (décodage + redimension + ré-encodage), CPU-bound
-    //    et indépendant par image.
+    // 2) Décodage + redimension + ré-encodage (parallèle en natif, séquentiel en WASM).
+    #[cfg(not(target_arch = "wasm32"))]
     let replacements: Vec<Replacement> = candidates
         .par_iter()
+        .filter_map(|candidate| process_candidate(candidate, &params))
+        .collect();
+    #[cfg(target_arch = "wasm32")]
+    let replacements: Vec<Replacement> = candidates
+        .iter()
         .filter_map(|candidate| process_candidate(candidate, &params))
         .collect();
 

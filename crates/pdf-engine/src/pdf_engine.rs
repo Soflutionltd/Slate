@@ -1,5 +1,6 @@
 use pdfium_render::prelude::*;
 use serde::{Deserialize, Serialize};
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
@@ -8,6 +9,14 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 // Mutex (PDFium n'est pas thread-safe).
 static PDFIUM: OnceLock<Option<Mutex<Pdfium>>> = OnceLock::new();
 
+#[cfg(target_arch = "wasm32")]
+fn create_pdfium() -> Option<Pdfium> {
+    // Le module Pdfium WASM doit être initialisé côté JS (`initialize_pdfium_render`)
+    // avant le premier appel. Pdfium::default() lie le module déjà chargé.
+    Some(Pdfium::default())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn create_pdfium() -> Option<Pdfium> {
     for dir in pdfium_search_dirs() {
         let lib = Pdfium::pdfium_platform_library_name_at_path(&dir);
@@ -29,6 +38,7 @@ pub fn pdfium_guard() -> Result<MutexGuard<'static, Pdfium>, String> {
     mtx.lock().map_err(|e| e.to_string())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn pdfium_search_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     if let Ok(exe) = std::env::current_exe() {

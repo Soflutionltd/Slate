@@ -17,6 +17,12 @@ fn main() {
     fs::write(Path::new(&out_dir).join("frontend_fingerprint.txt"), fingerprint)
         .expect("écriture de l'empreinte frontend impossible");
 
+    // Impression native (panneau d'impression dans l'app) : on lie le framework
+    // PDFKit, uniquement sur macOS (sinon casse les builds Windows/Linux).
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        println!("cargo:rustc-link-lib=framework=PDFKit");
+    }
+
     tauri_build::build();
 }
 

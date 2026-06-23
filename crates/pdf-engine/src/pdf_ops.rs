@@ -5,7 +5,7 @@ use std::sync::Arc;
 use lopdf::encryption::crypt_filters::{Aes256CryptFilter, CryptFilter};
 use lopdf::encryption::{EncryptionState, EncryptionVersion, Permissions};
 use lopdf::{Bookmark, Document, Object, ObjectId, SaveOptions};
-use rand::RngCore;
+use rand::Rng;
 
 fn err_to_string<E: std::fmt::Display>(e: E) -> String {
     e.to_string()

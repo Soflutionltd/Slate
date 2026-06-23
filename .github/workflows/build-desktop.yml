@@ -100,6 +100,10 @@ jobs:
           OPENSSL_SRC_PERL: C:\Strawberry\perl\bin\perl.exe
         with:
           projectPath: "."
+          # Pas de canal d'auto-update Windows/Linux : on désactive la création des
+          # artefacts updater (sinon `tauri build` exige TAURI_SIGNING_PRIVATE_KEY et
+          # le build échoue). Le canal macOS est signé/publié localement via release.sh.
+          args: --config src-tauri/tauri.ci.conf.json
 
       - name: Upload bundles
         uses: actions/upload-artifact@v4

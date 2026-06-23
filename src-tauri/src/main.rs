@@ -13,6 +13,16 @@ use sofdocs_desktop::{
     llm, ocr, pdf_compress, pdf_engine, pdf_forms, pdf_ops, pdf_sign, pdf_tools, system_fonts,
 };
 
+// Module local au binaire (pas dans la lib partagée) : l'auto-update n'est utile
+// qu'à l'app Tauri, pas au sidecar `alto-mcp`.
+mod updater;
+
+// Impression depuis le Finder (Apple Event « print documents »). Spécifique macOS :
+// Tauri ne forwarde QUE l'event « open », pas « print ». On installe donc notre
+// propre méthode `application:printFiles:…` sur le delegate AppKit.
+#[cfg(target_os = "macos")]
+mod mac_print;
+
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -31,6 +41,11 @@ struct FileResult {
 
 #[derive(Default)]
 struct PendingOpens(Mutex<Vec<FileResult>>);
+
+/// PDF à imprimer dès l'ouverture (déclenchés par l'Apple Event « print » du Finder).
+/// Le frontend les draine, ouvre chaque document puis lance l'impression.
+#[derive(Default)]
+struct PendingPrints(Mutex<Vec<FileResult>>);
 
 /// Cache des octets de document, indexé par un id stable (empreinte du PDF).
 /// Évite de resérialiser tout le fichier en JSON à CHAQUE appel `analyze_pdf_page`
@@ -84,6 +99,14 @@ fn bring_window_to_front(window: &tauri::WebviewWindow) {
 
 #[tauri::command]
 fn take_pending_open_files(state: State<'_, PendingOpens>) -> Vec<FileResult> {
+    match state.0.lock() {
+        Ok(mut buf) => std::mem::take(&mut *buf),
+        Err(_) => Vec::new(),
+    }
+}
+
+#[tauri::command]
+fn take_pending_print_files(state: State<'_, PendingPrints>) -> Vec<FileResult> {
     match state.0.lock() {
         Ok(mut buf) => std::mem::take(&mut *buf),
         Err(_) => Vec::new(),
@@ -582,51 +605,63 @@ async fn pick_certificate_file(app: tauri::AppHandle) -> Result<Option<String>, 
 /// `window.print()` est inopérant dans le WebView macOS (WKWebView), on passe
 /// donc par un fichier temporaire + l'imprimante du système.
 #[tauri::command]
-async fn print_pdf(bytes: Vec<u8>) -> Result<(), String> {
+async fn print_pdf(app: tauri::AppHandle, bytes: Vec<u8>) -> Result<(), String> {
     if !bytes.starts_with(b"%PDF-") {
         return Err("Le contenu à imprimer n'est pas un PDF valide.".into());
     }
 
-    let mut path = std::env::temp_dir();
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0);
-    path.push(format!("alto-impression-{stamp}.pdf"));
-    std::fs::write(&path, &bytes)
-        .map_err(|e| format!("Écriture du fichier d'impression impossible : {e}"))?;
-    let path_str = path.to_string_lossy().to_string();
-
+    // macOS : panneau d'impression natif DANS l'app (PDFKit), façon Acrobat.
+    // Émet `alto-print-finished` à la fermeture du panneau.
     #[cfg(target_os = "macos")]
     {
-        // Aperçu affiche le dialogue d'impression standard (choix imprimante,
-        // copies, recto-verso...) grâce au paramètre « with print dialog ».
-        let script = format!(
-            "tell application \"Preview\"\nactivate\nprint POSIX file \"{}\" with print dialog\nend tell",
-            path_str.replace('\\', "\\\\").replace('"', "\\\"")
-        );
-        std::process::Command::new("osascript")
-            .arg("-e")
-            .arg(&script)
-            .spawn()
-            .map_err(|e| format!("Lancement de l'impression impossible : {e}"))?;
-    }
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("cmd")
-            .args(["/C", "start", "", "/min", &path_str])
-            .spawn()
-            .map_err(|e| format!("Lancement de l'impression impossible : {e}"))?;
-    }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        std::process::Command::new("lp")
-            .arg(&path_str)
-            .spawn()
-            .map_err(|e| format!("Lancement de l'impression impossible : {e}"))?;
+        return mac_print::print_pdf_native(&app, bytes);
     }
 
-    Ok(())
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = &app;
+        let mut path = std::env::temp_dir();
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        path.push(format!("alto-impression-{stamp}.pdf"));
+        std::fs::write(&path, &bytes)
+            .map_err(|e| format!("Écriture du fichier d'impression impossible : {e}"))?;
+        let path_str = path.to_string_lossy().to_string();
+
+        #[cfg(target_os = "windows")]
+        {
+            std::process::Command::new("cmd")
+                .args(["/C", "start", "", "/min", &path_str])
+                .spawn()
+                .map_err(|e| format!("Lancement de l'impression impossible : {e}"))?;
+        }
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            std::process::Command::new("lp")
+                .arg(&path_str)
+                .spawn()
+                .map_err(|e| format!("Lancement de l'impression impossible : {e}"))?;
+        }
+
+        Ok(())
+    }
+}
+
+/// Masque l'application (macOS : icône dans le Dock). Utilisé après une
+/// impression depuis le Finder quand des documents étaient déjà ouverts.
+#[tauri::command]
+fn hide_app(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        return mac_print::hide_app_native(&app);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = &app;
+        Ok(())
+    }
 }
 
 #[tauri::command]
@@ -819,7 +854,9 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(PendingOpens::default())
+        .manage(PendingPrints::default())
         .manage(DocCache::default())
         .setup(|app| {
             // Pré-chauffe PDFium en arrière-plan : charge/initialise la lib native
@@ -897,6 +934,13 @@ fn main() {
                 .text("unsupported-export-word", "Microsoft Word")
                 .text("unsupported-export-image", "Image")
                 .build()?;
+            // Item « Imprimer » avec raccourci natif ⌘P : macOS route alors Cmd+P
+            // vers le menu (→ alto-print → impression du PDF) au lieu de laisser le
+            // WebView ouvrir sa propre impression (qui imprimerait l'UI de l'app).
+            let print_item = MenuItemBuilder::new("Imprimer...")
+                .id("print")
+                .accelerator("CmdOrCtrl+P")
+                .build(app)?;
             let file_menu = SubmenuBuilder::new(app, "Fichier")
                 .text("open-pdf", "Ouvrir...")
                 .item(&recent_menu)
@@ -916,7 +960,7 @@ fn main() {
                 )
                 .text("unsupported-share", "Partager le fichier")
                 .separator()
-                .text("print", "Imprimer...")
+                .item(&print_item)
                 .text("focus-search", "Rechercher")
                 .text("unsupported-advanced-search", "Recherche avancée")
                 .separator()
@@ -1063,6 +1107,11 @@ fn main() {
                 .build()?;
 
             app.set_menu(menu)?;
+
+            // Branche l'impression depuis le Finder (Apple Event « print documents »).
+            #[cfg(target_os = "macos")]
+            mac_print::install(app.handle().clone());
+
             Ok(())
         })
         .on_menu_event(|app, event| {
@@ -1126,6 +1175,7 @@ fn main() {
             save_file,
             save_file_dialog,
             take_pending_open_files,
+            take_pending_print_files,
             merge_pdfs,
             encrypt_pdf,
             compress_pdf,
@@ -1149,6 +1199,7 @@ fn main() {
             pick_multiple_pdfs,
             open_external,
             print_pdf,
+            hide_app,
             watermark_pdf,
             add_page_numbers,
             images_to_pdf,
@@ -1166,7 +1217,9 @@ fn main() {
             set_bookmarks,
             llm::llm_get_config,
             llm::llm_set_config,
-            llm::llm_chat
+            llm::llm_chat,
+            updater::check_for_update,
+            updater::install_update
         ])
         .build(tauri::generate_context!())
         .expect("error while building Alto desktop")
@@ -1175,12 +1228,19 @@ fn main() {
             // association de fichiers). Sur Windows/Linux, l'ouverture passe par les
             // arguments CLI, gérés ailleurs.
             #[cfg(target_os = "macos")]
-            if let tauri::RunEvent::Opened { urls } = _event {
-                for url in urls {
-                    if let Ok(path) = url.to_file_path() {
-                        dispatch_open_path(_app, &path);
+            match &_event {
+                // Une fois NSApp lancé, ré-arme les handlers d'impression : à ce
+                // stade le delegate existe et notre handler Apple Event n'est plus
+                // écrasé par finishLaunching.
+                tauri::RunEvent::Ready => mac_print::rearm(),
+                tauri::RunEvent::Opened { urls } => {
+                    for url in urls {
+                        if let Ok(path) = url.to_file_path() {
+                            dispatch_open_path(_app, &path);
+                        }
                     }
                 }
+                _ => {}
             }
         });
 }

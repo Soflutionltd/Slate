@@ -1,42 +1,79 @@
-use tauri::AppHandle;
+use serde::Serialize;
+use tauri::{AppHandle, Emitter};
 use tauri_plugin_updater::UpdaterExt;
 
-/// Background-checks GitHub Releases for a new signed Alto build and applies it.
-///
-/// Strategy:
-///   1. Spawn a non-blocking task at startup so the UI isn't held back.
-///   2. If a newer signed update is available, download + install it silently.
-///   3. Restart the app so the user opens the new version on next launch.
-///
-/// Errors are logged via `tracing` and never propagated to the user — a failed
-/// update should never block the app from running.
-pub fn spawn_update_check(app: AppHandle) {
-    tauri::async_runtime::spawn(async move {
-        if let Err(err) = check_and_install(&app).await {
-            tracing::warn!("Alto auto-update failed: {err}");
-        }
-    });
+/// Métadonnées d'une mise à jour disponible, renvoyées au frontend pour alimenter
+/// le pop-up « Une nouvelle version est disponible ».
+#[derive(Serialize, Clone)]
+pub struct UpdateInfo {
+    pub version: String,
+    pub current_version: String,
+    pub notes: Option<String>,
 }
 
-async fn check_and_install(app: &AppHandle) -> Result<(), String> {
+/// Progression du téléchargement émise vers le frontend (événement `slate-update-progress`).
+#[derive(Serialize, Clone)]
+struct UpdateProgress {
+    downloaded: u64,
+    total: Option<u64>,
+}
+
+/// Vérifie auprès des GitHub Releases si une version plus récente et signée existe.
+///
+/// Appelé au démarrage par le frontend (non bloquant). Renvoie `None` si l'app est
+/// à jour, ou si le réseau est indisponible — un échec de vérification ne doit jamais
+/// gêner l'utilisateur.
+#[tauri::command]
+pub async fn check_for_update(app: AppHandle) -> Result<Option<UpdateInfo>, String> {
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    match updater.check().await {
+        Ok(Some(update)) => Ok(Some(UpdateInfo {
+            version: update.version.clone(),
+            current_version: update.current_version.clone(),
+            notes: update.body.clone(),
+        })),
+        Ok(None) => Ok(None),
+        Err(err) => {
+            // Réseau coupé, endpoint inaccessible… : on log et on reste silencieux.
+            tracing::debug!("Slate update check failed: {err}");
+            Ok(None)
+        }
+    }
+}
+
+/// Télécharge + installe la mise à jour signée, puis redémarre l'application.
+///
+/// Déclenché quand l'utilisateur clique sur « Mettre à jour » dans le pop-up.
+/// La signature est vérifiée par le plugin avant l'installation ; en cas d'échec,
+/// rien n'est installé. `app.restart()` ne retourne jamais (relance le process).
+#[tauri::command]
+pub async fn install_update(app: AppHandle) -> Result<(), String> {
     let updater = app.updater().map_err(|e| e.to_string())?;
 
     let Some(update) = updater.check().await.map_err(|e| e.to_string())? else {
-        tracing::debug!("Alto is up to date");
-        return Ok(());
+        return Err("Aucune mise à jour disponible".to_string());
     };
 
-    tracing::info!(
-        "Alto update available: {} -> {}",
-        update.current_version,
-        update.version
-    );
+    let progress_app = app.clone();
+    let mut downloaded: u64 = 0;
 
     update
-        .download_and_install(|_chunk_len, _content_len| {}, || {})
+        .download_and_install(
+            move |chunk_len, content_len| {
+                downloaded += chunk_len as u64;
+                let _ = progress_app.emit(
+                    "slate-update-progress",
+                    UpdateProgress {
+                        downloaded,
+                        total: content_len,
+                    },
+                );
+            },
+            || {},
+        )
         .await
         .map_err(|e| e.to_string())?;
 
-    tracing::info!("Alto update installed, restarting…");
+    tracing::info!("Slate update installed — restarting");
     app.restart();
 }
