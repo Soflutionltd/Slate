@@ -25,7 +25,7 @@ leave your machine.
 
 ### ⬇️ Download
 
-<a href="https://github.com/Soflutionltd/Slate/releases/latest"><img src="docs/assets/download-mac.png" alt="Download Slate for macOS" height="80"></a>
+<a href="https://github.com/Soflutionltd/Slate/releases/latest/download/Slate.app.tar.gz"><img src="docs/assets/download-mac.png" alt="Download Slate for macOS" height="80"></a>
 &nbsp;&nbsp;
 <a href="https://github.com/Soflutionltd/Slate/releases"><img src="docs/assets/download-win.png" alt="Download Slate for Windows" height="80"></a>
 &nbsp;&nbsp;
@@ -64,14 +64,14 @@ or slow Electron apps wrapping a JavaScript renderer. Slate is different:
 
 | Platform | Architecture | Status | Link |
 | --- | --- | --- | --- |
-| **macOS** | Apple Silicon (aarch64) | ✅ Signed & notarized | [**Download `.dmg`**](https://github.com/Soflutionltd/Slate/releases/latest) |
+| **macOS** | Apple Silicon (aarch64) | ✅ Signed | [**Download now**](https://github.com/Soflutionltd/Slate/releases/latest/download/Slate.app.tar.gz) |
 | **macOS** | Intel (x86_64) | 🛠 Build from source | [Instructions](#-build-from-source) |
-| **Windows** | x86_64 | 🔄 Via CI | [Releases](https://github.com/Soflutionltd/Slate/releases) |
-| **Linux** | x86_64 | 🔄 Via CI | [Releases](https://github.com/Soflutionltd/Slate/releases) |
+| **Windows** | x86_64 | 🔜 Coming soon | — |
+| **Linux** | x86_64 | 🔜 Coming soon | — |
 
-> **macOS:** download the `.dmg`, open it, and drag **Slate** to *Applications*.
-> The build is signed with a Developer ID and notarized by Apple, so it launches
-> without security warnings.
+> **macOS:** the download starts immediately (`Slate.app.tar.gz`). Double-click
+> the archive to extract it, then drag **Slate.app** to *Applications*. The build
+> is signed with an Apple Developer ID.
 
 ➡️ **Latest release:** [github.com/Soflutionltd/Slate/releases/latest](https://github.com/Soflutionltd/Slate/releases/latest)
 
