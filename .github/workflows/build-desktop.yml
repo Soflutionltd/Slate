@@ -68,8 +68,20 @@ jobs:
         run: |
           set -euo pipefail
           cd src-tauri
-          curl -L --fail -o pdfium.tgz \
-            "https://github.com/bblanchon/pdfium-binaries/releases/download/${PDFIUM_TAG}/${{ matrix.pdfium_asset }}"
+          # GitHub release-assets renvoie parfois 504 : retries + backoff.
+          URL="https://github.com/bblanchon/pdfium-binaries/releases/download/${PDFIUM_TAG}/${{ matrix.pdfium_asset }}"
+          for attempt in 1 2 3 4 5; do
+            if curl -L --fail --retry 3 --retry-delay 2 --retry-all-errors \
+              --connect-timeout 30 --max-time 300 \
+              -o pdfium.tgz "$URL"; then
+              break
+            fi
+            if [[ "$attempt" -eq 5 ]]; then
+              echo "ERREUR : téléchargement PDFium échoué après 5 essais ($URL)" >&2
+              exit 1
+            fi
+            sleep $((attempt * 5))
+          done
           mkdir -p pdfium-extract
           tar -xzf pdfium.tgz -C pdfium-extract
           cp "pdfium-extract/${{ matrix.pdfium_src }}" "${{ matrix.pdfium_file }}"
