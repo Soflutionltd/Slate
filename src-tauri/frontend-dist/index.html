@@ -56,8 +56,18 @@
 
 				<div class="topbar-right">
 					<div class="undo-redo-group">
-						<button class="toolbar-icon undo-redo-button" id="undo-button" type="button" aria-label="Annuler" title="Annuler (⌘Z)" disabled>↶</button>
-						<button class="toolbar-icon undo-redo-button" id="redo-button" type="button" aria-label="Rétablir" title="Rétablir (⌘⇧Z)" disabled>↷</button>
+						<button class="toolbar-icon undo-redo-button" id="undo-button" type="button" aria-label="Annuler" title="Annuler (⌘Z)" disabled>
+							<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+								<path d="M9 14 4 9l5-5" />
+								<path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+							</svg>
+						</button>
+						<button class="toolbar-icon undo-redo-button" id="redo-button" type="button" aria-label="Rétablir" title="Rétablir (⌘⇧Z)" disabled>
+							<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+								<path d="m15 14 5-5-5-5" />
+								<path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
+							</svg>
+						</button>
 					</div>
 					<span class="topbar-sep" aria-hidden="true"></span>
 					<form class="top-search" id="search-form">
@@ -83,11 +93,26 @@
 							</svg>
 							<span>Enregistrer</span>
 						</button>
+						<label class="autosave-toggle" id="autosave-toggle" hidden title="Enregistrement automatique de ce document">
+							<input id="toolbar-auto-save" type="checkbox" class="setting-switch" role="switch" />
+							<span id="autosave-toggle-label">Enreg. auto</span>
+						</label>
 						<button class="toolbar-icon" id="export-edited-pdf" type="button" disabled>Export edited PDF</button>
 						<button class="toolbar-icon" id="export-annotations" type="button" hidden disabled>Export notes</button>
 					</div>
 					<span class="topbar-sep" aria-hidden="true"></span>
-					<button class="toolbar-icon filled" id="settings-button" type="button">Settings</button>
+					<button
+						class="toolbar-icon filled share-button"
+						id="share-button"
+						type="button"
+						aria-haspopup="dialog"
+						aria-expanded="false"
+						aria-controls="share-popover"
+						disabled
+					>
+						Partager
+					</button>
+					<button class="toolbar-icon" id="settings-button" type="button">Settings</button>
 				</div>
 			</header>
 
@@ -137,6 +162,10 @@
 						<span class="tool-icon" data-icon="sign"></span>
 						<span>Fill and sign</span>
 					</button>
+					<button class="tool-row" type="button" data-open-panel="history" data-label-key="historyTool">
+						<span class="tool-icon" data-icon="clock"></span>
+						<span>Historique</span>
+					</button>
 					<button class="tool-row" type="button" data-tool-action="ocr-page" data-label-key="scanOcr">
 						<span class="tool-icon" data-icon="ocr"></span>
 						<span>Scan and OCR</span>
@@ -146,6 +175,10 @@
 						<span>Protect a PDF</span>
 					</button>
 					<div class="more-tools hidden" id="more-tools">
+						<button class="tool-row" type="button" data-tool-action="prepress" data-label-key="usePrepress">
+							<span class="tool-icon" data-icon="prepress"></span>
+							<span>Utiliser le prépresse</span>
+						</button>
 						<button class="tool-row" type="button" data-tool-action="compress" data-label-key="compressPdf">
 							<span class="tool-icon" data-icon="compress"></span>
 							<span>Compress a PDF</span>
@@ -237,6 +270,43 @@
 					</div>
 					<button class="show-more" id="toggle-more-tools" type="button">Show more</button>
 				</div>
+				<div class="prepress-panel hidden" id="prepress-panel">
+					<div class="panel-heading prepress-heading">
+						<button class="prepress-back" id="prepress-back" type="button" aria-label="Retour">‹</button>
+						<strong data-label-key="usePrepress">Utiliser le prépresse</strong>
+						<button class="close-panel" type="button" data-close-panel aria-label="Close tools">x</button>
+					</div>
+					<div class="tool-list">
+						<button class="tool-row" type="button" data-tool-action="convert-colors" data-label-key="convertColors">
+							<span class="tool-icon" data-icon="prepress"></span>
+							<span>Convertir les couleurs</span>
+						</button>
+						<button class="tool-row" type="button" disabled title="Bientôt">
+							<span class="tool-icon" data-icon="search"></span>
+							<span>Aperçu de la sortie</span>
+						</button>
+						<button class="tool-row" type="button" disabled title="Bientôt">
+							<span class="tool-icon" data-icon="standards"></span>
+							<span>Contrôle en amont</span>
+						</button>
+						<button class="tool-row" type="button" disabled title="Bientôt">
+							<span class="tool-icon" data-icon="export"></span>
+							<span>Enregistrer au format PDF/X</span>
+						</button>
+						<button class="tool-row" type="button" disabled title="Bientôt">
+							<span class="tool-icon" data-icon="crop"></span>
+							<span>Définir des zones de page</span>
+						</button>
+						<button class="tool-row" type="button" disabled title="Bientôt">
+							<span class="tool-icon" data-icon="measure"></span>
+							<span>Ajouter des repères d’impression</span>
+						</button>
+						<button class="tool-row" type="button" disabled title="Bientôt">
+							<span class="tool-icon" data-icon="stamp"></span>
+							<span>Gestionnaires d’encres</span>
+						</button>
+					</div>
+				</div>
 				<div class="modifier-panel">
 					<section class="modifier-section">
 						<p class="panel-kicker">Modifier la page</p>
@@ -261,19 +331,33 @@
 					</section>
 					<section class="modifier-section">
 						<p class="panel-kicker">Ajouter un contenu</p>
-						<button class="modifier-menu-row" type="button" data-tool-disabled="Text insertion is not available yet">
-							<span class="tool-icon" data-icon="comment"></span>
+						<button class="modifier-menu-row" id="add-text-tool" type="button" aria-pressed="false">
+							<span class="tool-icon" data-icon="textAdd"></span>
 							<span>Texte</span>
 						</button>
-						<button class="modifier-menu-row" type="button" data-tool-disabled="Image insertion is not available yet">
+						<button class="modifier-menu-row" id="add-image-tool" type="button">
 							<span class="tool-icon" data-icon="media"></span>
 							<span>Image</span>
 						</button>
-						<button class="modifier-menu-row" type="button" data-tool-disabled="Headers and footers are not available yet">
+						<button class="modifier-menu-row" id="add-signature-tool" type="button">
+							<span class="tool-icon" data-icon="sign"></span>
+							<span>Signature</span>
+						</button>
+						<button class="modifier-menu-row" id="add-header-footer-tool" type="button">
 							<span class="tool-icon" data-icon="form"></span>
 							<span>En-tête et pied de page</span>
 						</button>
-						<button class="modifier-link-button" type="button" data-tool-disabled="More editing tools are not available yet">Plus</button>
+						<button class="modifier-link-button" id="modifier-more-tools" type="button" aria-expanded="false">Plus</button>
+						<div id="modifier-more-content" class="modifier-more-content hidden">
+							<button class="modifier-menu-row" type="button" data-tool-action="watermark">
+								<span class="tool-icon" data-icon="watermark"></span>
+								<span>Filigrane</span>
+							</button>
+							<button class="modifier-menu-row" type="button" data-tool-action="page-numbers">
+								<span class="tool-icon" data-icon="pages"></span>
+								<span>Numéros de page</span>
+							</button>
+						</div>
 					</section>
 					<section class="modifier-selected-section">
 						<div class="format-panel" id="format-panel" data-empty="true">
@@ -309,6 +393,21 @@
 								<button class="format-toggle" data-align="center" type="button" aria-label="Centrer" disabled>≡</button>
 								<button class="format-toggle" data-align="right" type="button" aria-label="Aligner à droite" disabled>≥</button>
 							</div>
+							<div class="format-toggles format-list" role="group" aria-label="Listes">
+								<button class="format-toggle" data-list="bullet" type="button" aria-label="Liste à puces" title="Liste à puces" disabled>•—</button>
+								<button class="format-toggle" data-list="number" type="button" aria-label="Liste numérotée" title="Liste numérotée" disabled>1.</button>
+							</div>
+						</div>
+						<div class="signature-transform-panel" id="signature-transform-panel" hidden>
+							<p class="panel-kicker">Inclinaison</p>
+							<label class="signature-rotation-field">
+								<span>Inclinaison</span>
+								<div class="signature-rotation-controls">
+									<input id="signature-rotation-range" type="range" min="-180" max="180" step="1" value="0" />
+									<input id="signature-rotation-input" type="number" min="-180" max="180" step="1" value="0" />
+									<small>°</small>
+								</div>
+							</label>
 						</div>
 						<label class="modifier-edit-field">
 							<span>Texte sélectionné</span>
@@ -358,6 +457,24 @@
 			</aside>
 
 			<section class="reader">
+				<div class="reader-toolbar">
+					<div class="document-meta">
+						<strong id="document-name">No PDF open</strong>
+						<span id="document-meta">Drop a PDF anywhere.</span>
+					</div>
+					<div class="page-controls">
+						<button id="prev-page" type="button" disabled>Previous</button>
+						<span id="page-label">0 / 0</span>
+						<button id="next-page" type="button" disabled>Next</button>
+					</div>
+					<div class="zoom-controls">
+						<button id="zoom-out" type="button" disabled>-</button>
+						<button id="fit-width" type="button" disabled>Fit width</button>
+						<span id="zoom-label">115%</span>
+						<button id="zoom-in" type="button" disabled>+</button>
+					</div>
+				</div>
+
 				<div class="canvas-stage" id="drop-zone">
 					<div class="empty-state" id="empty-state">
 						<div class="home" id="home">
@@ -459,34 +576,11 @@
 				<button class="rail-button" type="button" data-open-panel="notes" aria-label="Notes">C</button>
 				<button class="rail-button" type="button" data-open-panel="pages" aria-label="Pages">P</button>
 				<button class="rail-button" type="button" data-open-panel="outline" aria-label="Marque-pages">B</button>
-
-				<div class="rail-sep" aria-hidden="true"></div>
-
-				<div class="rail-group" aria-label="Navigation page">
-					<button class="rail-button" type="button" id="prev-page" aria-label="Page précédente" title="Page précédente" disabled>
-						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 15 6-6 6 6" /></svg>
-					</button>
-					<span class="rail-value" id="page-label">0/0</span>
-					<button class="rail-button" type="button" id="next-page" aria-label="Page suivante" title="Page suivante" disabled>
-						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
-					</button>
-				</div>
-
-				<span class="rail-size" id="doc-size" title="Taille du document"></span>
-
-				<div class="rail-sep" aria-hidden="true"></div>
-
-				<div class="rail-group" aria-label="Zoom">
-					<button class="rail-button" type="button" id="rail-zoom-in" aria-label="Zoom avant" title="Zoom avant" disabled>+</button>
-					<span class="rail-value" id="zoom-label">100%</span>
-					<button class="rail-button" type="button" id="rail-zoom-out" aria-label="Zoom arrière" title="Zoom arrière" disabled>−</button>
-				</div>
 				<button class="rail-button" type="button" id="rail-fit-width" aria-label="Ajuster la page" title="Ajuster la page" disabled>W</button>
+				<button class="rail-button" type="button" id="rail-zoom-in" aria-label="Zoom in" disabled>+</button>
+				<button class="rail-button" type="button" id="rail-zoom-out" aria-label="Zoom out" disabled>-</button>
 				<button class="rail-button page-layout-toggle" type="button" id="rail-layout-single" aria-label="Page unique" data-layout="single" disabled></button>
-
-				<div class="rail-sep" aria-hidden="true"></div>
-
-				<button class="rail-button" type="button" data-tool-disabled="Rotate pages is not available yet" aria-label="Rotate">R</button>
+				<button class="rail-button" type="button" data-open-panel="history" aria-label="Historique des modifications" title="Historique des modifications">H</button>
 				<button class="rail-button" type="button" data-open-settings aria-label="Settings">S</button>
 			</aside>
 
@@ -532,10 +626,23 @@
 				</section>
 
 				<section class="drawer-section drawer-sign hidden" data-drawer-section="sign">
-					<p class="sign-intro" id="sign-intro">Crée ta signature une fois, place-la en un clic sur n'importe quelle page.</p>
-					<button class="sign-create-button" id="sign-create-button" type="button">+ Créer une signature</button>
-					<div class="sign-list" id="sign-list"></div>
-					<p class="sign-hint" id="sign-hint">Clique une signature puis clique sur la page pour la poser. Poignées : coins pour redimensionner, rond du haut pour pivoter.</p>
+					<p class="sign-intro" id="sign-intro">Enregistre une signature et un paraphe, puis clique sur la page pour les poser.</p>
+					<div class="sign-slots">
+						<div class="sign-slot">
+							<p class="sign-slot-label">Signature</p>
+							<div class="sign-list" id="sign-list-signature"></div>
+						</div>
+						<div class="sign-slot">
+							<p class="sign-slot-label">Paraphe</p>
+							<div class="sign-list" id="sign-list-initials"></div>
+						</div>
+					</div>
+					<p class="sign-hint" id="sign-hint">Clique une carte puis la page pour poser. Poignées : coins pour redimensionner, rond du haut pour pivoter.</p>
+				</section>
+
+				<section class="drawer-section drawer-history hidden" data-drawer-section="history">
+					<div class="history-empty" id="history-empty">Aucune modification pour l’instant.</div>
+					<ol class="history-list" id="history-list"></ol>
 				</section>
 
 				<section class="drawer-section drawer-ai hidden" data-drawer-section="ai">
@@ -662,12 +769,15 @@
 					<button class="signature-tab" id="sig-tab-import" type="button" data-sig-mode="import">Importer</button>
 				</div>
 
+				<div class="signature-toolbar" id="signature-color-row">
+					<label>Couleur
+						<input type="color" id="signature-color" value="#0a3a8c" />
+					</label>
+				</div>
+
 				<div class="signature-pane" id="sig-pane-draw">
 					<canvas id="signature-canvas" width="640" height="220"></canvas>
 					<div class="signature-toolbar">
-						<label>Couleur
-							<input type="color" id="signature-color" value="#0a3a8c" />
-						</label>
 						<button id="signature-clear" type="button">Effacer</button>
 					</div>
 				</div>
@@ -701,13 +811,298 @@
 				</footer>
 			</section>
 
+			<div class="modal-backdrop hidden" id="print-backdrop"></div>
+			<section class="print-dialog hidden" id="print-modal" role="dialog" aria-modal="true" aria-labelledby="print-title">
+				<div class="dialog-titlebar" id="print-titlebar">
+					<h2 id="print-title">Imprimer</h2>
+				</div>
+				<header class="print-dialog-top">
+					<div class="print-top-row">
+						<label class="print-field print-field-printer">
+							<span>Imprimante</span>
+							<select id="print-printer"></select>
+						</label>
+						<button type="button" class="properties-secondary-btn print-advanced-btn" id="print-advanced-open">Options avancées</button>
+						<label class="print-field print-field-copies">
+							<span>Copies</span>
+							<input type="number" id="print-copies" min="1" max="999" value="1" />
+						</label>
+						<label class="print-check print-check-inline">
+							<input type="checkbox" id="print-grayscale" />
+							<span>Imprimer en nuances de gris</span>
+						</label>
+					</div>
+				</header>
+				<div class="print-dialog-main">
+					<div class="print-dialog-settings">
+						<fieldset class="print-fieldset">
+							<legend>Pages à imprimer</legend>
+							<label class="print-radio"><input type="radio" name="print-pages" value="all" checked /> Tout</label>
+							<label class="print-radio"><input type="radio" name="print-pages" value="active" /> Active</label>
+							<label class="print-radio print-radio-custom">
+								<input type="radio" name="print-pages" value="range" />
+								Pages
+								<input type="text" id="print-page-range" placeholder="1-3,5" disabled />
+							</label>
+							<label class="print-check">
+								<input type="checkbox" id="print-reverse" />
+								<span>Inverser</span>
+							</label>
+						</fieldset>
+						<fieldset class="print-fieldset">
+							<legend>Dimensionnement et gestion des pages</legend>
+							<div class="print-size-tabs" aria-hidden="true">
+								<span class="print-size-tab is-active">Taille</span>
+							</div>
+							<label class="print-radio"><input type="radio" name="print-scaling" value="fit" /> Ajuster</label>
+							<label class="print-radio"><input type="radio" name="print-scaling" value="actual" checked /> Taille réelle</label>
+							<label class="print-radio"><input type="radio" name="print-scaling" value="shrink" /> Réduire les pages hors format</label>
+							<label class="print-radio print-radio-custom">
+								<input type="radio" name="print-scaling" value="custom" />
+								Échelle personnalisée
+								<input type="number" id="print-custom-scale" min="1" max="400" value="100" disabled /> %
+							</label>
+							<label class="print-field">
+								<span>Format de papier</span>
+								<select id="print-paper"></select>
+							</label>
+							<label class="print-field" id="print-input-slot-row" hidden>
+								<span>Bac</span>
+								<select id="print-input-slot"></select>
+							</label>
+							<label class="print-check">
+								<input type="checkbox" id="print-auto-paper" />
+								<span>Choisir la source de papier selon le format de la page PDF</span>
+							</label>
+							<label class="print-check print-check-label-fit">
+								<input type="checkbox" id="print-fit-label" />
+								<span>Adapter à l’étiquette (recadrage automatique)</span>
+							</label>
+							<p class="print-hint" id="print-fit-label-hint">Supprime les marges blanches et resserre les espaces vides pour imprimer l’étiquette au plus grand, sans rien couper.</p>
+							<label class="print-check print-check-nested" id="print-fit-compact-row">
+								<input type="checkbox" id="print-fit-compact" checked />
+								<span>Resserrer les espaces vides entre les blocs</span>
+							</label>
+						</fieldset>
+						<fieldset class="print-fieldset">
+							<label class="print-check">
+								<input type="checkbox" id="print-duplex" />
+								<span>Imprimer en recto verso</span>
+							</label>
+							<div class="print-orient-row">
+								<span class="print-orient-label">Orientation</span>
+								<label class="print-radio print-radio-inline"><input type="radio" name="print-orientation" value="auto" checked /> Auto.</label>
+								<label class="print-radio print-radio-inline"><input type="radio" name="print-orientation" value="portrait" /> Portrait</label>
+								<label class="print-radio print-radio-inline"><input type="radio" name="print-orientation" value="landscape" /> Paysage</label>
+							</div>
+						</fieldset>
+						<p class="print-error hidden" id="print-error" role="alert"></p>
+					</div>
+					<aside class="print-dialog-preview">
+						<p class="print-preview-meta">
+							<span id="print-scale-label">Échelle : 100 %</span>
+							<span id="print-dims-label"></span>
+						</p>
+						<p class="print-fit-summary hidden" id="print-fit-summary"></p>
+						<div class="print-preview-frame">
+							<canvas id="print-preview-canvas"></canvas>
+						</div>
+						<div class="print-preview-nav">
+							<button type="button" id="print-preview-prev" aria-label="Page précédente">‹</button>
+							<span id="print-preview-page">Page 1 sur 1</span>
+							<button type="button" id="print-preview-next" aria-label="Page suivante">›</button>
+						</div>
+					</aside>
+				</div>
+				<footer class="print-dialog-footer">
+					<button type="button" class="properties-secondary-btn" id="print-layout-focus">Imprimante…</button>
+					<div class="print-footer-actions">
+						<button type="button" class="properties-secondary-btn" id="print-cancel">Annuler</button>
+						<button type="button" class="properties-primary-btn" id="print-submit">Imprimer</button>
+					</div>
+				</footer>
+			</section>
+
+			<section class="print-advanced-dialog hidden" id="print-advanced-modal" role="dialog" aria-modal="false" aria-labelledby="print-advanced-title">
+				<div class="dialog-titlebar" id="print-advanced-titlebar">
+					<h2 id="print-advanced-title">Réglages de l’imprimante</h2>
+				</div>
+				<p class="print-advanced-printer" id="print-advanced-printer"></p>
+				<div class="print-advanced-body" id="print-advanced-body"></div>
+				<footer class="print-advanced-footer">
+					<button type="button" class="properties-secondary-btn" id="print-advanced-reset">Réglages par défaut</button>
+					<button type="button" class="properties-primary-btn" id="print-advanced-close">Terminé</button>
+				</footer>
+			</section>
+
+			<div class="modal-backdrop hidden" id="convert-colors-backdrop"></div>
+			<section class="convert-colors-dialog hidden" id="convert-colors-modal" role="dialog" aria-modal="true" aria-labelledby="convert-colors-title">
+				<header class="convert-colors-header">
+					<h2 id="convert-colors-title">Convertir les couleurs</h2>
+				</header>
+				<div class="convert-colors-body">
+					<p class="convert-colors-lead">Convertit le document en CMYK pour l’impression offset selon le profil cible.</p>
+					<label class="convert-colors-field">
+						<span>Profil de destination</span>
+						<select id="convert-colors-profile" disabled>
+							<option value="fogra39" selected>Coated FOGRA39 (ISO 12647-2:2004)</option>
+						</select>
+					</label>
+					<p class="convert-colors-profile-status" id="convert-colors-profile-status">Recherche du profil ICC…</p>
+					<ul class="convert-colors-notes">
+						<li>Conversion via Ghostscript (CMYK Device).</li>
+						<li>Le fichier source n’est pas écrasé tant que tu n’enregistres pas.</li>
+						<li>Certains effets / transparences peuvent être aplatis.</li>
+					</ul>
+				</div>
+				<footer class="convert-colors-footer">
+					<button type="button" class="properties-secondary-btn" id="convert-colors-cancel">Annuler</button>
+					<button type="button" class="properties-primary-btn" id="convert-colors-ok">Convertir</button>
+				</footer>
+			</section>
+
 			<div class="modal-backdrop hidden" id="properties-backdrop"></div>
-			<section class="save-changes-modal properties-modal hidden" id="properties-modal" role="dialog" aria-modal="true" aria-labelledby="properties-title">
-				<p class="eyebrow">Slate</p>
-				<h2 id="properties-title">Propriétés du document</h2>
-				<dl class="properties-list" id="properties-list"></dl>
-				<footer class="save-changes-actions">
-					<button id="properties-close-button" class="filled" type="button">Fermer</button>
+			<section class="properties-dialog hidden" id="properties-modal" role="dialog" aria-modal="true" aria-labelledby="properties-title">
+				<header class="properties-dialog-header">
+					<h2 id="properties-title">Propriétés du document</h2>
+				</header>
+				<nav class="properties-tabs" role="tablist" aria-label="Sections des propriétés">
+					<button type="button" class="properties-tab active" role="tab" aria-selected="true" data-props-tab="description">Description</button>
+					<button type="button" class="properties-tab" role="tab" aria-selected="false" data-props-tab="protection">Protection</button>
+					<button type="button" class="properties-tab" role="tab" aria-selected="false" data-props-tab="fonts">Polices</button>
+					<button type="button" class="properties-tab" role="tab" aria-selected="false" data-props-tab="initial">Vue initiale</button>
+					<button type="button" class="properties-tab" role="tab" aria-selected="false" data-props-tab="custom">Personnalisées</button>
+					<button type="button" class="properties-tab" role="tab" aria-selected="false" data-props-tab="advanced">Avancées</button>
+				</nav>
+				<div class="properties-body">
+					<div class="properties-panel active" data-props-panel="description" role="tabpanel">
+						<section class="properties-card">
+							<h3>Description</h3>
+							<div class="properties-grid">
+								<label>Fichier :</label>
+								<span id="props-file-name">—</span>
+								<label for="props-title">Titre :</label>
+								<input id="props-title" type="text" autocomplete="off" />
+								<label for="props-author">Auteur :</label>
+								<input id="props-author" type="text" autocomplete="off" />
+								<label for="props-subject">Sujet :</label>
+								<input id="props-subject" type="text" autocomplete="off" />
+								<label for="props-keywords">Mots-clés :</label>
+								<textarea id="props-keywords" rows="3"></textarea>
+								<label>Date de création :</label>
+								<span id="props-created">—</span>
+								<label>Modifié le :</label>
+								<span id="props-modified">—</span>
+								<label>Application :</label>
+								<span id="props-creator">—</span>
+							</div>
+							<button type="button" class="properties-secondary-btn" id="props-extra-meta" disabled title="Bientôt disponible">Métadonnées supplémentaires...</button>
+						</section>
+						<section class="properties-card">
+							<h3>Description avancée</h3>
+							<div class="properties-grid">
+								<label>Outil de conversion PDF :</label>
+								<span id="props-producer">—</span>
+								<label>Version PDF :</label>
+								<span id="props-pdf-version">—</span>
+								<label>Emplacement :</label>
+								<span id="props-location" class="properties-path">—</span>
+								<label>Taille du fichier :</label>
+								<span id="props-file-size">—</span>
+								<label>Format de page :</label>
+								<span id="props-page-format">—</span>
+								<label>Nombre de pages :</label>
+								<span id="props-page-count">—</span>
+								<label>PDF balisé :</label>
+								<span id="props-tagged">—</span>
+								<label>Affichage web rapide :</label>
+								<span id="props-linearized">—</span>
+							</div>
+						</section>
+					</div>
+					<div class="properties-panel" data-props-panel="protection" role="tabpanel" hidden>
+						<section class="properties-card">
+							<h3>Sécurité du document</h3>
+							<div class="properties-grid">
+								<label>Méthode de sécurité :</label>
+								<span id="props-security-method">—</span>
+								<label>Impression :</label>
+								<span id="props-perm-print">—</span>
+								<label>Modification du document :</label>
+								<span id="props-perm-modify">—</span>
+								<label>Assemblage du document :</label>
+								<span id="props-perm-assemble">—</span>
+								<label>Copie du contenu :</label>
+								<span id="props-perm-copy">—</span>
+								<label>Commentaires :</label>
+								<span id="props-perm-annotate">—</span>
+								<label>Remplissage de formulaires :</label>
+								<span id="props-perm-forms">—</span>
+							</div>
+						</section>
+					</div>
+					<div class="properties-panel" data-props-panel="fonts" role="tabpanel" hidden>
+						<section class="properties-card properties-card-fill">
+							<h3>Polices utilisées dans ce document</h3>
+							<ul class="properties-fonts-list" id="props-fonts-list"></ul>
+						</section>
+					</div>
+					<div class="properties-panel" data-props-panel="initial" role="tabpanel" hidden>
+						<section class="properties-card">
+							<h3>Vue initiale</h3>
+							<div class="properties-grid">
+								<label>Disposition des pages :</label>
+								<span id="props-page-layout">—</span>
+								<label>Mode d’affichage :</label>
+								<span id="props-page-mode">—</span>
+								<label>Magnification :</label>
+								<span id="props-magnification">Par défaut</span>
+								<label>Ouvrir à la page :</label>
+								<span id="props-open-page">1</span>
+							</div>
+						</section>
+					</div>
+					<div class="properties-panel" data-props-panel="custom" role="tabpanel" hidden>
+						<section class="properties-card properties-card-fill">
+							<h3>Propriétés personnalisées</h3>
+							<div class="properties-custom-table-wrap">
+								<table class="properties-custom-table">
+									<thead>
+										<tr><th>Nom</th><th>Valeur</th></tr>
+									</thead>
+									<tbody id="props-custom-body"></tbody>
+								</table>
+							</div>
+							<p class="properties-empty" id="props-custom-empty">Aucune propriété personnalisée.</p>
+						</section>
+					</div>
+					<div class="properties-panel" data-props-panel="advanced" role="tabpanel" hidden>
+						<section class="properties-card">
+							<h3>Options de lecture</h3>
+							<div class="properties-grid">
+								<label>Sens de lecture :</label>
+								<span id="props-reading-direction">Gauche à droite</span>
+								<label>Langue :</label>
+								<span id="props-language">—</span>
+							</div>
+						</section>
+						<section class="properties-card">
+							<h3>Options d’impression</h3>
+							<div class="properties-grid">
+								<label>Recouvrement :</label>
+								<span id="props-trapped">—</span>
+								<label>Prévisualisation de la surimpression :</label>
+								<span>Toujours</span>
+							</div>
+						</section>
+					</div>
+				</div>
+				<footer class="properties-dialog-footer">
+					<button type="button" class="properties-secondary-btn" id="properties-help-button">Aide</button>
+					<div class="properties-footer-right">
+						<button type="button" class="properties-secondary-btn" id="properties-cancel-button">Annuler</button>
+						<button type="button" class="properties-primary-btn" id="properties-ok-button">OK</button>
+					</div>
 				</footer>
 			</section>
 
@@ -765,6 +1160,87 @@
 					<button id="save-confirm-close" class="filled" type="button">Enregistrer</button>
 				</footer>
 			</section>
+
+			<div class="share-popover" id="share-popover" role="dialog" aria-labelledby="share-popover-title" hidden>
+				<header class="share-popover-header">
+					<h2 class="share-popover-title" id="share-popover-title">Partager</h2>
+				</header>
+				<label class="share-invite-field">
+					<span class="sr-only" id="share-invite-label">Inviter par e-mail</span>
+					<input
+						id="share-invite-input"
+						type="text"
+						autocomplete="off"
+						spellcheck="false"
+						placeholder="Ajouter le nom ou l'adresse e-mail pour l'invitation"
+						aria-labelledby="share-invite-label"
+					/>
+				</label>
+				<ul class="share-channel-list" role="list">
+					<li>
+						<button class="share-channel-row" type="button" data-share-channel="whatsapp">
+							<span class="share-channel-icon share-channel-icon--whatsapp" aria-hidden="true">
+								<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 2.09.61 4.03 1.66 5.67L2 22l4.56-1.76A9.86 9.86 0 0 0 12.04 21c5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2Zm5.8 14.07c-.25.7-1.45 1.34-2 1.43-.5.08-1.15.12-1.86-.12-.43-.15-.98-.35-1.69-.68-2.98-1.3-4.93-4.38-5.08-4.58-.14-.2-1.21-1.61-1.21-3.07 0-1.46.77-2.18 1.04-2.48.27-.3.59-.38.79-.38.2 0 .4 0 .57.01.18 0 .43-.07.67.51.25.6.85 2.07.92 2.22.08.15.13.33.02.53-.1.2-.15.33-.3.51-.15.18-.32.4-.46.54-.15.14-.31.3-.13.59.18.29.8 1.32 1.72 2.14 1.18 1.05 2.18 1.38 2.49 1.53.31.16.49.14.67-.08.18-.22.77-.9.98-1.21.21-.31.42-.26.71-.16.29.1 1.84.87 2.16 1.03.32.16.53.24.61.37.08.13.08.76-.17 1.46Z"/></svg>
+							</span>
+							<span class="share-channel-label">WhatsApp</span>
+						</button>
+					</li>
+					<li>
+						<button class="share-channel-row" type="button" data-share-channel="outlook">
+							<span class="share-channel-icon share-channel-icon--outlook" aria-hidden="true">
+								<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M22 6.5V17.5L13.5 21V3L22 6.5ZM11.5 5.5H3.5C2.67 5.5 2 6.17 2 7v10c0 .83.67 1.5 1.5 1.5h8c.83 0 1.5-.67 1.5-1.5V7c0-.83-.67-1.5-1.5-1.5Zm-4 9.5H4v-7h3.5v7Z"/></svg>
+							</span>
+							<span class="share-channel-label">Microsoft Outlook</span>
+						</button>
+					</li>
+					<li>
+						<button class="share-channel-row" type="button" data-share-channel="teams">
+							<span class="share-channel-icon share-channel-icon--teams" aria-hidden="true">
+								<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M19.5 8.25h-2.63A3.37 3.37 0 0 0 16.5 5V2.5h-3V5a3.37 3.37 0 0 0-.37 3.25H10.5V2.5H7.5V5a3.37 3.37 0 0 0-.37 3.25H4.5v3h2.63A3.37 3.37 0 0 0 7.5 14.5V17h3v-2.5a3.37 3.37 0 0 0 .37-3.25h2.63v3H16.5v-3a3.37 3.37 0 0 0 .37-3.25H19.5v-3Z"/></svg>
+							</span>
+							<span class="share-channel-label">Microsoft Teams</span>
+						</button>
+					</li>
+					<li>
+						<button class="share-channel-row" type="button" data-share-channel="gmail">
+							<span class="share-channel-icon share-channel-icon--gmail" aria-hidden="true">
+								<svg viewBox="0 0 24 24" width="20" height="20"><path fill="#EA4335" d="M20 18h2V6.25L12 13 2 6.25V18h2V8.5l8 5.75 8-5.75V18Z"/><path fill="#34A853" d="M20 4H4v1.5l8 5.75L20 5.5V4Z"/><path fill="#FBBC05" d="M2 6.25 12 13l10-6.75V4H2v2.25Z"/><path fill="#4285F4" d="M2 6.25V18h2V8.5l8 5.75V13L2 6.25Z"/></svg>
+							</span>
+							<span class="share-channel-label">Gmail</span>
+						</button>
+					</li>
+					<li>
+						<button class="share-channel-row" type="button" data-share-channel="link">
+							<span class="share-channel-icon share-channel-icon--neutral" aria-hidden="true">
+								<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 13a5 5 0 0 0 7.54.54l2.08-2.08a5 5 0 0 0-7.07-7.07L11.2 5.8"/><path d="M14 11a5 5 0 0 0-7.54-.54L4.38 12.54a5 5 0 0 0 7.07 7.07L12.8 18.2"/></svg>
+							</span>
+							<span class="share-channel-label">Obtenir un lien</span>
+						</button>
+					</li>
+					<li>
+						<button class="share-channel-row" type="button" data-share-channel="email">
+							<span class="share-channel-icon share-channel-icon--neutral" aria-hidden="true">
+								<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+							</span>
+							<span class="share-channel-label">Adresse e-mail</span>
+						</button>
+					</li>
+				</ul>
+				<p class="share-info-banner" id="share-info-banner">
+					Le fichier reste sur votre ordinateur — Slate ne charge rien dans le cloud.
+				</p>
+				<button class="share-link-settings" type="button" id="share-reveal-button">
+					<span class="share-link-settings-icon" aria-hidden="true">
+						<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15.3 15.3 0 0 1 4 9 15.3 15.3 0 0 1-4 9 15.3 15.3 0 0 1-4-9 15.3 15.3 0 0 1 4-9Z"/></svg>
+					</span>
+					<span class="share-link-settings-copy">
+						<strong>Accès au fichier</strong>
+						<span id="share-link-settings-help">Afficher dans le Finder pour joindre ou envoyer le PDF.</span>
+					</span>
+					<span class="share-link-settings-chevron" aria-hidden="true">›</span>
+				</button>
+			</div>
+
 			<section class="settings-modal hidden" id="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
 				<header>
 					<div>
@@ -783,6 +1259,14 @@
 				</nav>
 
 				<div class="settings-grid" data-settings-pane="general">
+					<label class="setting-row">
+						<span>
+							<strong>Par défaut pour les nouveaux documents</strong>
+							<small>Appliqué à l’ouverture d’un fichier qui n’a pas encore de préférence.</small>
+						</span>
+						<input id="setting-auto-save" type="checkbox" class="setting-switch" />
+					</label>
+
 					<label class="setting-row">
 						<span>
 							<strong>Default zoom</strong>

@@ -238,6 +238,13 @@ fn rotate_pages_sets_rotation_angle() {
 }
 
 #[test]
+fn rotate_pages_180_turns_upside_down() {
+    let input = build_pdf(&[&["ALPHA"]]);
+    let out = pdf_ops::rotate_pages(input, vec![1], 180).expect("rotate");
+    assert_eq!(page_rotation(&out, 1), 180);
+}
+
+#[test]
 fn merge_pdfs_concatenates_pages() {
     let a = build_pdf(&[&["ALPHA"]]);
     let b = build_pdf(&[&["BETA"], &["GAMMA"]]);

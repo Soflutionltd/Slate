@@ -1,3 +1,30 @@
+/* Police EXACTE du rendu de page pour Helvetica/Arial : PDF.js dessine les
+   base-14 sans-serif avec LiberationSans (vendor/standard_fonts/). En utilisant
+   les MÊMES fichiers TTF dans l'overlay d'édition, les glyphes HTML sont
+   identiques à ceux du canvas — la bascule natif → édité devient invisible
+   (mêmes contours, mêmes avances ; seule la rasterisation diffère). */
+@font-face { font-family: 'Liberation Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url('vendor/standard_fonts/LiberationSans-Regular.ttf') format('truetype'); }
+@font-face { font-family: 'Liberation Sans'; font-style: normal; font-weight: 700; font-display: swap; src: url('vendor/standard_fonts/LiberationSans-Bold.ttf') format('truetype'); }
+@font-face { font-family: 'Liberation Sans'; font-style: italic; font-weight: 400; font-display: swap; src: url('vendor/standard_fonts/LiberationSans-Italic.ttf') format('truetype'); }
+@font-face { font-family: 'Liberation Sans'; font-style: italic; font-weight: 700; font-display: swap; src: url('vendor/standard_fonts/LiberationSans-BoldItalic.ttf') format('truetype'); }
+
+/* Polices métriquement compatibles base-14, embarquées dans l'app (Apache 2.0).
+   Arimo == Helvetica/Arial (repli), Tinos == Times, Cousine == Courier : mêmes
+   avances que les base-14, donc l'overlay d'édition HTML ne décale ni ne
+   rétrécit le texte par rapport au rendu de la page. */
+@font-face { font-family: 'Arimo'; font-style: normal; font-weight: 400; font-display: swap; src: url('fonts/arimo-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Arimo'; font-style: normal; font-weight: 700; font-display: swap; src: url('fonts/arimo-700-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Arimo'; font-style: italic; font-weight: 400; font-display: swap; src: url('fonts/arimo-400-italic.woff2') format('woff2'); }
+@font-face { font-family: 'Arimo'; font-style: italic; font-weight: 700; font-display: swap; src: url('fonts/arimo-700-italic.woff2') format('woff2'); }
+@font-face { font-family: 'Tinos'; font-style: normal; font-weight: 400; font-display: swap; src: url('fonts/tinos-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Tinos'; font-style: normal; font-weight: 700; font-display: swap; src: url('fonts/tinos-700-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Tinos'; font-style: italic; font-weight: 400; font-display: swap; src: url('fonts/tinos-400-italic.woff2') format('woff2'); }
+@font-face { font-family: 'Tinos'; font-style: italic; font-weight: 700; font-display: swap; src: url('fonts/tinos-700-italic.woff2') format('woff2'); }
+@font-face { font-family: 'Cousine'; font-style: normal; font-weight: 400; font-display: swap; src: url('fonts/cousine-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Cousine'; font-style: normal; font-weight: 700; font-display: swap; src: url('fonts/cousine-700-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Cousine'; font-style: italic; font-weight: 400; font-display: swap; src: url('fonts/cousine-400-italic.woff2') format('woff2'); }
+@font-face { font-family: 'Cousine'; font-style: italic; font-weight: 700; font-display: swap; src: url('fonts/cousine-700-italic.woff2') format('woff2'); }
+
 :root {
 	color-scheme: light;
 	--tools-width: 296px;
@@ -91,7 +118,7 @@ textarea:disabled {
 	grid-row: 2;
 	align-items: center;
 	justify-content: space-between;
-	gap: 12px;
+	gap: 8px;
 	border-bottom: 1px solid var(--border);
 	background: rgba(255, 255, 255, 0.86);
 	padding: 0 10px;
@@ -241,6 +268,61 @@ textarea:disabled {
 	background: var(--accent);
 }
 
+.document-tab.just-saved {
+	background: #ffffff;
+	box-shadow:
+		0 0 0 1.5px rgba(26, 127, 75, 0.42),
+		0 2px 12px rgba(26, 127, 75, 0.12);
+	animation: tab-saved-pulse 1.2s ease-out;
+}
+
+.document-tab-saved {
+	display: grid;
+	place-items: center;
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+	border-radius: 999px;
+	background: #1a7f4b;
+	color: #f3faf6;
+	animation: tab-saved-pop 0.35s cubic-bezier(0.2, 0.85, 0.3, 1.15);
+}
+
+.document-tab-saved svg {
+	display: block;
+	width: 9px;
+	height: 9px;
+}
+
+@keyframes tab-saved-pulse {
+	0% {
+		box-shadow:
+			0 0 0 0 rgba(26, 127, 75, 0.34),
+			0 2px 10px rgba(26, 127, 75, 0.1);
+	}
+	45% {
+		box-shadow:
+			0 0 0 5px rgba(26, 127, 75, 0.1),
+			0 2px 14px rgba(26, 127, 75, 0.16);
+	}
+	100% {
+		box-shadow:
+			0 0 0 0 rgba(26, 127, 75, 0),
+			0 1px 10px rgba(23, 23, 23, 0.05);
+	}
+}
+
+@keyframes tab-saved-pop {
+	0% {
+		transform: scale(0.35);
+		opacity: 0;
+	}
+	100% {
+		transform: scale(1);
+		opacity: 1;
+	}
+}
+
 .document-tab-close {
 	display: grid;
 	place-items: center;
@@ -276,6 +358,24 @@ textarea:disabled {
 	min-width: 0;
 	align-items: center;
 	gap: 6px;
+}
+
+/* La bande d'onglets absorbe le manque de place en défilant. Comprimée sans
+   défilement, elle rognait ses libellés ou les faisait déborder sous les
+   boutons annuler/rétablir. */
+.top-tabs {
+	overflow-x: auto;
+	scrollbar-width: none;
+	mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 16px), transparent 100%);
+}
+
+.top-tabs::-webkit-scrollbar {
+	display: none;
+}
+
+.top-tabs .tab {
+	flex: none;
+	white-space: nowrap;
 }
 
 .brand {
@@ -364,6 +464,60 @@ button:hover:not(:disabled),
 	flex: none;
 }
 
+.save-button.just-saved {
+	color: #1a7f4b;
+}
+
+.autosave-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin: 0;
+	padding: 0 2px;
+	border: none;
+	background: transparent;
+	cursor: pointer;
+	user-select: none;
+	white-space: nowrap;
+}
+
+.autosave-toggle[hidden] {
+	display: none !important;
+}
+
+.autosave-toggle span {
+	font-size: 11px;
+	font-weight: 500;
+	letter-spacing: -0.01em;
+	color: var(--muted);
+}
+
+.autosave-toggle:has(input:checked) span {
+	color: var(--text);
+}
+
+.autosave-toggle:has(input:disabled) {
+	opacity: 0.45;
+	cursor: default;
+}
+
+.autosave-toggle input.setting-switch {
+	width: 28px;
+	height: 16px;
+}
+
+.autosave-toggle input.setting-switch::after {
+	top: 1px;
+	left: 1px;
+	width: 12px;
+	height: 12px;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
+}
+
+.autosave-toggle input.setting-switch:checked::after {
+	transform: translateX(12px);
+}
+
 /* --- Barre du haut : épurée, sans encadrement, avec séparateurs --- */
 .toolbar-icon {
 	white-space: nowrap;
@@ -371,6 +525,9 @@ button:hover:not(:disabled),
 
 .topbar-right {
 	flex-wrap: nowrap;
+	/* Bloc de contrôles non compressible : comprimé, son contenu débordait hors
+	   de la fenêtre. Toute la souplesse est portée par la bande d'onglets. */
+	flex: none;
 }
 
 .top-search,
@@ -383,6 +540,9 @@ button:hover:not(:disabled),
 	align-items: center;
 	gap: 2px;
 	min-width: 0;
+	/* Jamais comprimé : ses boutons débordaient de leur conteneur et passaient
+	   sous « Partager ». Le manque de place est absorbé par la bande d'onglets. */
+	flex: none;
 }
 
 .topbar-right .toolbar-icon {
@@ -405,6 +565,209 @@ button:hover:not(:disabled),
 .topbar-right .toolbar-icon.filled:hover:not(:disabled) {
 	background: #000;
 	border-color: #000;
+}
+
+.share-button {
+	min-width: 92px;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+}
+
+.share-popover {
+	position: fixed;
+	z-index: 1300;
+	display: flex;
+	flex-direction: column;
+	width: min(360px, calc(100vw - 24px));
+	border: 1px solid rgba(0, 0, 0, 0.08);
+	border-radius: 16px;
+	background: rgba(255, 255, 255, 0.97);
+	box-shadow:
+		0 1px 2px rgba(0, 0, 0, 0.05),
+		0 8px 24px rgba(0, 0, 0, 0.1),
+		0 20px 48px rgba(0, 0, 0, 0.08);
+	backdrop-filter: blur(24px) saturate(1.25);
+	-webkit-backdrop-filter: blur(24px) saturate(1.25);
+	overflow: hidden;
+}
+
+.share-popover[hidden] {
+	display: none;
+}
+
+.share-popover-header {
+	padding: 18px 18px 10px;
+}
+
+.share-popover-title {
+	margin: 0;
+	font-size: 15px;
+	font-weight: 650;
+	letter-spacing: -0.02em;
+	line-height: 1.25;
+	color: var(--text);
+}
+
+.share-invite-field {
+	padding: 0 18px 12px;
+}
+
+.share-invite-field input {
+	width: 100%;
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	padding: 11px 12px;
+	font-size: 13px;
+	color: var(--text);
+	background: #fafafa;
+	outline: none;
+}
+
+.share-invite-field input:focus {
+	border-color: rgba(23, 23, 23, 0.22);
+	background: #fff;
+}
+
+.share-channel-list {
+	list-style: none;
+	margin: 0;
+	padding: 4px 8px 8px;
+}
+
+.share-channel-list li {
+	margin: 0;
+}
+
+.share-channel-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	border: 0;
+	border-radius: 10px;
+	background: transparent;
+	padding: 10px 10px;
+	text-align: left;
+	cursor: pointer;
+	transition: background 0.15s ease;
+}
+
+.share-channel-row:hover {
+	background: rgba(23, 23, 23, 0.05);
+}
+
+.share-channel-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 28px;
+	width: 28px;
+	height: 28px;
+	border-radius: 8px;
+}
+
+.share-channel-icon--whatsapp {
+	color: #25d366;
+	background: rgba(37, 211, 102, 0.12);
+}
+
+.share-channel-icon--outlook {
+	color: #0078d4;
+	background: rgba(0, 120, 212, 0.1);
+}
+
+.share-channel-icon--teams {
+	color: #5b5fc7;
+	background: rgba(91, 95, 199, 0.12);
+}
+
+.share-channel-icon--neutral {
+	color: var(--text);
+	background: rgba(23, 23, 23, 0.06);
+}
+
+.share-channel-label {
+	font-size: 14px;
+	font-weight: 520;
+	color: var(--text);
+}
+
+.share-info-banner {
+	margin: 0;
+	padding: 12px 18px;
+	font-size: 12px;
+	line-height: 1.45;
+	color: #1d4f91;
+	background: rgba(29, 79, 145, 0.08);
+	border-top: 1px solid rgba(29, 79, 145, 0.08);
+}
+
+.share-link-settings {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	border: 0;
+	border-top: 1px solid var(--border);
+	background: #fbfbfb;
+	padding: 14px 16px;
+	text-align: left;
+	cursor: pointer;
+	transition: background 0.15s ease;
+}
+
+.share-link-settings:hover {
+	background: #f3f3f1;
+}
+
+.share-link-settings-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 32px;
+	width: 32px;
+	height: 32px;
+	border-radius: 999px;
+	background: rgba(23, 23, 23, 0.06);
+	color: var(--text);
+}
+
+.share-link-settings-copy {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+	flex: 1;
+}
+
+.share-link-settings-copy strong {
+	font-size: 13px;
+	font-weight: 620;
+	color: var(--text);
+}
+
+.share-link-settings-copy span {
+	font-size: 12px;
+	line-height: 1.35;
+	color: var(--muted);
+}
+
+.share-link-settings-chevron {
+	flex: 0 0 auto;
+	font-size: 18px;
+	color: var(--muted);
+}
+
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
 }
 
 .topbar-sep {
@@ -553,8 +916,11 @@ button:hover:not(:disabled),
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	font-size: 17px;
 	line-height: 1;
+}
+
+.undo-redo-button svg {
+	display: block;
 }
 
 .undo-redo-button:disabled {
@@ -780,6 +1146,18 @@ button:hover:not(:disabled),
 	text-align: left;
 }
 
+.modifier-more-content {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin-top: 2px;
+	padding-left: 2px;
+}
+
+.modifier-more-content.hidden {
+	display: none;
+}
+
 .modifier-muted-copy {
 	margin: -2px 0 3px;
 	color: var(--muted);
@@ -802,6 +1180,51 @@ button:hover:not(:disabled),
 
 .format-panel[data-empty="true"] {
 	opacity: 0.55;
+}
+
+.signature-transform-panel {
+	display: grid;
+	gap: 10px;
+	margin-bottom: 12px;
+	border: 1px solid rgba(23, 23, 23, 0.08);
+	border-radius: 16px;
+	background: rgba(255, 255, 255, 0.68);
+	padding: 12px;
+}
+
+.signature-rotation-field {
+	display: grid;
+	gap: 8px;
+	color: var(--muted);
+	font-size: 12px;
+	font-weight: 650;
+}
+
+.signature-rotation-controls {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 64px auto;
+	align-items: center;
+	gap: 8px;
+}
+
+.signature-rotation-controls input[type="range"] {
+	width: 100%;
+	accent-color: #1f6feb;
+}
+
+.signature-rotation-controls input[type="number"] {
+	width: 64px;
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	background: rgba(255, 255, 255, 0.82);
+	padding: 7px 8px;
+	color: var(--text);
+	font-size: 12px;
+}
+
+.signature-rotation-controls small {
+	color: var(--muted);
+	font-size: 12px;
 }
 
 .format-font-warning {
@@ -1131,6 +1554,64 @@ button:hover:not(:disabled),
 	border-radius: 6px;
 	background: transparent;
 	color: var(--accent);
+}
+
+/* Pastilles colorées style iOS Settings — panneau « Tous les outils » */
+.tool-row .tool-icon {
+	width: 28px;
+	height: 28px;
+	border-radius: 8px;
+	color: #fff;
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.tool-row .tool-icon svg {
+	width: 15px;
+	height: 15px;
+	stroke-width: 2.1;
+}
+
+.tool-row .tool-icon[data-tint='blue'] {
+	background: #007aff;
+}
+.tool-row .tool-icon[data-tint='indigo'] {
+	background: #5856d6;
+}
+.tool-row .tool-icon[data-tint='violet'] {
+	background: #af52de;
+}
+.tool-row .tool-icon[data-tint='purple'] {
+	background: #bf5af2;
+}
+.tool-row .tool-icon[data-tint='pink'] {
+	background: #ff2d55;
+}
+.tool-row .tool-icon[data-tint='rose'] {
+	background: #ff375f;
+}
+.tool-row .tool-icon[data-tint='red'] {
+	background: #ff3b30;
+}
+.tool-row .tool-icon[data-tint='orange'] {
+	background: #ff9500;
+}
+.tool-row .tool-icon[data-tint='amber'] {
+	background: #ff9f0a;
+}
+.tool-row .tool-icon[data-tint='green'] {
+	background: #34c759;
+}
+.tool-row .tool-icon[data-tint='mint'] {
+	background: #00c7be;
+}
+.tool-row .tool-icon[data-tint='teal'] {
+	background: #30b0c7;
+}
+.tool-row .tool-icon[data-tint='cyan'] {
+	background: #32ade6;
+}
+.tool-row .tool-icon[data-tint='slate'] {
+	background: #8e8e93;
 }
 
 .tool-icon svg,
@@ -1715,6 +2196,9 @@ button:hover:not(:disabled),
 	transform-origin: 0 0;
 	caret-color: CanvasText;
 	color-scheme: only light;
+	--scale-factor: 1;
+	--user-unit: 1;
+	--total-scale-factor: calc(var(--scale-factor) * var(--user-unit));
 	--min-font-size: 1;
 	--text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
 	--min-font-size-inv: calc(1 / var(--min-font-size));
@@ -1740,9 +2224,6 @@ button:hover:not(:disabled),
 	--scale-x: 1;
 	--rotate: 0deg;
 	transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
-	line-height: 0.8;
-	padding-block: 0;
-	margin-block: 0;
 }
 
 .textLayer .markedContent {
@@ -1754,12 +2235,14 @@ button:hover:not(:disabled),
 	cursor: default;
 }
 
+/* Sélection native (comme pdf.js viewer) : le SVG custom décalait le bleu
+   au-dessus du texte. L'édition glyphe garde son overlay dédié. */
 .textLayer ::selection {
-	background: transparent;
+	background: rgba(0, 0, 255, 0.25);
 }
 
 .textLayer ::-moz-selection {
-	background: transparent;
+	background: rgba(0, 0, 255, 0.25);
 }
 
 .precise-selection-overlay {
@@ -1790,6 +2273,360 @@ button:hover:not(:disabled),
 
 .sign-layer > .sign-placement {
 	pointer-events: auto;
+}
+
+/* ── Formulaires : widgets HTML PDF.js posés sur la page ─────────────────── */
+.form-layer {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 4;
+	pointer-events: none;
+	transform-origin: 0 0;
+	color-scheme: only light;
+	--user-unit: 1;
+	/* setLayerDimensions() de PDF.js arrondit via ces variables : sans elles,
+	   le calc() est invalide et la couche a une largeur nulle. */
+	--scale-round-x: 1px;
+	--scale-round-y: 1px;
+	--annotation-unfocused-field-background: rgba(34, 113, 177, 0.1);
+	--input-focus-border-color: #2271b1;
+	--input-unfocused-border-color: transparent;
+	--input-hover-border-color: rgba(34, 113, 177, 0.55);
+}
+
+.form-layer.hidden {
+	display: none;
+}
+
+.form-layer section {
+	position: absolute;
+	text-align: initial;
+	pointer-events: auto;
+	box-sizing: border-box;
+	transform-origin: 0 0;
+	user-select: none;
+}
+
+.form-layer .hasBorder {
+	background-size: 100% 100%;
+}
+
+.form-layer :is(.linkAnnotation, .buttonWidgetAnnotation.pushButton) > a {
+	position: absolute;
+	font-size: 1em;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+}
+
+.form-layer .textWidgetAnnotation :is(input, textarea),
+.form-layer .choiceWidgetAnnotation select,
+.form-layer .buttonWidgetAnnotation:is(.checkBox, .radioButton) input {
+	/* PDF.js pose `background-color: transparent` en inline : on passe par
+	   background-image pour teinter le champ malgré tout (comme Firefox). */
+	background-image: linear-gradient(
+		var(--annotation-unfocused-field-background),
+		var(--annotation-unfocused-field-background)
+	);
+	border: 1px solid var(--input-unfocused-border-color);
+	border-radius: 2px;
+	box-sizing: border-box;
+	font: calc(9px * var(--total-scale-factor)) sans-serif;
+	line-height: normal;
+	color: #111111;
+	/* Neutralise les styles globaux de l'app (textarea min-height 106px,
+	   padding 12px, select arrondi…) : le widget doit rester DANS son /Rect,
+	   sinon il déborde sur les champs voisins (ex. la photo). */
+	height: 100%;
+	min-height: 0;
+	max-height: 100%;
+	margin: 0;
+	padding: 0 calc(2px * var(--total-scale-factor));
+	vertical-align: top;
+	width: 100%;
+	opacity: 1;
+	overflow: auto;
+	outline: none;
+	transition: background-color 120ms ease-out, border-color 120ms ease-out;
+}
+
+.form-layer .textWidgetAnnotation textarea {
+	resize: none;
+}
+
+.form-layer .choiceWidgetAnnotation select option {
+	padding: 0;
+}
+
+.form-layer .textWidgetAnnotation :is(input, textarea)[disabled],
+.form-layer .choiceWidgetAnnotation select[disabled],
+.form-layer .buttonWidgetAnnotation:is(.checkBox, .radioButton) input[disabled] {
+	background-image: none;
+	cursor: not-allowed;
+}
+
+.form-layer .textWidgetAnnotation :is(input, textarea):hover,
+.form-layer .choiceWidgetAnnotation select:hover,
+.form-layer .buttonWidgetAnnotation:is(.checkBox, .radioButton) input:hover {
+	border-color: var(--input-hover-border-color);
+}
+
+.form-layer .textWidgetAnnotation :is(input, textarea):focus,
+.form-layer .choiceWidgetAnnotation select:focus {
+	background-image: linear-gradient(#ffffff, #ffffff);
+	border-color: var(--input-focus-border-color);
+	box-shadow: 0 0 0 2px rgba(34, 113, 177, 0.22);
+}
+
+.form-layer .buttonWidgetAnnotation:is(.checkBox, .radioButton) input {
+	appearance: none;
+	position: relative;
+	cursor: pointer;
+}
+
+.form-layer .buttonWidgetAnnotation.radioButton input {
+	border-radius: 50%;
+}
+
+.form-layer .buttonWidgetAnnotation:is(.checkBox, .radioButton) input:focus {
+	border-color: var(--input-focus-border-color);
+}
+
+.form-layer .buttonWidgetAnnotation.checkBox input:checked::before,
+.form-layer .buttonWidgetAnnotation.checkBox input:checked::after,
+.form-layer .buttonWidgetAnnotation.radioButton input:checked::before {
+	background-color: #111111;
+	content: '';
+	display: block;
+	position: absolute;
+}
+
+.form-layer .buttonWidgetAnnotation.checkBox input:checked::before,
+.form-layer .buttonWidgetAnnotation.checkBox input:checked::after {
+	height: 80%;
+	left: 45%;
+	top: 10%;
+	width: calc(1px * var(--total-scale-factor));
+}
+
+.form-layer .buttonWidgetAnnotation.checkBox input:checked::before {
+	transform: rotate(45deg);
+}
+
+.form-layer .buttonWidgetAnnotation.checkBox input:checked::after {
+	transform: rotate(-45deg);
+}
+
+.form-layer .buttonWidgetAnnotation.radioButton input:checked::before {
+	border-radius: 50%;
+	height: 50%;
+	left: 25%;
+	top: 25%;
+	width: 50%;
+}
+
+.form-layer .textWidgetAnnotation input.comb {
+	font-family: monospace;
+	padding-left: 2px;
+	padding-right: 0;
+}
+
+.form-layer .textWidgetAnnotation input.comb:focus {
+	width: 103%;
+}
+
+.form-layer .form-date-field {
+	overflow: visible;
+}
+
+.form-layer .form-date-field .form-date-guide {
+	position: absolute;
+	inset: 0;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	padding: 0 calc(2px * var(--total-scale-factor));
+	font: calc(9px * var(--total-scale-factor)) sans-serif;
+	line-height: normal;
+	color: rgba(17, 17, 17, 0.34);
+	pointer-events: none;
+	white-space: pre;
+	overflow: hidden;
+}
+
+.form-layer .form-date-field .form-date-guide-filled {
+	visibility: hidden;
+}
+
+.form-layer .form-date-field input.form-date-input {
+	cursor: text;
+	position: relative;
+	z-index: 1;
+}
+
+.form-date-calendar {
+	position: fixed;
+	z-index: 1400;
+	display: flex;
+	flex-direction: column;
+	width: 268px;
+	padding: 12px;
+	border: 1px solid rgba(23, 23, 23, 0.08);
+	border-radius: 16px;
+	background: rgba(255, 255, 255, 0.97);
+	box-shadow:
+		0 1px 2px rgba(23, 23, 23, 0.05),
+		0 8px 24px rgba(23, 23, 23, 0.1),
+		0 20px 48px rgba(23, 23, 23, 0.08);
+	backdrop-filter: blur(24px) saturate(1.25);
+	-webkit-backdrop-filter: blur(24px) saturate(1.25);
+}
+
+.form-date-calendar[hidden] {
+	display: none;
+}
+
+.form-date-calendar-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 10px;
+}
+
+.form-date-calendar-title {
+	flex: 1;
+	min-width: 0;
+	margin: 0;
+	font-size: 13px;
+	font-weight: 650;
+	letter-spacing: -0.02em;
+	line-height: 1.2;
+	text-align: center;
+	text-transform: capitalize;
+	color: var(--text);
+}
+
+.form-date-calendar-nav {
+	flex: 0 0 32px;
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	border: 1px solid transparent;
+	border-radius: 10px;
+	background: transparent;
+	color: var(--text);
+	font-size: 18px;
+	line-height: 1;
+	transition: all 160ms ease-out;
+}
+
+.form-date-calendar-nav:hover {
+	background: var(--muted-panel);
+	border-color: var(--border);
+}
+
+.form-date-calendar-week,
+.form-date-calendar-grid {
+	display: grid;
+	grid-template-columns: repeat(7, minmax(0, 1fr));
+	gap: 2px;
+}
+
+.form-date-calendar-week {
+	margin-bottom: 4px;
+}
+
+.form-date-calendar-week span {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 22px;
+	color: var(--faint);
+	font-size: 10px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.form-date-calendar-day {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 0;
+	height: 32px;
+	padding: 0;
+	border: 1px solid transparent;
+	border-radius: 10px;
+	background: transparent;
+	color: var(--text);
+	font-size: 12px;
+	font-weight: 550;
+	line-height: 1;
+	transition: all 140ms ease-out;
+}
+
+.form-date-calendar-day:hover:not(.is-empty):not(.is-selected) {
+	background: var(--muted-panel);
+}
+
+.form-date-calendar-day.is-empty {
+	pointer-events: none;
+}
+
+.form-date-calendar-day.is-today:not(.is-selected) {
+	box-shadow: inset 0 0 0 1px var(--accent);
+	color: var(--accent);
+}
+
+.form-date-calendar-day.is-selected {
+	background: var(--text);
+	color: #f6f6f4;
+}
+
+/* Bouton « choisir une image » (buttonImportIcon) : cible cliquable. */
+.form-layer .form-image-button {
+	cursor: pointer;
+	border-radius: 2px;
+	transition: background-color 150ms ease-out, box-shadow 150ms ease-out;
+}
+
+.form-layer .form-image-button > a {
+	cursor: pointer;
+}
+
+.form-layer .form-image-button:hover {
+	background-color: rgba(34, 113, 177, 0.1);
+	box-shadow: inset 0 0 0 calc(1px * var(--total-scale-factor)) rgba(34, 113, 177, 0.55);
+}
+
+.form-layer .form-image-button.hasBorder,
+.form-layer .buttonWidgetAnnotation.pushButton.hasBorder {
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+}
+
+.form-layer .form-image-button img,
+.form-layer .buttonWidgetAnnotation.pushButton img {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+	object-position: center;
+}
+
+.form-layer .form-signature-field {
+	z-index: 40;
+	cursor: pointer;
+	border-radius: 2px;
+	pointer-events: auto;
+	transition: background-color 150ms ease-out, box-shadow 150ms ease-out;
+}
+
+.form-layer .form-signature-field:hover {
+	background-color: rgba(34, 113, 177, 0.08);
+	box-shadow: inset 0 0 0 calc(1px * var(--total-scale-factor)) rgba(34, 113, 177, 0.5);
 }
 
 body.sign-arming .sign-layer {
@@ -1841,36 +2678,6 @@ body.sign-arming .sign-layer {
 	cursor: nwse-resize;
 }
 
-/* Rotation : masquée par défaut, révélée au survol du cadre sélectionné. */
-.sign-placement .sign-rotate {
-	width: 12px;
-	height: 12px;
-	border-radius: 999px;
-	top: -22px;
-	left: 50%;
-	transform: translateX(-50%);
-	cursor: grab;
-}
-
-.sign-placement.selected .sign-rotate {
-	display: none;
-}
-
-.sign-placement.selected:hover .sign-rotate {
-	display: grid;
-}
-
-.sign-placement .sign-rotate::after {
-	content: "";
-	position: absolute;
-	top: 11px;
-	left: 50%;
-	width: 1px;
-	height: 11px;
-	background: rgba(31, 111, 235, 0.9);
-	transform: translateX(-50%);
-}
-
 .sign-placement .sign-del {
 	top: -5px;
 	right: -5px;
@@ -1894,6 +2701,21 @@ body.sign-arming .sign-layer {
 	font-size: 12px;
 	line-height: 1.5;
 	margin: 0;
+}
+
+.sign-slots {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.sign-slot-label {
+	margin: 0 0 8px;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--muted);
 }
 
 .sign-create-button {
@@ -2051,6 +2873,10 @@ body.sign-arming .sign-layer {
 	color: var(--muted);
 }
 
+#signature-color-row {
+	margin: 0 0 4px;
+}
+
 .signature-toolbar label {
 	display: flex;
 	align-items: center;
@@ -2145,13 +2971,41 @@ body.sign-arming .sign-layer {
 	pointer-events: auto;
 }
 
+/* Hors mode Modifier : on garde visibles les textes ajoutés / édités, sans
+   intercepter les clics sur le reste de la page (formulaires, signatures). */
+.edit-layer.has-content {
+	display: block;
+	pointer-events: none;
+}
+
+.edit-layer.has-content .edit-block {
+	pointer-events: auto;
+}
+
+/* Mode Texte : I-beam sur toute la page (pas seulement .edit-layer.active). */
+.pages-stack.add-text-mode,
+.pages-stack.add-text-mode .page-wrapper,
+.pages-stack.add-text-mode .page-wrapper canvas,
+.pages-stack.add-text-mode .textLayer,
+.pages-stack.add-text-mode .textLayer *,
+.pages-stack.add-text-mode .edit-layer,
+.pages-stack.add-text-mode .edit-layer * {
+	cursor: text !important;
+}
+
+.pages-stack.add-text-mode .edit-block,
+.pages-stack.add-text-mode .text-resize-zone,
+.pages-stack.add-text-mode .block-resize-handle {
+	pointer-events: none !important;
+}
+
 .alto-ocr-text {
 	cursor: text;
 	pointer-events: auto;
 }
 
 .alto-ocr-text::selection {
-	background: transparent;
+	background: rgba(0, 0, 255, 0.25);
 }
 
 .edit-block-mask {
@@ -2178,6 +3032,35 @@ body.sign-arming .sign-layer {
 	z-index: 9;
 	pointer-events: none;
 	overflow: visible;
+}
+
+/* Badge de fiabilité posé au-dessus du bloc sélectionné (origine du texte). */
+.edit-block-badge {
+	position: absolute;
+	z-index: 12;
+	transform: translateY(-2px);
+	padding: 1px 6px;
+	font-size: 10px;
+	line-height: 14px;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+	white-space: nowrap;
+	border-radius: 6px;
+	pointer-events: none;
+	color: #fff;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.edit-block-badge.badge-native {
+	background: #2271b1;
+}
+
+.edit-block-badge.badge-ocr {
+	background: #6b4fbb;
+}
+
+.edit-block-badge.badge-low {
+	background: #b54708;
 }
 
 .create-view {
@@ -2357,8 +3240,8 @@ body.sign-arming .sign-layer {
 	/* Pas de bordure : elle décalerait le texte (border-box) de 1px vers la droite/bas
 	   par rapport au rendu PDF. Les contours visuels passent par `outline`. */
 	border: 0;
-	outline: 1.5px solid transparent;
-	outline-offset: 1.5px;
+	outline: 1px solid transparent;
+	outline-offset: 1px;
 	border-radius: 0;
 	background: transparent;
 	color: transparent;
@@ -2384,10 +3267,21 @@ body.sign-arming .sign-layer {
 }
 
 .edit-block.dirty {
-	background: #ffffff;
+	/* Fond transparent : l'ancien texte PDF est caché par les masques serrés
+	   (un par glyphe) en dessous, pas par un grand carré blanc. Ainsi le bloc ne
+	   recouvre plus les traits du tableau, et un bloc déplacé ne laisse pas de
+	   rectangle blanc derrière lui. */
+	background: transparent;
 	color: #161616;
 	border-color: transparent;
 	outline-color: transparent;
+}
+
+/* Un bloc déplacé devient `dirty`, mais doit conserver le même retour visuel
+   au survol qu'un bloc natif. Cette règle vient après `.dirty` pour éviter que
+   son outline transparent masque le cadre plein. */
+.edit-block.dirty:hover {
+	outline-color: rgba(31, 111, 235, 0.85);
 }
 
 /* Texte modifié : on ne rogne jamais (sinon la dernière lettre est coupée si le
@@ -2396,10 +3290,12 @@ body.sign-arming .sign-layer {
 	overflow: visible;
 }
 
+/* SÉLECTION (pas en édition) : cadre en TIRETS espacés.
+   MODIFICATION (.editing) : cadre UNI + poignées (règle plus bas). */
 .edit-block.selected {
 	border-color: transparent;
-	outline: 1.5px solid #2271b1;
-	outline-offset: 1.5px;
+	outline: 1.5px dashed #2271b1;
+	outline-offset: 1px;
 	border-radius: 0;
 }
 
@@ -2453,13 +3349,97 @@ body.sign-arming .sign-layer {
 	cursor: ew-resize;
 }
 
+/* Zones de redimensionnement des blocs texte : bandes de saisie invisibles sur
+   les arêtes (le curseur change au survol), et un point MINUSCULE (5px) à
+   chaque angle pour indiquer la prise sans masquer le texte (les anciens
+   carrés de 9px rendaient les petits blocs illisibles). */
+.text-resize-zone {
+	position: absolute;
+	margin: 0;
+	background: transparent;
+	border: 0;
+	z-index: 9;
+	pointer-events: auto;
+	touch-action: none;
+}
+
+/* Pendant l'édition, les zones ne doivent jamais voler la sélection de texte. */
+.edit-layer:has(.edit-block.editing) .text-resize-zone {
+	pointer-events: none;
+}
+
+/* Carré VISUEL entièrement HORS du cadre, collé à l'angle (coin du carré
+   contre le coin du cadre). Hitbox hors lettres (JS). */
+.text-resize-zone.zone-nw::after,
+.text-resize-zone.zone-ne::after,
+.text-resize-zone.zone-sw::after,
+.text-resize-zone.zone-se::after {
+	content: '';
+	position: absolute;
+	width: 5px;
+	height: 5px;
+	background: #ffffff;
+	border: 1px solid #2271b1;
+	border-radius: 1.5px;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+	pointer-events: none;
+}
+
+.text-resize-zone.zone-nw::after {
+	left: 100%;
+	top: 100%;
+	transform: translate(-100%, -100%);
+}
+
+.text-resize-zone.zone-ne::after {
+	left: 0%;
+	top: 100%;
+	transform: translate(0%, -100%);
+}
+
+.text-resize-zone.zone-sw::after {
+	left: 100%;
+	top: 0%;
+	transform: translate(-100%, 0%);
+}
+
+.text-resize-zone.zone-se::after {
+	left: 0%;
+	top: 0%;
+	transform: translate(0%, 0%);
+}
+
+.text-resize-zone.zone-nw,
+.text-resize-zone.zone-se {
+	cursor: nwse-resize;
+	z-index: 10;
+}
+
+.text-resize-zone.zone-ne,
+.text-resize-zone.zone-sw {
+	cursor: nesw-resize;
+	z-index: 10;
+}
+
+.text-resize-zone.zone-n,
+.text-resize-zone.zone-s {
+	cursor: ns-resize;
+}
+
+.text-resize-zone.zone-e,
+.text-resize-zone.zone-w {
+	cursor: ew-resize;
+}
+
 .edit-block.editing {
 	cursor: text;
-	background: #ffffff;
+	/* Transparent : le texte d'origine est masqué par les masques serrés en
+	   dessous ; on n'ajoute pas de carré blanc qui couperait le tableau. */
+	background: transparent;
 	color: #161616;
 	border-color: transparent;
 	outline: 1px solid #2271b1;
-	outline-offset: 1.5px;
+	outline-offset: 1px;
 	user-select: text;
 	-webkit-user-select: text;
 	overflow: visible;
@@ -2477,10 +3457,14 @@ body.sign-arming .sign-layer {
 	text-rendering: geometricPrecision;
 }
 
-/* Bloc-paragraphe : le texte reflue dans la largeur de colonne. */
+/* Bloc multiligne : on n'enroule QUE sur les \n explicites (pas de reflux sur la
+   largeur), pour rester identique au mode édition. */
 .edit-block.multiline {
-	white-space: pre-wrap;
-	word-break: break-word;
+	/* pre (et non pre-wrap) : on n'enroule QUE sur les \n explicites, jamais sur la
+	   largeur de la boîte. L'état sélection/repos rend ainsi EXACTEMENT comme l'état
+	   édition (.editing.multiline = pre) : pas de mot qui retombe à la ligne. */
+	white-space: pre;
+	word-break: normal;
 	overflow: visible;
 }
 
@@ -2491,6 +3475,45 @@ body.sign-arming .sign-layer {
 	word-break: normal;
 	overflow: visible;
 	cursor: text;
+}
+
+/* COUCHE COMPOSITE GELÉE (texte modifié). Une fois le bloc monté, sa surface
+   d'édition ne doit JAMAIS changer de rasterisation entre repos / sélection /
+   édition. On fige donc toutes les propriétés qui re-rasterisent les glyphes
+   (white-space, color, text-rendering, font-synthesis, overflow) : seuls
+   outline / caret-color (chrome de sélection) peuvent varier d'un état à
+   l'autre. Le déplacement passe uniquement par transform translate3d. */
+.edit-block.alto-frozen,
+.edit-block.alto-frozen.dirty,
+.edit-block.alto-frozen.selected,
+.edit-block.alto-frozen.editing,
+.edit-block.alto-frozen.multiline,
+.edit-block.alto-frozen.editing.multiline {
+	white-space: pre;
+	word-break: normal;
+	color: #161616;
+	/* Transparent comme .dirty : l'ancien texte est caché par les masques serrés,
+	   pas par le bloc. Un fond blanc opaque peignait un rectangle sur les traits
+	   de tableau / fonds colorés à la position de DESTINATION du bloc déplacé
+	   (le « fond blanc bizarre » au déplacement). */
+	background: transparent;
+	overflow: visible;
+	text-rendering: geometricPrecision;
+	font-synthesis-weight: auto;
+	-webkit-font-smoothing: antialiased;
+	backface-visibility: hidden;
+	transform-origin: 0 0;
+}
+
+.edit-block.alto-frozen[data-bold="true"] {
+	font-weight: 700;
+}
+
+/* Pas de halo box-shadow à l'entrée en édition d'un bloc gelé : le contour de
+   sélection passe déjà par `outline`, et le halo donnait l'impression que le
+   cadre se décalait d'1px entre sélection et édition. */
+.edit-block.alto-frozen.editing {
+	box-shadow: none;
 }
 
 
@@ -2504,12 +3527,45 @@ body.sign-arming .sign-layer {
 	-webkit-text-fill-color: transparent !important;
 }
 
+/* Texte ajouté vide : fantôme « Aa » (CSS) + cadre — jamais dans textContent. */
+.edit-block.added-empty {
+	outline: 1.5px dashed rgba(34, 113, 177, 0.55);
+	outline-offset: 1px;
+	color: transparent !important;
+	-webkit-text-fill-color: transparent !important;
+	min-width: 80px;
+	cursor: move;
+}
+
+.edit-block.added-empty::before {
+	content: 'Aa';
+	color: rgba(22, 22, 22, 0.32);
+	-webkit-text-fill-color: rgba(22, 22, 22, 0.32);
+	pointer-events: none;
+}
+
+/* En édition : jamais de fantôme Aa, frappe + caret noirs. */
+.edit-block.editing.added-empty::before,
+.edit-block.editing.added::before,
+.edit-block.editing[data-added='true']::before {
+	content: none !important;
+	display: none !important;
+}
+
+.edit-block.editing.added,
+.edit-block.editing[data-added='true'],
+.edit-block.editing.added-empty {
+	color: #111111 !important;
+	-webkit-text-fill-color: #111111 !important;
+	caret-color: #111111 !important;
+}
+
 .edit-block.editing.editing-pristine::selection {
 	background: rgba(34, 113, 177, 0.18);
 }
 
 .edit-block.editing.pdf-glyph-editing {
-	caret-color: transparent !important;
+	caret-color: #161616 !important;
 	-webkit-text-fill-color: transparent !important;
 	color: transparent !important;
 }
@@ -2531,8 +3587,102 @@ body.sign-arming .sign-layer {
 	animation: alto-caret-blink 1s steps(1, end) infinite;
 }
 
+/* Sélection active : on masque le caret custom (mode glyphe) et on neutralise le
+   caret natif. Le curseur ne doit jamais clignoter par-dessus du texte surligné. */
+body.has-text-selection .alto-pdf-caret {
+	display: none;
+}
+
+body.has-text-selection .edit-block.editing {
+	caret-color: transparent !important;
+}
+
+/* Caret dessiné aux frontières des glyphes NATIFS (bloc vierge en édition) :
+   le caret WebKit — positionné avec les métriques de la police de substitution —
+   est masqué, remplacé par cette barre calée sur les boîtes PDFium. */
+.alto-native-caret {
+	position: absolute;
+	z-index: 13;
+	width: 1.5px;
+	background: #161616;
+	pointer-events: none;
+	animation: alto-caret-blink 1.1s steps(1, end) infinite;
+}
+
+.edit-block.editing.native-caret-active {
+	caret-color: transparent !important;
+}
+
+body.has-text-selection .alto-native-caret {
+	display: none;
+}
+
 .edit-block-mask.glyph-mask {
 	z-index: 6;
+}
+
+/* ─── Glyphes préservés (mode Adobe) ─────────────────────────────────────────
+   Le texte d'origine non touché reste le rendu NATIF du PDF (zéro mouvement).
+   Les artefacts composite portent le visuel de l'édition : tranche bitmap du
+   suffixe décalée + texte inséré en police de substitution. */
+.glyph-composite-artifact {
+	position: absolute;
+	z-index: 7;
+	pointer-events: none;
+	margin: 0;
+}
+
+.glyph-composite-insert {
+	white-space: pre;
+	line-height: 1;
+	color: #161616;
+}
+
+/* Le bloc composite lui-même reste un contenteditable INVISIBLE : il ne sert
+   qu'au caret natif et à la sélection (le visuel est natif + artefacts). */
+.edit-block.glyph-composite,
+.edit-block.dirty.glyph-composite,
+.edit-block.alto-frozen.glyph-composite,
+.edit-block.alto-frozen.dirty.glyph-composite,
+.edit-block.editing.glyph-composite {
+	color: transparent;
+	-webkit-text-fill-color: transparent;
+	caret-color: #161616;
+}
+
+/* Sélection de texte visible malgré la transparence (comme le mode glyphe vierge). */
+.edit-block.editing.glyph-composite::selection {
+	background: rgba(34, 113, 177, 0.22);
+}
+
+/* Quand la sélection est projetée sur les boîtes exactes des glyphes PDF, on
+   masque le surlignage WebKit (calculé avec la police HTML de substitution).
+   Sinon les deux géométries se superposent et la dernière lettre semble exclue. */
+body.has-precise-edit-selection .edit-block.editing.pdf-glyph-editing::selection,
+body.has-precise-edit-selection .edit-block.editing.glyph-composite::selection,
+body.has-precise-edit-selection .edit-block.editing.editing-pristine::selection {
+	background: transparent;
+}
+
+/* Badge « police non disponible » (façon Adobe) : point d'exclamation jaune à
+   droite du cadre du bloc, tooltip natif au survol. Discret mais repérable. */
+.font-warning-badge {
+	position: absolute;
+	z-index: 11;
+	width: 15px;
+	height: 15px;
+	border-radius: 50%;
+	background: #f5b301;
+	color: #3a2c00;
+	font-size: 11px;
+	font-weight: 800;
+	line-height: 15px;
+	text-align: center;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+	pointer-events: auto;
+	cursor: help;
+	user-select: none;
+	-webkit-user-select: none;
 }
 
 .edit-block.editing.snapshot-editing {
@@ -2566,14 +3716,18 @@ body.sign-arming .sign-layer {
 	min-width: 1px;
 }
 
+.edit-block.image {
+	z-index: 5;
+}
+
 .edit-block.image:hover,
 .edit-block.image.selected {
 	border-color: transparent;
-	outline-color: rgba(229, 72, 63, 0.95);
+	outline-color: #2271b1;
 }
 
 .edit-block.image.dirty {
-	background: rgba(229, 72, 63, 0.06);
+	background: transparent;
 }
 
 .app-shell.editing .reader-toolbar {
@@ -2611,46 +3765,6 @@ canvas {
 .rail-button.active {
 	background: rgba(23, 23, 23, 0.07);
 	color: var(--text);
-}
-
-.rail-sep {
-	width: 22px;
-	height: 1px;
-	flex: 0 0 auto;
-	background: var(--border);
-	margin: 2px 0;
-}
-
-.rail-group {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 2px;
-}
-
-.rail-value {
-	font-size: 10px;
-	font-weight: 650;
-	line-height: 1;
-	letter-spacing: -0.02em;
-	color: var(--muted);
-	font-variant-numeric: tabular-nums;
-	white-space: nowrap;
-}
-
-.rail-size {
-	max-width: 38px;
-	text-align: center;
-	font-size: 9px;
-	font-weight: 600;
-	line-height: 1.2;
-	color: var(--muted);
-	font-variant-numeric: tabular-nums;
-	word-break: break-word;
-}
-
-.rail-size:empty {
-	display: none;
 }
 
 .page-layout-toggle.active {
@@ -3141,7 +4255,9 @@ textarea {
 
 .modal-backdrop {
 	position: absolute;
-	z-index: 12;
+	/* Au-dessus du tools-resize-handle (z-index 40), sinon le trait gris
+	   traverse les dialogues (impression, propriétés…). */
+	z-index: 50;
 	inset: 0;
 	background: rgba(246, 246, 244, 0.58);
 	backdrop-filter: blur(12px);
@@ -3150,7 +4266,7 @@ textarea {
 
 .settings-modal {
 	position: absolute;
-	z-index: 13;
+	z-index: 51;
 	top: 50%;
 	left: 50%;
 	display: flex;
@@ -3170,7 +4286,7 @@ textarea {
 
 .save-changes-modal {
 	position: absolute;
-	z-index: 13;
+	z-index: 51;
 	top: 50%;
 	left: 50%;
 	width: min(440px, calc(100vw - 48px));
@@ -3205,49 +4321,134 @@ textarea {
 }
 
 .thumbs-grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-	gap: 14px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
 	margin-top: 16px;
 }
 
 .thumb {
 	display: flex;
-	flex-direction: column;
+	flex-direction: row;
 	align-items: center;
-	gap: 6px;
-	padding: 8px 4px;
-	border: 1px solid transparent;
-	border-radius: 10px;
-	background: transparent;
-	cursor: pointer;
-	transition: all 0.18s ease-out;
+	gap: 10px;
+	width: 100%;
+	min-width: 0;
+	padding: 8px 8px 8px 6px;
+	border: 1px solid var(--border);
+	border-radius: 14px;
+	background: rgba(255, 255, 255, 0.72);
+	cursor: grab;
+	touch-action: none;
+	user-select: none;
+	transition: all 160ms ease-out;
 }
 
 .thumb:hover {
-	background: rgba(0, 0, 0, 0.03);
-	border-color: var(--border);
+	background: #fff;
+	border-color: var(--border-strong);
 }
 
 .thumb.active {
-	background: rgba(229, 72, 63, 0.06);
-	border-color: rgba(229, 72, 63, 0.35);
+	background: #fff;
+	border-color: rgba(23, 23, 23, 0.28);
+	box-shadow:
+		0 1px 2px rgba(23, 23, 23, 0.04),
+		0 8px 20px rgba(23, 23, 23, 0.06);
+}
+
+.thumb-grip {
+	flex: 0 0 14px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--faint);
+	pointer-events: none;
+}
+
+.thumb-grip svg {
+	width: 14px;
+	height: 14px;
+}
+
+/* Case carrée : portrait et paysage tiennent dans le même 64×64 (côté
+   le plus long). Une emprise 64×88 faisait le vertical plus grand — les
+   flèches restent au même endroit d'une ligne à l'autre. */
+.thumb-preview {
+	flex: 0 0 64px;
+	width: 64px;
+	height: 64px;
+	display: grid;
+	place-items: center;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	min-width: 0;
+	overflow: hidden;
 }
 
 .thumb canvas {
-	width: 100%;
+	width: auto;
 	height: auto;
-	max-width: 140px;
+	max-width: 64px;
+	max-height: 64px;
 	background: #fff;
-	border-radius: 4px;
+	border-radius: 6px;
 	box-shadow: 0 1px 3px rgba(23, 23, 23, 0.12);
 	display: block;
 }
 
 .thumb-label {
-	font-size: 11px;
-	color: var(--muted);
-	font-weight: 580;
+	flex: 1;
+	min-width: 0;
+	font-size: 13px;
+	font-weight: 650;
+	letter-spacing: -0.02em;
+	color: var(--text);
+}
+
+.thumb-actions {
+	display: flex;
+	flex-wrap: nowrap;
+	justify-content: flex-end;
+	gap: 4px;
+}
+
+.thumb-action {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--text);
+	transition: all 140ms ease-out;
+}
+
+.thumb-action svg {
+	width: 14px;
+	height: 14px;
+}
+
+.thumb-action:hover:not(:disabled) {
+	background: var(--muted-panel);
+	border-color: var(--border);
+}
+
+.thumb-action:disabled {
+	opacity: 0.35;
+	cursor: not-allowed;
+}
+
+.thumb-action-danger {
+	color: var(--accent);
+}
+
+.thumb.active .thumb-action-danger {
+	background: var(--accent-soft);
 }
 
 .outline-tree {
@@ -3291,6 +4492,87 @@ textarea {
 	color: var(--muted);
 	font-size: 12px;
 	padding: 12px 0;
+}
+
+/* ── Panneau Historique des modifications ─────────────────────────────── */
+.history-empty {
+	color: var(--muted);
+	font-size: 12px;
+	padding: 12px 0;
+}
+
+.history-empty.hidden {
+	display: none;
+}
+
+.history-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.history-row {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 10px;
+	width: 100%;
+	padding: 7px 9px;
+	margin: 2px 0;
+	font-size: 13px;
+	font-weight: 540;
+	color: var(--text);
+	background: transparent;
+	border: none;
+	border-radius: 6px;
+	text-align: left;
+	cursor: pointer;
+	transition: background 0.15s ease-out;
+}
+
+.history-row:hover:not(:disabled) {
+	background: rgba(0, 0, 0, 0.04);
+}
+
+.history-row:disabled {
+	cursor: default;
+}
+
+.history-row.current {
+	background: rgba(0, 0, 0, 0.06);
+	font-weight: 650;
+}
+
+.history-row.current::before {
+	content: '●';
+	font-size: 8px;
+	margin-right: 6px;
+	align-self: center;
+	color: var(--accent, #1a73e8);
+}
+
+.history-row.undone {
+	color: var(--muted);
+}
+
+.history-row.undone .history-row-label {
+	text-decoration: line-through;
+	text-decoration-thickness: 1px;
+}
+
+.history-row-label {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.history-row-time {
+	flex: none;
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	color: var(--muted);
 }
 
 .forms-fields {
@@ -3344,6 +4626,30 @@ textarea {
 	white-space: normal;
 }
 
+.forms-field-input:is(textarea) {
+	resize: vertical;
+	min-height: 64px;
+	font-family: inherit;
+}
+
+.forms-field-image {
+	width: 100%;
+	padding: 8px 12px;
+	font-size: 13px;
+	font-weight: 600;
+	color: #2271b1;
+	background: rgba(34, 113, 177, 0.08);
+	border: 1px dashed rgba(34, 113, 177, 0.45);
+	border-radius: 8px;
+	cursor: pointer;
+	transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.forms-field-image:hover {
+	background: rgba(34, 113, 177, 0.14);
+	border-color: #2271b1;
+}
+
 .forms-apply {
 	margin-top: 14px;
 	width: 100%;
@@ -3367,37 +4673,937 @@ textarea {
 	opacity: 0.9;
 }
 
-.thumb.dragging {
-	opacity: 0.45;
+.thumb.is-dragging {
+	position: relative;
+	z-index: 2;
+	transform: scale(1.02);
+	cursor: grabbing;
+	border-color: rgba(23, 23, 23, 0.28);
+	background: #fff;
+	box-shadow:
+		0 1px 2px rgba(23, 23, 23, 0.06),
+		0 12px 28px rgba(23, 23, 23, 0.14);
 }
 
-.thumb.drop-target {
-	background: rgba(229, 72, 63, 0.08);
-	border-color: rgba(229, 72, 63, 0.45);
+body.is-thumb-dragging {
+	cursor: grabbing;
+	user-select: none;
 }
 
-.properties-modal {
-	max-width: 520px;
+/* Prépresse — sous-panneau style Acrobat */
+.prepress-panel {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	flex: 1;
 }
 
-.properties-list {
-	display: grid;
-	grid-template-columns: 130px 1fr;
-	row-gap: 10px;
-	column-gap: 16px;
-	margin: 18px 0 8px;
-	font-size: 13px;
+.prepress-panel.hidden {
+	display: none !important;
 }
 
-.properties-list dt {
-	color: var(--muted);
-	font-weight: 540;
+.tools-panel.prepress-open .tools-home-panel,
+.tools-panel.prepress-open .show-more,
+.tools-panel.prepress-open .more-tools {
+	display: none !important;
 }
 
-.properties-list dd {
-	margin: 0;
+.tools-panel.prepress-open .prepress-panel {
+	display: flex;
+}
+
+.prepress-heading {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.prepress-heading strong {
+	flex: 1;
+	min-width: 0;
+}
+
+.prepress-back {
+	appearance: none;
+	border: 0;
+	background: transparent;
+	width: 28px;
+	height: 28px;
+	border-radius: 8px;
+	font-size: 22px;
+	line-height: 1;
 	color: var(--text);
+	cursor: pointer;
+}
+
+.prepress-back:hover {
+	background: rgba(0, 0, 0, 0.06);
+}
+
+/* Panneau d’impression CUPS — layout 2 colonnes style Acrobat */
+.print-dialog {
+	position: absolute;
+	z-index: 52;
+	top: 50%;
+	left: 50%;
+	width: min(920px, calc(100vw - 32px));
+	max-height: min(92vh, 780px);
+	transform: translate(-50%, -50%);
+	border: 1px solid rgba(0, 0, 0, 0.12);
+	border-radius: 12px;
+	background: #f0f0f0;
+	box-shadow:
+		0 1px 2px rgba(0, 0, 0, 0.06),
+		0 12px 40px rgba(0, 0, 0, 0.18);
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+
+.print-dialog.hidden {
+	display: none !important;
+}
+
+/* Le dialogue d’impression laisse voir le document net derrière lui, comme
+   Acrobat : pas de flou ni d’assombrissement, on veut pouvoir comparer la page
+   à l’aperçu. Le backdrop ne sert plus qu’à capter le clic de fermeture. */
+#print-backdrop {
+	background: transparent;
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+}
+
+/* Poignée de déplacement des dialogues (voir makeDialogDraggable). */
+.dialog-titlebar {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 10px 16px;
+	border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+	background: #eaeaea;
+	cursor: grab;
+	flex-shrink: 0;
+	/* Un drag ne doit jamais sélectionner le titre au passage. */
+	user-select: none;
+	-webkit-user-select: none;
+}
+
+.dialog-titlebar.is-dragging {
+	cursor: grabbing;
+}
+
+.dialog-titlebar h2 {
+	margin: 0;
+	font-size: 13px;
+	font-weight: 640;
+	color: #333;
+	letter-spacing: -0.01em;
+}
+
+.print-dialog-top {
+	padding: 14px 18px 10px;
+	border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+	flex-shrink: 0;
+	background: #f6f6f6;
+}
+
+.print-advanced-btn {
+	flex: 0 0 auto;
+	align-self: flex-end;
+}
+
+.print-top-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 14px 18px;
+}
+
+.print-field {
+	display: grid;
+	gap: 5px;
+	font-size: 12px;
+	font-weight: 560;
+	color: #333;
+	min-width: 0;
+}
+
+.print-field[hidden] {
+	display: none;
+}
+
+.print-field-printer {
+	flex: 1 1 220px;
+}
+
+.print-field-copies {
+	flex: 0 0 88px;
+}
+
+.print-field select,
+.print-field input[type='number'],
+.print-field input[type='text'],
+.print-radio-custom input[type='number'],
+.print-radio-custom input[type='text'] {
+	appearance: none;
+	border: 1px solid rgba(0, 0, 0, 0.18);
+	border-radius: 8px;
+	background: #fff;
+	padding: 8px 11px;
+	font: inherit;
+	font-weight: 500;
+	min-width: 0;
+	width: 100%;
+}
+
+.print-radio-custom input[type='number'] {
+	width: 68px;
+	padding: 5px 7px;
+}
+
+.print-radio-custom input[type='text'] {
+	width: 110px;
+	padding: 5px 7px;
+	flex: 1;
+}
+
+.print-dialog-main {
+	display: grid;
+	grid-template-columns: minmax(280px, 1fr) minmax(260px, 1.05fr);
+	gap: 0;
+	min-height: 0;
+	flex: 1;
+	overflow: hidden;
+}
+
+@media (max-width: 720px) {
+	.print-dialog-main {
+		grid-template-columns: 1fr;
+		overflow: auto;
+	}
+}
+
+.print-dialog-settings {
+	padding: 12px 14px 10px;
+	overflow: auto;
+	min-height: 0;
+	border-right: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.print-fieldset {
+	margin: 0 0 10px;
+	padding: 10px 12px;
+	border: 1px solid rgba(0, 0, 0, 0.1);
+	border-radius: 10px;
+	background: rgba(255, 255, 255, 0.7);
+}
+
+.print-fieldset legend {
+	padding: 0 4px;
+	font-size: 11.5px;
+	font-weight: 650;
+	color: #333;
+}
+
+.print-size-tabs {
+	display: flex;
+	gap: 4px;
+	margin-bottom: 8px;
+}
+
+.print-size-tab {
+	padding: 5px 10px;
+	border-radius: 7px;
+	font-size: 11.5px;
+	font-weight: 600;
+	color: #666;
+	background: rgba(0, 0, 0, 0.04);
+}
+
+.print-size-tab.is-active {
+	color: #111;
+	background: #fff;
+	box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+.print-radio {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 5px 0;
+	font-size: 12.5px;
+	font-weight: 500;
+	color: #222;
+	cursor: pointer;
+}
+
+.print-radio-inline {
+	margin: 0;
+}
+
+.print-radio input,
+.print-check input {
+	accent-color: #1a73e8;
+}
+
+.print-radio-custom {
+	flex-wrap: wrap;
+}
+
+.print-check {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	margin: 8px 0 4px;
+	font-size: 12.5px;
+	font-weight: 500;
+	color: #222;
+	cursor: pointer;
+	line-height: 1.35;
+}
+
+.print-check-inline {
+	margin: 0 0 2px;
+	align-items: center;
+	flex: 1 1 200px;
+}
+
+/* Recadrage d'étiquette : mis en avant, car il change tout le résultat sur une
+   imprimante thermique. */
+.print-check-label-fit {
+	margin-top: 12px;
+	padding-top: 12px;
+	border-top: 1px solid rgb(0 0 0 / 0.07);
+	font-weight: 620;
+}
+
+.print-hint {
+	margin: 2px 0 0 24px;
+	font-size: 11.5px;
+	line-height: 1.45;
+	color: #5b5b5b;
+	max-width: 46ch;
+}
+
+.print-check-nested {
+	margin: 8px 0 2px 24px;
+	font-weight: 500;
+}
+
+/* Un mode d'échelle neutralisé par le recadrage reste lisible, mais clairement
+   inactif : sinon l'utilisateur croit que son clic n'a pas été pris. */
+.print-radio.is-disabled {
+	opacity: 0.42;
+	cursor: not-allowed;
+}
+
+.print-fit-summary {
+	margin: 0 0 8px;
+	padding: 7px 9px;
+	border-radius: 8px;
+	background: rgb(26 115 232 / 0.08);
+	color: #1a4d8f;
+	font-size: 11.5px;
+	font-weight: 560;
+	line-height: 1.45;
+}
+
+.print-orient-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px 14px;
+	margin-top: 6px;
+}
+
+.print-orient-label {
+	font-size: 12.5px;
+	font-weight: 600;
+	color: #333;
+}
+
+.print-dialog-preview {
+	display: flex;
+	flex-direction: column;
+	padding: 12px 14px;
+	min-height: 0;
+	background: #e8e8e8;
+}
+
+.print-preview-meta {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin: 0 0 8px;
+	font-size: 12px;
+	font-weight: 560;
+	color: #333;
+}
+
+.print-preview-frame {
+	flex: 1;
+	min-height: 220px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid rgba(0, 0, 0, 0.1);
+	border-radius: 8px;
+	background:
+		linear-gradient(45deg, #dcdcdc 25%, transparent 25%),
+		linear-gradient(-45deg, #dcdcdc 25%, transparent 25%),
+		linear-gradient(45deg, transparent 75%, #dcdcdc 75%),
+		linear-gradient(-45deg, transparent 75%, #dcdcdc 75%);
+	background-size: 16px 16px;
+	background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+	background-color: #efefef;
+	overflow: hidden;
+	padding: 12px;
+}
+
+.print-preview-frame canvas {
+	max-width: 100%;
+	max-height: min(42vh, 420px);
+	width: auto;
+	height: auto;
+	box-shadow:
+		0 1px 2px rgba(0, 0, 0, 0.08),
+		0 8px 24px rgba(0, 0, 0, 0.14);
+	background: #fff;
+}
+
+.print-preview-nav {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 12px;
+	margin-top: 10px;
+	font-size: 12px;
+	font-weight: 560;
+	color: #333;
+}
+
+.print-preview-nav button {
+	width: 32px;
+	height: 28px;
+	border: 1px solid rgba(0, 0, 0, 0.14);
+	border-radius: 7px;
+	background: #fff;
+	font-size: 16px;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.print-preview-nav button:hover {
+	background: #f7f7f7;
+}
+
+.print-preview-nav button:disabled {
+	opacity: 0.4;
+	cursor: default;
+}
+
+.print-error {
+	margin: 4px 0 0;
+	padding: 8px 10px;
+	border-radius: 8px;
+	background: rgba(179, 18, 18, 0.08);
+	color: #b31212;
+	font-size: 12px;
+	line-height: 1.4;
+	white-space: pre-wrap;
 	word-break: break-word;
+}
+
+.print-error.hidden {
+	display: none !important;
+}
+
+.print-dialog-footer {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	align-items: center;
+	gap: 8px;
+	padding: 12px 16px 14px;
+	border-top: 1px solid rgba(0, 0, 0, 0.08);
+	background: #e8e8e8;
+	flex-shrink: 0;
+}
+
+.print-footer-actions {
+	display: flex;
+	gap: 8px;
+	margin-left: auto;
+}
+
+/* Réglages PPD de l’imprimante : fenêtre secondaire, au-dessus du panneau
+   d’impression et sans backdrop — le panneau reste lisible et utilisable. */
+.print-advanced-dialog {
+	position: absolute;
+	z-index: 53;
+	top: 50%;
+	left: 50%;
+	display: flex;
+	flex-direction: column;
+	width: min(460px, calc(100vw - 32px));
+	max-height: min(80vh, 620px);
+	transform: translate(-50%, -50%);
+	border: 1px solid rgba(0, 0, 0, 0.14);
+	border-radius: 12px;
+	background: #f0f0f0;
+	box-shadow:
+		0 1px 2px rgba(0, 0, 0, 0.08),
+		0 18px 50px rgba(0, 0, 0, 0.26);
+	overflow: hidden;
+}
+
+.print-advanced-dialog.hidden {
+	display: none !important;
+}
+
+.print-advanced-printer {
+	margin: 0;
+	padding: 10px 18px 0;
+	color: #666;
+	font-size: 11px;
+	font-weight: 560;
+}
+
+.print-advanced-body {
+	display: grid;
+	gap: 12px;
+	padding: 14px 18px 16px;
+	overflow: auto;
+	min-height: 0;
+}
+
+.print-advanced-field {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+	align-items: center;
+	gap: 12px;
+	font-size: 12px;
+	font-weight: 560;
+	color: #333;
+}
+
+.print-advanced-field select {
+	min-width: 0;
+	padding: 4px 6px;
+	border: 1px solid rgba(0, 0, 0, 0.22);
+	border-radius: 6px;
+	background: #fff;
+	font-size: 12px;
+	color: #1a1a1a;
+}
+
+.print-advanced-empty {
+	margin: 0;
+	color: #666;
+	font-size: 12px;
+	line-height: 1.5;
+}
+
+.print-advanced-footer {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 8px;
+	padding: 12px 16px 14px;
+	border-top: 1px solid rgba(0, 0, 0, 0.08);
+	background: #e8e8e8;
+	flex-shrink: 0;
+}
+
+.convert-colors-dialog {
+	position: absolute;
+	z-index: 52;
+	top: 50%;
+	left: 50%;
+	width: min(440px, calc(100vw - 40px));
+	transform: translate(-50%, -50%);
+	border: 1px solid rgba(0, 0, 0, 0.12);
+	border-radius: 12px;
+	background: #f4f4f4;
+	box-shadow:
+		0 1px 2px rgba(0, 0, 0, 0.06),
+		0 12px 40px rgba(0, 0, 0, 0.18);
+	overflow: hidden;
+}
+
+.convert-colors-dialog.hidden {
+	display: none !important;
+}
+
+.convert-colors-header {
+	padding: 16px 18px 8px;
+}
+
+.convert-colors-header h2 {
+	margin: 0;
+	font-size: 15px;
+	font-weight: 650;
+}
+
+.convert-colors-body {
+	padding: 8px 18px 16px;
+}
+
+.convert-colors-lead {
+	margin: 0 0 14px;
+	color: #444;
+	font-size: 13px;
+	line-height: 1.45;
+	max-width: 36em;
+}
+
+.convert-colors-field {
+	display: grid;
+	gap: 6px;
+	margin-bottom: 10px;
+	font-size: 12.5px;
+	font-weight: 560;
+}
+
+.convert-colors-field select {
+	appearance: none;
+	border: 1px solid rgba(0, 0, 0, 0.18);
+	border-radius: 8px;
+	background: #fff;
+	padding: 9px 12px;
+	font: inherit;
+	font-weight: 500;
+}
+
+.convert-colors-profile-status {
+	margin: 0 0 12px;
+	font-size: 12px;
+	color: #555;
+	line-height: 1.4;
+	word-break: break-word;
+}
+
+.convert-colors-profile-status[data-tone='error'] {
+	color: #b31212;
+}
+
+.convert-colors-profile-status[data-tone='ok'] {
+	color: #0b6b3a;
+}
+
+.convert-colors-notes {
+	margin: 0;
+	padding-left: 18px;
+	color: #666;
+	font-size: 12px;
+	line-height: 1.45;
+}
+
+.convert-colors-footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	padding: 12px 16px 14px;
+	border-top: 1px solid rgba(0, 0, 0, 0.08);
+	background: #ececec;
+}
+
+/* Propriétés du document — dialogue style Acrobat */
+.properties-dialog {
+	position: absolute;
+	z-index: 52;
+	top: 50%;
+	left: 50%;
+	width: min(720px, calc(100vw - 40px));
+	max-height: calc(100vh - 48px);
+	transform: translate(-50%, -50%);
+	display: flex;
+	flex-direction: column;
+	border: 1px solid rgba(0, 0, 0, 0.12);
+	border-radius: 12px;
+	background: #f2f2f2;
+	box-shadow:
+		0 1px 2px rgba(0, 0, 0, 0.06),
+		0 12px 40px rgba(0, 0, 0, 0.18);
+	overflow: hidden;
+	font-size: 13px;
+	color: #1d1d1f;
+}
+
+.properties-dialog.hidden {
+	display: none;
+}
+
+.properties-dialog-header {
+	padding: 14px 18px 8px;
+}
+
+.properties-dialog-header h2 {
+	margin: 0;
+	font-size: 15px;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+}
+
+.properties-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px;
+	padding: 0 12px 10px;
+	border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.properties-tab {
+	appearance: none;
+	border: 0;
+	background: transparent;
+	color: #3a3a3c;
+	padding: 7px 12px;
+	border-radius: 8px;
+	font-size: 12.5px;
+	font-weight: 520;
+	cursor: pointer;
+	transition: background 0.15s ease-out, color 0.15s ease-out;
+}
+
+.properties-tab:hover {
+	background: rgba(0, 0, 0, 0.05);
+}
+
+.properties-tab.active {
+	background: #1473e6;
+	color: #fff;
+	font-weight: 600;
+}
+
+.properties-body {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	padding: 14px 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.properties-panel {
+	display: none;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.properties-panel.active {
+	display: flex;
+}
+
+.properties-card {
+	position: relative;
+	background: #e8e8e8;
+	border-radius: 10px;
+	padding: 14px 16px 16px;
+}
+
+.properties-card h3 {
+	margin: 0 0 12px;
+	font-size: 13px;
+	font-weight: 650;
+}
+
+.properties-card-fill {
+	min-height: 220px;
+}
+
+.properties-grid {
+	display: grid;
+	grid-template-columns: minmax(140px, 38%) minmax(0, 1fr);
+	column-gap: 14px;
+	row-gap: 9px;
+	align-items: start;
+}
+
+.properties-grid > label {
+	text-align: right;
+	color: #3a3a3c;
+	font-weight: 520;
+	padding-top: 6px;
+	line-height: 1.3;
+}
+
+.properties-grid > span {
+	min-width: 0;
+	padding-top: 6px;
+	line-height: 1.35;
+	word-break: break-word;
+}
+
+.properties-grid > input,
+.properties-grid > textarea {
+	width: 100%;
+	min-width: 0;
+	border: 1px solid rgba(0, 0, 0, 0.18);
+	border-radius: 6px;
+	background: #fff;
+	padding: 6px 9px;
+	font: inherit;
+	color: inherit;
+	outline: none;
+}
+
+.properties-grid > input:focus,
+.properties-grid > textarea:focus {
+	border-color: #1473e6;
+	box-shadow: 0 0 0 2px rgba(20, 115, 230, 0.22);
+}
+
+.properties-grid > textarea {
+	resize: vertical;
+	min-height: 64px;
+}
+
+.properties-path {
+	font-size: 12px;
+	color: #444;
+}
+
+.properties-secondary-btn,
+.properties-primary-btn {
+	appearance: none;
+	border-radius: 8px;
+	font: inherit;
+	font-weight: 560;
+	padding: 7px 14px;
+	cursor: pointer;
+	transition: background 0.15s ease-out, border-color 0.15s ease-out;
+}
+
+.properties-secondary-btn {
+	border: 1px solid rgba(0, 0, 0, 0.16);
+	background: #efefef;
+	color: #1d1d1f;
+}
+
+.properties-secondary-btn:hover:not(:disabled) {
+	background: #e4e4e4;
+}
+
+.properties-secondary-btn:disabled {
+	opacity: 0.55;
+	cursor: default;
+}
+
+.properties-primary-btn {
+	border: 1px solid #0d66d0;
+	background: #1473e6;
+	color: #fff;
+}
+
+.properties-primary-btn:hover {
+	background: #0d66d0;
+}
+
+.properties-card > .properties-secondary-btn {
+	position: absolute;
+	right: 16px;
+	bottom: 16px;
+}
+
+.properties-fonts-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	max-height: 280px;
+	overflow-y: auto;
+	border: 1px solid rgba(0, 0, 0, 0.1);
+	border-radius: 8px;
+	background: #fff;
+}
+
+.properties-fonts-list li {
+	padding: 8px 12px;
+	border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 12px;
+	align-items: baseline;
+}
+
+.properties-fonts-list li:last-child {
+	border-bottom: 0;
+}
+
+.properties-fonts-list .font-name {
+	font-weight: 600;
+}
+
+.properties-fonts-list .font-meta {
+	color: #666;
+	font-size: 12px;
+}
+
+.properties-custom-table-wrap {
+	max-height: 260px;
+	overflow: auto;
+	border: 1px solid rgba(0, 0, 0, 0.1);
+	border-radius: 8px;
+	background: #fff;
+}
+
+.properties-custom-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 12.5px;
+}
+
+.properties-custom-table th,
+.properties-custom-table td {
+	padding: 8px 12px;
+	text-align: left;
+	border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+	word-break: break-word;
+}
+
+.properties-custom-table th {
+	background: #f7f7f7;
+	font-weight: 620;
+	position: sticky;
+	top: 0;
+}
+
+.properties-empty {
+	margin: 12px 0 0;
+	color: #666;
+	font-size: 12.5px;
+}
+
+.properties-dialog-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 12px 16px 14px;
+	border-top: 1px solid rgba(0, 0, 0, 0.08);
+	background: #ececec;
+}
+
+.properties-footer-right {
+	display: flex;
+	gap: 8px;
+}
+
+@media (max-width: 700px) {
+	.properties-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.properties-grid > label {
+		text-align: left;
+		padding-top: 0;
+	}
+
+	.properties-card > .properties-secondary-btn {
+		position: static;
+		margin-top: 12px;
+	}
 }
 
 .recent-list {
@@ -3654,10 +5860,46 @@ textarea {
 	padding: 8px 10px;
 }
 
-.setting-row input[type="checkbox"] {
-	width: 18px;
-	height: 18px;
-	accent-color: var(--accent);
+.setting-row input[type="checkbox"],
+input.setting-switch {
+	appearance: none;
+	-webkit-appearance: none;
+	width: 44px;
+	height: 26px;
+	margin: 0;
+	padding: 0;
+	flex: none;
+	border: 1px solid rgba(0, 0, 0, 0.08);
+	border-radius: 999px;
+	background: rgba(0, 0, 0, 0.12);
+	cursor: pointer;
+	position: relative;
+	transition: background 0.18s ease-out, border-color 0.18s ease-out;
+}
+
+.setting-row input[type="checkbox"]::after,
+input.setting-switch::after {
+	content: "";
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	background: #fff;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.1);
+	transition: transform 0.18s ease-out;
+}
+
+.setting-row input[type="checkbox"]:checked,
+input.setting-switch:checked {
+	background: var(--accent);
+	border-color: transparent;
+}
+
+.setting-row input[type="checkbox"]:checked::after,
+input.setting-switch:checked::after {
+	transform: translateX(18px);
 }
 
 .setting-row input[type="color"] {
@@ -3773,7 +6015,9 @@ textarea {
 	color: var(--accent);
 }
 
-@media (max-width: 1120px) {
+/* Empilement vertical réservé au vrai mobile (version web). Une fenêtre desktop
+   étroite garde ses 3 colonnes : voir la plage 701–1120px plus bas. */
+@media (max-width: 700px) {
 	body {
 		overflow: auto;
 	}
@@ -3829,6 +6073,83 @@ textarea {
 	}
 }
 
+/* Fenêtre moins large : on regagne d'abord de la place sur le décor (mot
+   « Slate », séparateurs, respiration des onglets) avant de toucher aux
+   contrôles, sinon la bande d'onglets se fait rogner. */
+@media (max-width: 1400px) {
+	.brand > span:not(.brand-mark) {
+		display: none;
+	}
+
+	.topbar-sep {
+		display: none;
+	}
+
+	.tab {
+		padding: 10px 8px;
+	}
+
+	.top-tabs {
+		gap: 2px;
+	}
+
+	.top-tabs [data-tool-disabled],
+	#ai-tab {
+		display: none;
+	}
+
+	.top-search {
+		flex: 0 1 190px;
+	}
+}
+
+/* Fenêtre desktop étroite : la colonne outils rétrécit au lieu de passer
+   au-dessus du document. La zone de lecture reste visible sans scroller la
+   fenêtre, et la barre du haut tient sur une seule ligne (sinon « Partager »
+   se superpose à « Exporter »). */
+@media (min-width: 701px) and (max-width: 1120px) {
+	.app-shell {
+		grid-template-columns: min(var(--tools-width), 34vw) minmax(0, 1fr) 42px;
+	}
+
+	.app-shell.rail-hidden {
+		grid-template-columns: min(var(--tools-width), 34vw) minmax(0, 1fr) 0;
+	}
+
+	.topbar {
+		flex-wrap: nowrap;
+	}
+
+	.tab {
+		padding: 10px 7px;
+	}
+
+	/* Recherche globale repliée : elle reste accessible via ⌘F et « Rechercher du
+	   texte » dans le panneau d'outils. */
+	.top-search {
+		display: none;
+	}
+
+	.print-button span,
+	.save-button span {
+		display: none;
+	}
+
+	/* Rester accessible via le panneau « Tous les outils » → « Exporter un PDF ». */
+	#export-edited-pdf {
+		display: none;
+	}
+}
+
+/* Sous cette largeur, le nom du document n'a plus que quelques pixels et ne
+   laisse voir que des glyphes coupés : les contrôles de page et de zoom
+   passent devant. */
+@media (min-width: 701px) and (max-width: 880px) {
+	.document-meta {
+		display: none;
+	}
+}
+
 /* ── Pop-up de mise à jour automatique ─────────────────────────────── */
 .slate-update-toast {
 	position: fixed;
@@ -3857,10 +6178,38 @@ textarea {
 	transform: translate(-50%, 0);
 }
 
+.slate-update-toast-close {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	display: grid;
+	place-items: center;
+	width: 26px;
+	height: 26px;
+	padding: 0;
+	border: none;
+	border-radius: 8px;
+	background: transparent;
+	color: rgba(244, 244, 245, 0.55);
+	cursor: pointer;
+	transition: background 0.16s ease, color 0.16s ease;
+}
+
+.slate-update-toast-close svg {
+	width: 15px;
+	height: 15px;
+}
+
+.slate-update-toast-close:hover {
+	background: rgba(255, 255, 255, 0.1);
+	color: #f4f4f5;
+}
+
 .slate-update-toast-body {
 	display: flex;
 	align-items: center;
 	gap: 14px;
+	padding-right: 26px;
 }
 
 .slate-update-toast-icon {

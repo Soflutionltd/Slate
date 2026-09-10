@@ -114,6 +114,28 @@ fn load_image_file(path: &str) -> Result<image::DynamicImage, String> {
     image::open(absolute).map_err(|e| format!("Unable to decode image {path}: {e} (PNG and JPEG are supported)"))
 }
 
+/// Charge la police pour l'écriture vectorielle. Si des octets de police sont
+/// fournis (police réelle résolue côté application via font_kit), on les embarque
+/// dans le PDF : le texte réécrit reste net, sélectionnable ET dans la police
+/// voulue (police d'origine ou choix du sélecteur). En cas d'échec de chargement
+/// (format non supporté, CFF/OTF récalcitrant…), repli silencieux sur les 14
+/// polices standard pour ne jamais bloquer l'export.
+fn resolve_font_token(
+    document: &mut PdfDocument,
+    font_name: Option<&str>,
+    font_bytes: Option<&[u8]>,
+) -> Result<PdfFontToken, String> {
+    if let Some(bytes) = font_bytes {
+        if bytes.len() > 4 {
+            // is_cid_font = true : couverture Unicode complète (accents FR, etc.).
+            if let Ok(token) = document.fonts_mut().load_true_type_from_bytes(bytes, true) {
+                return Ok(token);
+            }
+        }
+    }
+    font_token_for(document, font_name)
+}
+
 fn font_token_for(
     document: &mut PdfDocument,
     name: Option<&str>,
@@ -216,17 +238,19 @@ fn wrap_text_lines(
 /// Pose `text` dans la bbox (repère haut-gauche), avec retour à la ligne et
 /// réduction automatique de la taille jusqu'à ce que tout tienne.
 /// Retourne la taille effectivement utilisée.
+#[allow(clippy::too_many_arguments)]
 fn insert_textbox(
     document: &mut PdfDocument,
     page_index: u32,
     bbox: (f64, f64, f64, f64),
     text: &str,
     font_name: Option<&str>,
+    font_bytes: Option<&[u8]>,
     requested_size: f64,
     color: PdfColor,
     align: &str,
 ) -> Result<f64, String> {
-    let font = font_token_for(document, font_name)?;
+    let font = resolve_font_token(document, font_name, font_bytes)?;
     let page_height = {
         let page = document
             .pages()
@@ -554,6 +578,33 @@ pub fn edit_region(
     color: PdfColor,
     align: &str,
 ) -> Result<EditRegionOutcome, String> {
+    edit_region_placed(
+        bytes, page_number, bbox, None, new_text, font, None, size, color, align, false,
+    )
+}
+
+/// Variante de `edit_region` pour l'export vectoriel. Deux différences :
+/// - `target_bbox` : on EFFACE le texte d'origine à `bbox` mais on RÉÉCRIT le
+///   nouveau texte à `target_bbox` (bloc déplacé ou redimensionné). Si `None`,
+///   réécriture au même endroit (comportement historique).
+/// - `font_bytes` : embarque la police réelle (résolue côté app) au lieu d'une
+///   police standard, pour préserver la police d'origine / le choix utilisateur.
+/// - `insert_only` : ajoute le texte sans supprimer les objets déjà présents
+///   dans `bbox` (outil « Ajouter du texte »).
+#[allow(clippy::too_many_arguments)]
+pub fn edit_region_placed(
+    bytes: &[u8],
+    page_number: u32,
+    bbox: (f64, f64, f64, f64),
+    target_bbox: Option<(f64, f64, f64, f64)>,
+    new_text: &str,
+    font: Option<&str>,
+    font_bytes: Option<&[u8]>,
+    size: Option<f64>,
+    color: PdfColor,
+    align: &str,
+    insert_only: bool,
+) -> Result<EditRegionOutcome, String> {
     let guard = pdfium_guard()?;
     let pdfium = &*guard;
     let mut document = pdfium
@@ -572,21 +623,24 @@ pub fn edit_region(
         let page_height = page.height().value as f64;
 
         // Indices des runs de texte à supprimer (en intersection avec la zone).
+        // Une insertion pure doit préserver intégralement le contenu sous-jacent.
         let mut to_remove: Vec<usize> = Vec::new();
-        for (index, object) in page.objects().iter().enumerate() {
-            if object.object_type() != PdfPageObjectType::Text {
-                continue;
-            }
-            let Some(object_bbox) = object_bbox_top_left(&object, page_height) else {
-                continue;
-            };
-            if rects_intersect(object_bbox, bbox) {
-                if requested_size <= 0.0 {
-                    if let Some(text_object) = object.as_text_object() {
-                        requested_size = text_object.scaled_font_size().value as f64;
-                    }
+        if !insert_only {
+            for (index, object) in page.objects().iter().enumerate() {
+                if object.object_type() != PdfPageObjectType::Text {
+                    continue;
                 }
-                to_remove.push(index);
+                let Some(object_bbox) = object_bbox_top_left(&object, page_height) else {
+                    continue;
+                };
+                if rects_intersect(object_bbox, bbox) {
+                    if requested_size <= 0.0 {
+                        if let Some(text_object) = object.as_text_object() {
+                            requested_size = text_object.scaled_font_size().value as f64;
+                        }
+                    }
+                    to_remove.push(index);
+                }
             }
         }
         removed = to_remove.len();
@@ -608,9 +662,10 @@ pub fn edit_region(
         final_size = insert_textbox(
             &mut document,
             page_number - 1,
-            bbox,
+            target_bbox.unwrap_or(bbox),
             new_text,
             font,
+            font_bytes,
             requested_size,
             color,
             align,
@@ -680,18 +735,20 @@ pub fn replace_image(bytes: &[u8], image_id: &str, new_image_path: &str) -> Resu
         .pages()
         .get((page_number - 1) as i32)
         .map_err(|e| e.to_string())?;
-    let mut object = page
-        .objects()
-        .get(object_index)
-        .map_err(|_| format!("No object at index {object_index} on page {page_number}. Re-run pdf_layout."))?;
-    let Some(image_object) = object.as_image_object_mut() else {
-        return Err(format!(
-            "Object {image_id} is not an image. Re-run pdf_layout to get fresh ids."
-        ));
-    };
-    image_object
-        .set_image(&new_image)
-        .map_err(|e| format!("Unable to replace image: {e}"))?;
+    {
+        let mut object = page
+            .objects()
+            .get(object_index)
+            .map_err(|_| format!("No object at index {object_index} on page {page_number}. Re-run pdf_layout."))?;
+        let Some(image_object) = object.as_image_object_mut() else {
+            return Err(format!(
+                "Object {image_id} is not an image. Re-run pdf_layout to get fresh ids."
+            ));
+        };
+        image_object
+            .set_image(&new_image)
+            .map_err(|e| format!("Unable to replace image: {e}"))?;
+    }
     page.regenerate_content().map_err(|e| e.to_string())?;
     document.save_to_bytes().map_err(|e| e.to_string())
 }
@@ -1017,4 +1074,74 @@ pub fn stamp(
     }
 
     document.save_to_bytes().map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn rects_intersect_overlap_and_touch() {
+        // Chevauchement franc.
+        assert!(rects_intersect((0.0, 0.0, 10.0, 10.0), (5.0, 5.0, 15.0, 15.0)));
+        // Contact arête-à-arête : pas un chevauchement (comparaisons strictes).
+        assert!(!rects_intersect((0.0, 0.0, 10.0, 10.0), (10.0, 0.0, 20.0, 10.0)));
+        // Totalement disjoints.
+        assert!(!rects_intersect((0.0, 0.0, 5.0, 5.0), (6.0, 6.0, 9.0, 9.0)));
+        // Inclusion.
+        assert!(rects_intersect((0.0, 0.0, 100.0, 100.0), (10.0, 10.0, 20.0, 20.0)));
+    }
+
+    #[test]
+    fn parse_bbox_valid() {
+        let bbox = parse_bbox(&json!([10.0, 20.0, 110.0, 60.0])).unwrap();
+        assert_eq!(bbox, (10.0, 20.0, 110.0, 60.0));
+    }
+
+    #[test]
+    fn parse_bbox_rejects_bad_input() {
+        // Mauvaise longueur.
+        assert!(parse_bbox(&json!([1.0, 2.0, 3.0])).is_err());
+        // Valeur non numérique.
+        assert!(parse_bbox(&json!([1.0, 2.0, "x", 4.0])).is_err());
+        // x1 <= x0.
+        assert!(parse_bbox(&json!([10.0, 0.0, 10.0, 5.0])).is_err());
+        // y1 <= y0.
+        assert!(parse_bbox(&json!([0.0, 10.0, 5.0, 10.0])).is_err());
+    }
+
+    #[test]
+    fn parse_object_id_text_and_image() {
+        assert_eq!(parse_object_id("p1-t0", 't').unwrap(), (1, 0));
+        assert_eq!(parse_object_id("p12-i7", 'i').unwrap(), (12, 7));
+    }
+
+    #[test]
+    fn parse_object_id_rejects_bad_input() {
+        // Mauvais préfixe.
+        assert!(parse_object_id("x1-t0", 't').is_err());
+        // Mauvais type d'objet.
+        assert!(parse_object_id("p1-i0", 't').is_err());
+        // Page 0 interdite (1-based).
+        assert!(parse_object_id("p0-t0", 't').is_err());
+        // Index non numérique.
+        assert!(parse_object_id("p1-tx", 't').is_err());
+    }
+
+    #[test]
+    fn parse_color_default_is_black_opaque() {
+        let c = parse_color(None).unwrap();
+        assert_eq!((c.red(), c.green(), c.blue(), c.alpha()), (0, 0, 0, 255));
+    }
+
+    #[test]
+    fn parse_color_rgb_and_bounds() {
+        let c = parse_color(Some(&json!([255, 128, 0]))).unwrap();
+        assert_eq!((c.red(), c.green(), c.blue(), c.alpha()), (255, 128, 0, 255));
+        // Hors plage.
+        assert!(parse_color(Some(&json!([256, 0, 0]))).is_err());
+        // Mauvaise longueur.
+        assert!(parse_color(Some(&json!([0, 0]))).is_err());
+    }
 }

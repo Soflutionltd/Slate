@@ -1,13 +1,13 @@
 {
 	"$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-utils/schema.json",
 	"productName": "Slate",
-	"version": "0.2.4",
+	"version": "0.3.123",
 	"identifier": "com.soflution.slate",
 	"build": {
 		"frontendDist": "./frontend-dist",
 		"devUrl": "http://localhost:1420",
 		"beforeDevCommand": "",
-		"beforeBuildCommand": "cd src-tauri && mkdir -p binaries && touch binaries/alto-mcp-aarch64-apple-darwin && cargo build --release --bin alto-mcp && cp target/release/alto-mcp binaries/alto-mcp-aarch64-apple-darwin"
+		"beforeBuildCommand": "bash scripts/ensure-alto-mcp.sh"
 	},
 	"app": {
 		"withGlobalTauri": true,
@@ -39,7 +39,11 @@
 	"bundle": {
 		"active": true,
 		"targets": ["app", "dmg"],
-		"resources": ["libpdfium.dylib"],
+		"resources": {
+			"libpdfium.dylib": "libpdfium.dylib",
+			"infoplist/en.lproj/InfoPlist.strings": "en.lproj/InfoPlist.strings",
+			"infoplist/fr.lproj/InfoPlist.strings": "fr.lproj/InfoPlist.strings"
+		},
 		"externalBin": ["binaries/alto-mcp"],
 		"icon": [
 			"icons/32x32.png",

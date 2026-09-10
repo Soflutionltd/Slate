@@ -10,16 +10,19 @@ name = "alto_pdf_engine"
 path = "src/lib.rs"
 
 [dependencies]
-pdfium-render = "0.9.1"
+pdfium-render = { git = "https://github.com/ajrcarey/pdfium-render", rev = "0d7f99ad660317d5fd2e9df732db77764873a6d7" }
 lopdf = "0.40"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg"] }
-rand = "0.9"
+rand = "0.10"
 regex = "1"
 tracing = "0.1"
+ttf-parser = "0.25.1"
 
 # rayon n'existe pas sur wasm32-unknown-unknown (pas de threads). On ne le lie
 # qu'en natif ; les modules basculent sur un parcours séquentiel en WASM (Phase 2).
+# mupdf compile la bibliothèque C : natif uniquement (rendu rapide + réparation).
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rayon = "1"
+mupdf = { version = "0.8.0", default-features = false, features = ["base14-fonts"] }

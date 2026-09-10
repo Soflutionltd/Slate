@@ -27,9 +27,9 @@ leave your machine.
 
 <a href="https://github.com/Soflutionltd/Slate/releases/latest/download/Slate.app.tar.gz"><img src="docs/assets/download-mac.png" alt="Download Slate for macOS" height="80"></a>
 &nbsp;&nbsp;
-<a href="https://github.com/Soflutionltd/Slate/releases"><img src="docs/assets/download-win.png" alt="Download Slate for Windows" height="80"></a>
+<a href="https://github.com/Soflutionltd/Slate/releases/latest/download/Slate-windows-x64-setup.exe"><img src="docs/assets/download-win.png" alt="Download Slate for Windows" height="80"></a>
 &nbsp;&nbsp;
-<a href="https://github.com/Soflutionltd/Slate/releases"><img src="docs/assets/download-linux.png" alt="Download Slate for Linux" height="80"></a>
+<a href="https://github.com/Soflutionltd/Slate/releases/latest/download/Slate-linux-x64.AppImage"><img src="docs/assets/download-linux.png" alt="Download Slate for Linux" height="80"></a>
 
 </div>
 
@@ -66,12 +66,15 @@ or slow Electron apps wrapping a JavaScript renderer. Slate is different:
 | --- | --- | --- | --- |
 | **macOS** | Apple Silicon (aarch64) | ✅ Signed | [**Download now**](https://github.com/Soflutionltd/Slate/releases/latest/download/Slate.app.tar.gz) |
 | **macOS** | Intel (x86_64) | 🛠 Build from source | [Instructions](#-build-from-source) |
-| **Windows** | x86_64 | 🔜 Coming soon | — |
-| **Linux** | x86_64 | 🔜 Coming soon | — |
+| **Windows** | x86_64 | ✅ Available | [**Download now**](https://github.com/Soflutionltd/Slate/releases/latest/download/Slate-windows-x64-setup.exe) |
+| **Linux** | x86_64 | ✅ Available | [**Download now**](https://github.com/Soflutionltd/Slate/releases/latest/download/Slate-linux-x64.AppImage) |
 
 > **macOS:** the download starts immediately (`Slate.app.tar.gz`). Double-click
 > the archive to extract it, then drag **Slate.app** to *Applications*. The build
 > is signed with an Apple Developer ID.
+>
+> **Windows:** download `Slate-windows-x64-setup.exe` — not `Slate.app.tar.gz`
+> (that archive is macOS only).
 
 ➡️ **Latest release:** [github.com/Soflutionltd/Slate/releases/latest](https://github.com/Soflutionltd/Slate/releases/latest)
 

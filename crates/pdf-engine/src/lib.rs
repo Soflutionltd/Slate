@@ -11,6 +11,12 @@
 pub mod pdf_compress;
 pub mod pdf_edit;
 pub mod pdf_engine;
+pub mod pdf_fallback_font;
 pub mod pdf_forms;
+pub mod pdf_label;
+pub mod pdf_mupdf;
 pub mod pdf_ops;
+mod pdf_positioned_edit;
+pub mod pdf_stream_edit;
 pub mod pdf_tools;
+pub mod pdf_versioning;

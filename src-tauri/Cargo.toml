@@ -1,9 +1,10 @@
 [package]
 name = "sofdocs-desktop"
-version = "0.2.4"
+version = "0.3.123"
 edition = "2021"
 description = "Alto desktop application — native file access and offline editing"
 license = "AGPL-3.0-or-later"
+default-run = "sofdocs-desktop"
 
 [lib]
 name = "sofdocs_desktop"
@@ -33,7 +34,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Moteur PDF partagé (extrait de src-tauri) : même code natif ici et WASM côté web.
 alto-pdf-engine = { path = "../crates/pdf-engine" }
-pdfium-render = "0.9.1"
+pdfium-render = { git = "https://github.com/ajrcarey/pdfium-render", rev = "0d7f99ad660317d5fd2e9df732db77764873a6d7" }
 dirs = "6.0.0"
 lopdf = "0.40"
 rand = "0.9"
@@ -45,6 +46,12 @@ rayon = "1"
 # Énumération des polices installées (cross-OS : CoreText macOS / DirectWrite
 # Windows / fontconfig Linux). Sert à peupler le sélecteur de police de l'éditeur.
 font-kit = "0.14"
+
+# Drag natif d'un onglet hors de la fenêtre (le PDF devient un vrai fichier
+# glissé : Finder, Mail, navigateur…). L'API Linux (gtk::ApplicationWindow)
+# diffère : on ne l'active que sur macOS/Windows.
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+drag = "2.1.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"

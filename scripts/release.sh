@@ -54,13 +54,32 @@ TAG="v${VERSION}"
 ARCH="aarch64"
 echo "▶ Release Slate ${TAG} (${ARCH}) → ${REPO}"
 
+# Cache Rust partagé (sccache si installé) — même artefact signé, recompil plus vite.
+# shellcheck source=scripts/release-env.sh
+source "$SCRIPT_DIR/release-env.sh"
+
+# Refuser une release si le module frontend contient une erreur de syntaxe.
+node --check src-tauri/frontend-dist/app.js
+
+# Le binding PDFium épinglé utilise FPDFText_SetPositions (API 7881+).
+# Refuser une release avec une ancienne dylib évite un échec au lancement.
+PDFIUM_LIB="src-tauri/libpdfium.dylib"
+if [[ ! -f "$PDFIUM_LIB" ]] || ! nm -gU "$PDFIUM_LIB" | rg '_FPDFText_SetPositions$' >/dev/null; then
+  echo "ERREUR : $PDFIUM_LIB doit exporter FPDFText_SetPositions (PDFium 7881+)." >&2
+  exit 1
+fi
+
 # ── Build signé + artefacts updater ──────────────────────────────────────
+# 1) Sidecar alto-mcp (skip si inchangé)
+# 2) cargo tauri build + bundle signé
+bash "$SCRIPT_DIR/ensure-alto-mcp.sh"
+
 # --bundles app : on ne produit que le .app (+ .app.tar.gz/.sig pour l'updater),
 # pas de DMG → aucune fenêtre Finder qui s'ouvre. Avec --dmg on génère aussi le DMG.
 if [[ "$BUILD_DMG" -eq 1 ]]; then
-  cargo tauri build
+	cargo tauri build
 else
-  cargo tauri build --bundles app
+	cargo tauri build --bundles app
 fi
 
 BUNDLE_DIR="src-tauri/target/release/bundle"
@@ -90,13 +109,41 @@ fi
 PUB_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 SIG_CONTENT="$(cat "$SIG_FILE")"
 DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/Slate.app.tar.gz"
+# NOTES (une seule ligne) est injecté dans le JSON du manifeste updater ;
+# RELEASE_NOTES (markdown multi-ligne) sert uniquement à la page GitHub.
 [[ -z "$NOTES" ]] && NOTES="Slate ${VERSION} — voir https://github.com/${REPO}/releases/tag/${TAG}"
+
+# La valeur est injectée dans une chaîne JSON : un saut de ligne ou un guillemet
+# non échappé produit un latest.json invalide, que l'updater rejette en silence
+# (aucun pop-up de mise à jour côté utilisateurs).
+json_string_escape() {
+	local value="$1"
+	value="${value//\\/\\\\}"
+	value="${value//\"/\\\"}"
+	value="${value//$'\r'/}"
+	value="${value//$'\t'/ }"
+	value="${value//$'\n'/ · }"
+	printf '%s' "$value"
+}
+MANIFEST_NOTES="$(json_string_escape "$NOTES")"
+WIN_URL="https://github.com/${REPO}/releases/download/${TAG}/Slate-windows-x64-setup.exe"
+RELEASE_NOTES="## ⬇️ Téléchargement direct
+
+**macOS (Apple Silicon)** : [**Télécharger Slate ${VERSION}**](${DOWNLOAD_URL}) — archive \`.app.tar.gz\`. Double-cliquez puis glissez **Slate.app** dans *Applications*.
+
+**Windows (x64)** : [**Télécharger Slate ${VERSION}**](${WIN_URL}) — installeur \`.exe\`. Ne téléchargez pas \`Slate.app.tar.gz\` (c’est macOS).
+
+_Les fichiers \`.sig\` et \`latest.json\` servent uniquement aux mises à jour automatiques — inutile de les télécharger._
+
+---
+
+${NOTES}"
 MANIFEST="${BUNDLE_DIR}/latest.json"
 
 cat > "$MANIFEST" <<EOF
 {
   "version": "${VERSION}",
-  "notes": "${NOTES}",
+  "notes": "${MANIFEST_NOTES}",
   "pub_date": "${PUB_DATE}",
   "platforms": {
     "darwin-aarch64": {
@@ -107,6 +154,13 @@ cat > "$MANIFEST" <<EOF
 }
 EOF
 
+# Un manifeste illisible casse la mise à jour sans le moindre message : on refuse
+# de publier avant de l'avoir validé.
+python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$MANIFEST" || {
+  echo "ERREUR : $MANIFEST n'est pas un JSON valide." >&2
+  exit 1
+}
+
 # ── Publication GitHub ───────────────────────────────────────────────────
 echo "▶ Publication de la release ${TAG}…"
 if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
@@ -114,8 +168,31 @@ if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
     --repo "$REPO" --clobber
 else
   gh release create "$TAG" "$TAR_FILE" "$SIG_FILE" "$MANIFEST" ${DMG_FILE:+"$DMG_FILE"} \
-    --repo "$REPO" --title "Slate ${VERSION}" --notes "$NOTES" --latest
+    --repo "$REPO" --title "Slate ${VERSION}" --notes "$RELEASE_NOTES" --latest
 fi
+
+# GitHub peut laisser /releases/latest/download/latest.json pointer sur
+# l'avant-dernière tag (CDN). L'updater ne propose alors rien.
+echo "▶ Vérification du pointeur /releases/latest → ${TAG}…"
+gh release edit "$TAG" --repo "$REPO" --latest >/dev/null
+LATEST_OK=0
+for _try in 1 2 3 4 5 6 7 8 9 10; do
+  LATEST_LOC="$(curl -fsI "https://github.com/${REPO}/releases/latest/download/latest.json?ts=$(date +%s%3N)" \
+    | awk 'tolower($1)=="location:" {print $2; exit}' | tr -d '\r')"
+  if [[ "$LATEST_LOC" == *"/download/${TAG}/"* ]]; then
+    LATEST_OK=1
+    break
+  fi
+  echo "   encore ${LATEST_LOC:-inconnu} — retry ${_try}"
+  gh release edit "$TAG" --repo "$REPO" --latest >/dev/null || true
+  sleep 2
+done
+if [[ "$LATEST_OK" -ne 1 ]]; then
+  echo "ERREUR : /releases/latest/download/latest.json ne pointe pas sur ${TAG}." >&2
+  echo "   Dernier Location: ${LATEST_LOC:-aucun}" >&2
+  exit 1
+fi
+echo "   latest.json → ${TAG}"
 
 echo
 echo "✅ Release ${TAG} publiée sur ${REPO}."

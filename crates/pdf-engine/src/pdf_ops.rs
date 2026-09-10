@@ -5,7 +5,7 @@ use std::sync::Arc;
 use lopdf::encryption::crypt_filters::{Aes256CryptFilter, CryptFilter};
 use lopdf::encryption::{EncryptionState, EncryptionVersion, Permissions};
 use lopdf::{Bookmark, Document, Object, ObjectId, SaveOptions};
-use rand::RngCore;
+use rand::Rng;
 
 fn err_to_string<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
@@ -218,6 +218,26 @@ pub fn remove_annotations(bytes: Vec<u8>) -> Result<Vec<u8>, String> {
     save_modern(&mut doc)
 }
 
+/// Rotation effective d'une page : `/Rotate` sur la page, sinon hérité des
+/// nœuds `/Pages` parents (PDF 32000 §7.7.3.4). La valeur peut être un objet
+/// indirect (`5 0 R`) : on la déréférence, sinon un scanner qui écrit ainsi
+/// ferait croire à 0° et « 180° » ne produirait qu'un quart de tour.
+fn inherited_rotate(doc: &Document, page_id: ObjectId) -> i32 {
+    let mut current = Some(page_id);
+    for _ in 0..16 {
+        let Some(id) = current else { break };
+        let Ok(dict) = doc.get_dictionary(id) else { break };
+        if let Ok(raw) = dict.get(b"Rotate") {
+            let resolved = doc.dereference(raw).map(|(_, obj)| obj).unwrap_or(raw);
+            if let Ok(value) = resolved.as_i64() {
+                return (value % 360 + 360) as i32 % 360;
+            }
+        }
+        current = dict.get(b"Parent").ok().and_then(|obj| obj.as_reference().ok());
+    }
+    0
+}
+
 /// Rotate the given pages (1-indexed) by `angle` (0/90/180/270) degrees, multiple of 90.
 pub fn rotate_pages(bytes: Vec<u8>, page_numbers: Vec<u32>, angle: i32) -> Result<Vec<u8>, String> {
     if angle % 90 != 0 {
@@ -234,13 +254,9 @@ pub fn rotate_pages(bytes: Vec<u8>, page_numbers: Vec<u32>, angle: i32) -> Resul
             .collect()
     };
     for page_id in targets {
-        let dict = doc.get_dictionary_mut(page_id).map_err(err_to_string)?;
-        let current = dict
-            .get(b"Rotate")
-            .ok()
-            .and_then(|o| o.as_i64().ok())
-            .unwrap_or(0) as i32;
+        let current = inherited_rotate(&doc, page_id);
         let new_angle = ((current + angle) % 360 + 360) % 360;
+        let dict = doc.get_dictionary_mut(page_id).map_err(err_to_string)?;
         dict.set("Rotate", new_angle as i64);
     }
     save_modern(&mut doc)
@@ -338,6 +354,213 @@ pub fn reorder_pages(bytes: Vec<u8>, new_order: Vec<u32>) -> Result<Vec<u8>, Str
 }
 
 /// Return basic document properties (title, author, subject, etc.) read from /Info.
+fn pdf_object_string(obj: &Object) -> Option<String> {
+    match obj {
+        Object::String(bytes, _) => decode_pdf_string(bytes),
+        Object::Name(name) => Some(String::from_utf8_lossy(name).into_owned()),
+        _ => obj
+            .as_str()
+            .ok()
+            .map(|bytes| String::from_utf8_lossy(bytes).into_owned()),
+    }
+}
+
+fn decode_pdf_string(bytes: &[u8]) -> Option<String> {
+    if bytes.is_empty() {
+        return Some(String::new());
+    }
+    // UTF-16BE avec BOM (courant dans Info dict Adobe / Preview).
+    if bytes.len() >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF {
+        let mut units = Vec::with_capacity((bytes.len() - 2) / 2);
+        let mut i = 2;
+        while i + 1 < bytes.len() {
+            units.push(u16::from_be_bytes([bytes[i], bytes[i + 1]]));
+            i += 2;
+        }
+        return Some(String::from_utf16_lossy(&units));
+    }
+    // UTF-16LE avec BOM.
+    if bytes.len() >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE {
+        let mut units = Vec::with_capacity((bytes.len() - 2) / 2);
+        let mut i = 2;
+        while i + 1 < bytes.len() {
+            units.push(u16::from_le_bytes([bytes[i], bytes[i + 1]]));
+            i += 2;
+        }
+        return Some(String::from_utf16_lossy(&units));
+    }
+    Some(String::from_utf8_lossy(bytes).into_owned())
+}
+
+fn info_get_str(info: Option<&lopdf::Dictionary>, key: &[u8]) -> Option<String> {
+    let dict = info?;
+    let obj = dict.get(key).ok()?;
+    pdf_object_string(obj)
+}
+
+fn catalog_bool(doc: &Document, key: &[u8], nested: Option<&[u8]>) -> bool {
+    let Ok(catalog) = doc.catalog() else {
+        return false;
+    };
+    if let Some(nested_key) = nested {
+        let Ok(nested_obj) = catalog.get(nested_key) else {
+            return false;
+        };
+        let dict = match nested_obj {
+            Object::Dictionary(d) => d,
+            Object::Reference(id) => match doc.get_dictionary(*id) {
+                Ok(d) => d,
+                Err(_) => return false,
+            },
+            _ => return false,
+        };
+        return matches!(dict.get(key), Ok(Object::Boolean(true)));
+    }
+    matches!(catalog.get(key), Ok(Object::Boolean(true)))
+}
+
+fn catalog_name(doc: &Document, key: &[u8]) -> Option<String> {
+    let catalog = doc.catalog().ok()?;
+    match catalog.get(key).ok()? {
+        Object::Name(name) => Some(String::from_utf8_lossy(name).into_owned()),
+        Object::Reference(id) => match doc.get_object(*id).ok()? {
+            Object::Name(name) => Some(String::from_utf8_lossy(name).into_owned()),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn is_linearized(bytes: &[u8]) -> bool {
+    // Le dict /Linearized est en tête de fichier (après %PDF-x.y).
+    let head = &bytes[..bytes.len().min(2048)];
+    head.windows(b"/Linearized".len())
+        .any(|window| window == b"/Linearized")
+}
+
+fn first_page_size(doc: &Document) -> (Option<f64>, Option<f64>) {
+    let pages = doc.get_pages();
+    let Some((_, page_id)) = pages.iter().next() else {
+        return (None, None);
+    };
+    let Ok(page) = doc.get_dictionary(*page_id) else {
+        return (None, None);
+    };
+    let media = match page.get(b"MediaBox") {
+        Ok(Object::Array(arr)) if arr.len() >= 4 => arr.clone(),
+        Ok(Object::Reference(id)) => match doc.get_object(*id) {
+            Ok(Object::Array(arr)) if arr.len() >= 4 => arr.clone(),
+            _ => return (None, None),
+        },
+        _ => return (None, None),
+    };
+    let num = |obj: &Object| -> Option<f64> {
+        match obj {
+            Object::Integer(v) => Some(*v as f64),
+            Object::Real(v) => Some(f64::from(*v)),
+            _ => None,
+        }
+    };
+    match (num(&media[0]), num(&media[1]), num(&media[2]), num(&media[3])) {
+        (Some(x0), Some(y0), Some(x1), Some(y1)) => (Some((x1 - x0).abs()), Some((y1 - y0).abs())),
+        _ => (None, None),
+    }
+}
+
+fn collect_fonts(doc: &Document) -> Vec<PdfFontInfo> {
+    use std::collections::BTreeMap;
+    let mut fonts: BTreeMap<String, PdfFontInfo> = BTreeMap::new();
+    for (_num, page_id) in doc.get_pages() {
+        let Ok(page) = doc.get_dictionary(page_id) else {
+            continue;
+        };
+        let resources = match page.get(b"Resources") {
+            Ok(Object::Dictionary(d)) => d.clone(),
+            Ok(Object::Reference(id)) => match doc.get_dictionary(*id) {
+                Ok(d) => d.clone(),
+                Err(_) => continue,
+            },
+            _ => continue,
+        };
+        let font_dict = match resources.get(b"Font") {
+            Ok(Object::Dictionary(d)) => d,
+            Ok(Object::Reference(id)) => match doc.get_dictionary(*id) {
+                Ok(d) => d,
+                Err(_) => continue,
+            },
+            _ => continue,
+        };
+        for (_key, value) in font_dict.iter() {
+            let font = match value {
+                Object::Dictionary(d) => d,
+                Object::Reference(id) => match doc.get_dictionary(*id) {
+                    Ok(d) => d,
+                    Err(_) => continue,
+                },
+                _ => continue,
+            };
+            let base = font
+                .get(b"BaseFont")
+                .ok()
+                .and_then(pdf_object_string)
+                .unwrap_or_else(|| "Sans nom".into());
+            // Préfixe de sous-ensemble ABCDEF+…
+            let display = if base.len() > 7 && base.as_bytes().get(6) == Some(&b'+') {
+                base[7..].to_string()
+            } else {
+                base.clone()
+            };
+            let subtype = font
+                .get(b"Subtype")
+                .ok()
+                .and_then(pdf_object_string)
+                .unwrap_or_else(|| "Unknown".into());
+            let encoding = font.get(b"Encoding").ok().and_then(pdf_object_string);
+            let embedded = font.get(b"FontDescriptor").is_ok()
+                || matches!(subtype.as_str(), "Type0" | "CIDFontType0" | "CIDFontType2");
+            fonts.entry(display.clone()).or_insert(PdfFontInfo {
+                name: display,
+                subtype,
+                encoding,
+                embedded,
+            });
+        }
+    }
+    fonts.into_values().collect()
+}
+
+fn collect_custom_properties(info: Option<&lopdf::Dictionary>) -> Vec<PdfCustomProperty> {
+    const STANDARD: &[&[u8]] = &[
+        b"Title",
+        b"Author",
+        b"Subject",
+        b"Keywords",
+        b"Creator",
+        b"Producer",
+        b"CreationDate",
+        b"ModDate",
+        b"Trapped",
+    ];
+    let Some(dict) = info else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for (key, value) in dict.iter() {
+        if STANDARD.iter().any(|s| *s == key.as_slice()) {
+            continue;
+        }
+        let name = String::from_utf8_lossy(key).into_owned();
+        if name.starts_with("PTEX.") {
+            continue;
+        }
+        if let Some(val) = pdf_object_string(value) {
+            out.push(PdfCustomProperty { name, value: val });
+        }
+    }
+    out.sort_by(|a, b| a.name.cmp(&b.name));
+    out
+}
+
 pub fn document_properties(bytes: Vec<u8>) -> Result<PdfProperties, String> {
     let doc = load_doc(&bytes)?;
     let pages = doc.get_pages();
@@ -348,31 +571,65 @@ pub fn document_properties(bytes: Vec<u8>) -> Result<PdfProperties, String> {
         .and_then(|o| o.as_reference().ok())
         .and_then(|id| doc.get_dictionary(id).ok());
 
-    fn get_str(d: Option<&lopdf::Dictionary>, key: &[u8]) -> Option<String> {
-        let dict = d?;
-        let obj = dict.get(key).ok()?;
-        obj.as_str()
-            .ok()
-            .map(|bytes| String::from_utf8_lossy(bytes).into_owned())
-    }
+    let tagged = catalog_bool(&doc, b"Marked", Some(b"MarkInfo"));
+    let linearized = is_linearized(&bytes);
+    let (page_width_pts, page_height_pts) = first_page_size(&doc);
+
+    let encrypted = doc.is_encrypted();
+    let security_method = if encrypted {
+        "Mot de passe".to_string()
+    } else {
+        "Aucune".to_string()
+    };
 
     Ok(PdfProperties {
-        title: get_str(info, b"Title"),
-        author: get_str(info, b"Author"),
-        subject: get_str(info, b"Subject"),
-        keywords: get_str(info, b"Keywords"),
-        creator: get_str(info, b"Creator"),
-        producer: get_str(info, b"Producer"),
-        creation_date: get_str(info, b"CreationDate"),
-        mod_date: get_str(info, b"ModDate"),
+        title: info_get_str(info, b"Title"),
+        author: info_get_str(info, b"Author"),
+        subject: info_get_str(info, b"Subject"),
+        keywords: info_get_str(info, b"Keywords"),
+        creator: info_get_str(info, b"Creator"),
+        producer: info_get_str(info, b"Producer"),
+        creation_date: info_get_str(info, b"CreationDate"),
+        mod_date: info_get_str(info, b"ModDate"),
         page_count: pages.len() as u32,
         pdf_version: doc.version.clone(),
         file_size: bytes.len() as u64,
-        encrypted: doc.is_encrypted(),
+        encrypted,
+        tagged,
+        linearized,
+        page_width_pts,
+        page_height_pts,
+        fonts: collect_fonts(&doc),
+        custom_properties: collect_custom_properties(info),
+        security_method,
+        can_print: !encrypted,
+        can_copy: !encrypted,
+        can_modify: !encrypted,
+        can_annotate: !encrypted,
+        page_layout: catalog_name(&doc, b"PageLayout"),
+        page_mode: catalog_name(&doc, b"PageMode"),
+        trapped: info_get_str(info, b"Trapped"),
     })
 }
 
 #[derive(serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PdfFontInfo {
+    pub name: String,
+    pub subtype: String,
+    pub encoding: Option<String>,
+    pub embedded: bool,
+}
+
+#[derive(serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PdfCustomProperty {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct PdfProperties {
     pub title: Option<String>,
     pub author: Option<String>,
@@ -386,4 +643,18 @@ pub struct PdfProperties {
     pub pdf_version: String,
     pub file_size: u64,
     pub encrypted: bool,
+    pub tagged: bool,
+    pub linearized: bool,
+    pub page_width_pts: Option<f64>,
+    pub page_height_pts: Option<f64>,
+    pub fonts: Vec<PdfFontInfo>,
+    pub custom_properties: Vec<PdfCustomProperty>,
+    pub security_method: String,
+    pub can_print: bool,
+    pub can_copy: bool,
+    pub can_modify: bool,
+    pub can_annotate: bool,
+    pub page_layout: Option<String>,
+    pub page_mode: Option<String>,
+    pub trapped: Option<String>,
 }
