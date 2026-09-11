@@ -3328,6 +3328,7 @@ const DEFAULT_APP_PREF_KEY = 'alto-default-prompt';
 
 async function maybePromptDefaultApp() {
 	if (!window.__TAURI__) return;
+	if (window.__slateDefaultAppPrompted) return;
 	if (!elements.defaultAppModal || !elements.defaultAppBackdrop) return;
 
 	let alreadyDefault = false;
@@ -3338,6 +3339,7 @@ async function maybePromptDefaultApp() {
 	}
 	if (alreadyDefault) {
 		setDefaultAppPref('done');
+		window.__slateDefaultAppPrompted = true;
 		return;
 	}
 
@@ -3347,18 +3349,13 @@ async function maybePromptDefaultApp() {
 	} catch (_err) {
 		pref = '';
 	}
-	if (pref === 'never') return;
-	if (pref === 'done') {
-		try {
-			localStorage.removeItem(DEFAULT_APP_PREF_KEY);
-		} catch (_err) {
-			/* noop */
-		}
-	} else if (pref.startsWith('later:')) {
+	if (pref === 'never' || pref === 'done') return;
+	if (pref.startsWith('later:')) {
 		const ts = Number(pref.slice(6));
 		if (Number.isFinite(ts) && Date.now() - ts < 3 * 24 * 60 * 60 * 1000) return;
 	}
 
+	window.__slateDefaultAppPrompted = true;
 	elements.defaultAppBackdrop.classList.remove('hidden');
 	elements.defaultAppModal.classList.remove('hidden');
 }
@@ -3665,7 +3662,7 @@ async function ensureEditBlocksForPage(pageNumber) {
 	if (!state.editBlocks.some((block) => block.page === state.page)) {
 		await scanEditableBlocks();
 		if (!state.editBlocks.some((block) => block.page === state.page)) {
-			await runOcrForCurrentPage(false);
+			await runOcrForCurrentPage(false, { silent: true });
 		}
 	}
 }
@@ -3802,14 +3799,29 @@ function setupToolsResize() {
 
 function setupDefaultAppPrompt() {
 	elements.defaultAppYes?.addEventListener('click', async () => {
+		const fr = currentLocale() === 'fr';
 		try {
 			await invokeCommand('set_default_pdf_handler');
-			setDefaultAppPref('done');
-			setStatus(
-				currentLocale() === 'fr'
-					? 'Slate est maintenant ton lecteur PDF par défaut.'
-					: 'Slate is now your default PDF reader.'
-			);
+			let nowDefault = false;
+			try {
+				nowDefault = Boolean(await invokeCommand('is_default_pdf_handler'));
+			} catch (_err) {
+				nowDefault = false;
+			}
+			if (nowDefault) {
+				setDefaultAppPref('done');
+				setStatus(
+					fr
+						? 'Slate est maintenant ton lecteur PDF par défaut.'
+						: 'Slate is now your default PDF reader.'
+				);
+			} else {
+				setStatus(
+					fr
+						? 'Choisis Slate comme lecteur PDF dans les réglages qui viennent de s’ouvrir.'
+						: 'Choose Slate as your default PDF reader in the settings that just opened.'
+				);
+			}
 		} catch (error) {
 			console.error(error);
 			setStatus(error instanceof Error ? error.message : String(error), 'error');
@@ -6698,8 +6710,9 @@ function visibleBlockRatio(blocks, viewport) {
 	return visible.length / blocks.length;
 }
 
-async function runOcrForCurrentPage(openPanel = false) {
+async function runOcrForCurrentPage(openPanel = false, options = {}) {
 	if (!state.pdf) return;
+	const silent = Boolean(options.silent);
 
 	try {
 		const data = getActivePageData();
@@ -6751,7 +6764,9 @@ async function runOcrForCurrentPage(openPanel = false) {
 		return blocks.length;
 	} catch (error) {
 		console.error(error);
-		setStatus(error instanceof Error ? error.message : 'Local OCR failed.', 'error');
+		if (!silent) {
+			setStatus(error instanceof Error ? error.message : 'Local OCR failed.', 'error');
+		}
 		return 0;
 	}
 }
@@ -14186,7 +14201,7 @@ async function autoDetectEditableContent() {
 	if (detected) return;
 	const text = await extractPageText(state.page);
 	if (!text) {
-		await runOcrForCurrentPage(false);
+		await runOcrForCurrentPage(false, { silent: true });
 	}
 }
 

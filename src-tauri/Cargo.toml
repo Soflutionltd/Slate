@@ -1,6 +1,6 @@
 [package]
 name = "sofdocs-desktop"
-version = "0.3.123"
+version = "0.3.124"
 edition = "2021"
 description = "Alto desktop application — native file access and offline editing"
 license = "AGPL-3.0-or-later"
@@ -64,6 +64,16 @@ openssl = { version = "0.10", features = ["vendored"] }
 # On force la compilation vendored (le runner Windows a Perl + NASM).
 [target.'cfg(windows)'.dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
+windows = { version = "0.58", features = [
+	"Foundation",
+	"Foundation_Collections",
+	"Globalization",
+	"Graphics_Imaging",
+	"Media_Ocr",
+	"Storage",
+	"Storage_Streams",
+	"Win32_System_WinRT",
+] }
 
 [features]
 default = ["custom-protocol"]

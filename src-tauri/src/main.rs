@@ -1308,9 +1308,48 @@ async fn read_pdf_path(path: String) -> Result<tauri::ipc::Response, String> {
         .map_err(|e| e.to_string())
 }
 
+fn handler_id_is_slate(id: &str) -> bool {
+    let id = id.trim().to_ascii_lowercase();
+    if id.is_empty() {
+        return false;
+    }
+    if id.contains("soflution.slate") {
+        return true;
+    }
+    let file_name = id.rsplit(['\\', '/']).next().unwrap_or(&id);
+    let stem = file_name
+        .strip_suffix(".desktop")
+        .or_else(|| file_name.strip_suffix(".exe"))
+        .unwrap_or(file_name);
+    stem == "slate" || stem == "com.soflution.slate"
+}
+
 #[cfg(target_os = "macos")]
-#[tauri::command]
-fn set_default_pdf_handler() -> Result<(), String> {
+fn macos_role_handler(uti: &str, role: u32) -> Option<String> {
+    use core_foundation::base::TCFType;
+    use core_foundation::string::{CFString, CFStringRef};
+
+    #[link(name = "CoreServices", kind = "framework")]
+    extern "C" {
+        fn LSCopyDefaultRoleHandlerForContentType(
+            in_content_type: CFStringRef,
+            in_role: u32,
+        ) -> CFStringRef;
+    }
+
+    let content_type = CFString::new(uti);
+    let handler_ref = unsafe {
+        LSCopyDefaultRoleHandlerForContentType(content_type.as_concrete_TypeRef(), role)
+    };
+    if handler_ref.is_null() {
+        return None;
+    }
+    let handler = unsafe { CFString::wrap_under_create_rule(handler_ref) };
+    Some(handler.to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn macos_set_role_handler(uti: &str, role: u32) -> i32 {
     use core_foundation::base::TCFType;
     use core_foundation::string::{CFString, CFStringRef};
 
@@ -1323,68 +1362,193 @@ fn set_default_pdf_handler() -> Result<(), String> {
         ) -> i32;
     }
 
-    const K_LS_ROLES_ALL: u32 = 0xFFFF_FFFF;
-    let content_type = CFString::new("com.adobe.pdf");
+    let content_type = CFString::new(uti);
     let bundle_id = CFString::new("com.soflution.slate");
-
-    let status = unsafe {
+    unsafe {
         LSSetDefaultRoleHandlerForContentType(
             content_type.as_concrete_TypeRef(),
-            K_LS_ROLES_ALL,
+            role,
             bundle_id.as_concrete_TypeRef(),
         )
-    };
-
-    if status == 0 {
-        Ok(())
-    } else {
-        Err(format!(
-            "Impossible de définir Slate par défaut (code {status})."
-        ))
     }
-}
-
-#[cfg(not(target_os = "macos"))]
-#[tauri::command]
-fn set_default_pdf_handler() -> Result<(), String> {
-    Err("Disponible uniquement sur macOS pour le moment.".to_string())
 }
 
 #[cfg(target_os = "macos")]
-#[tauri::command]
-fn is_default_pdf_handler() -> bool {
-    use core_foundation::base::TCFType;
-    use core_foundation::string::{CFString, CFStringRef};
-
-    #[link(name = "CoreServices", kind = "framework")]
-    extern "C" {
-        fn LSCopyDefaultRoleHandlerForContentType(
-            in_content_type: CFStringRef,
-            in_role: u32,
-        ) -> CFStringRef;
-    }
-
-    const K_LS_ROLES_ALL: u32 = 0xFFFF_FFFF;
-    let content_type = CFString::new("com.adobe.pdf");
-
-    let handler_ref = unsafe {
-        LSCopyDefaultRoleHandlerForContentType(content_type.as_concrete_TypeRef(), K_LS_ROLES_ALL)
-    };
-
-    if handler_ref.is_null() {
-        return false;
-    }
-
-    let handler = unsafe { CFString::wrap_under_create_rule(handler_ref) };
-    handler
-        .to_string()
-        .eq_ignore_ascii_case("com.soflution.slate")
+fn open_default_app_settings() {
+    let _ = std::process::Command::new("open")
+        .arg("x-apple.systempreferences:com.apple.Default-Apps-Settings")
+        .spawn();
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+fn open_default_app_settings() {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let _ = std::process::Command::new("cmd")
+        .args(["/C", "start", "", "ms-settings:defaultapps"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn();
+}
+
+#[cfg(target_os = "linux")]
+fn open_default_app_settings() {
+    for command in ["xdg-open", "gnome-control-center"] {
+        if std::process::Command::new(command)
+            .arg("default-apps")
+            .spawn()
+            .is_ok()
+        {
+            return;
+        }
+    }
+}
+
+#[tauri::command]
+fn set_default_pdf_handler() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        const K_LS_ROLES_VIEWER: u32 = 0x0000_0002;
+        const K_LS_ROLES_EDITOR: u32 = 0x0000_0004;
+        const K_LS_ROLES_ALL: u32 = 0xFFFF_FFFF;
+        for uti in ["com.adobe.pdf", "org.iso.pdf"] {
+            for role in [K_LS_ROLES_VIEWER, K_LS_ROLES_EDITOR, K_LS_ROLES_ALL] {
+                let _ = macos_set_role_handler(uti, role);
+            }
+        }
+        if is_default_pdf_handler() {
+            return Ok(());
+        }
+        open_default_app_settings();
+        Ok(())
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if is_default_pdf_handler() {
+            return Ok(());
+        }
+        open_default_app_settings();
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let desktop_names = [
+            "com.soflution.slate.desktop",
+            "slate.desktop",
+            "Slate.desktop",
+        ];
+        let mut set_ok = false;
+        for desktop in desktop_names {
+            if std::process::Command::new("xdg-mime")
+                .args(["default", desktop, "application/pdf"])
+                .status()
+                .map(|status| status.success())
+                .unwrap_or(false)
+            {
+                set_ok = true;
+                break;
+            }
+        }
+        if set_ok && is_default_pdf_handler() {
+            return Ok(());
+        }
+        open_default_app_settings();
+        Ok(())
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        Err("Impossible de définir le lecteur PDF par défaut sur cette plateforme.".to_string())
+    }
+}
+
 #[tauri::command]
 fn is_default_pdf_handler() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        const K_LS_ROLES_VIEWER: u32 = 0x0000_0002;
+        const K_LS_ROLES_EDITOR: u32 = 0x0000_0004;
+        const K_LS_ROLES_ALL: u32 = 0xFFFF_FFFF;
+        for uti in ["com.adobe.pdf", "org.iso.pdf"] {
+            for role in [K_LS_ROLES_VIEWER, K_LS_ROLES_EDITOR, K_LS_ROLES_ALL] {
+                if macos_role_handler(uti, role).is_some_and(|id| handler_id_is_slate(&id)) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        windows_pdf_handler_is_slate()
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let output = std::process::Command::new("xdg-mime")
+            .args(["query", "default", "application/pdf"])
+            .output();
+        match output {
+            Ok(out) if out.status.success() => {
+                handler_id_is_slate(&String::from_utf8_lossy(&out.stdout))
+            }
+            _ => false,
+        }
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        false
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_pdf_handler_is_slate() -> bool {
+    const USER_CHOICE: &str =
+        r"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.pdf\UserChoice";
+    const CLASSES_PDF: &str = r"HKCU\Software\Classes\.pdf";
+    for key in [USER_CHOICE, CLASSES_PDF] {
+        if let Some(value) = windows_reg_query(key, "ProgId")
+            .or_else(|| windows_reg_query(key, "(Default)"))
+        {
+            if handler_id_is_slate(&value) {
+                return true;
+            }
+        }
+    }
     false
+}
+
+#[cfg(target_os = "windows")]
+fn windows_reg_query(key: &str, value_name: &str) -> Option<String> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let output = std::process::Command::new("reg")
+        .args(["query", key, "/v", value_name])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    for line in text.lines() {
+        let line = line.trim();
+        if let Some(pos) = line.find("REG_SZ").or_else(|| line.find("REG_EXPAND_SZ")) {
+            let start = if line[pos..].starts_with("REG_EXPAND_SZ") {
+                pos + "REG_EXPAND_SZ".len()
+            } else {
+                pos + "REG_SZ".len()
+            };
+            let value = line[start..].trim().trim_matches('"');
+            if !value.is_empty() {
+                return Some(value.to_string());
+            }
+        }
+    }
+    None
 }
 
 /// Langue pour les libellés de dialogues fichier (filtres). Sur macOS, suit

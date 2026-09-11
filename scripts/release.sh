@@ -161,14 +161,42 @@ python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$MANIFEST" || {
   exit 1
 }
 
+# Conserver windows-x86_64 / linux-x86_64 déjà publiés sur cette tag
+# (CI les ajoute après le build Mac).
+if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+  MERGE_DIR="$(mktemp -d)"
+  if gh release download "$TAG" --repo "$REPO" --pattern latest.json --dir "$MERGE_DIR" >/dev/null 2>&1 \
+    && [[ -f "$MERGE_DIR/latest.json" ]]; then
+    python3 - "$MANIFEST" "$MERGE_DIR/latest.json" <<'PY'
+import json, sys
+from pathlib import Path
+ours = json.loads(Path(sys.argv[1]).read_text())
+try:
+    theirs = json.loads(Path(sys.argv[2]).read_text())
+except Exception:
+    theirs = {}
+platforms = {}
+if isinstance(theirs.get("platforms"), dict):
+    platforms.update(theirs["platforms"])
+if isinstance(ours.get("platforms"), dict):
+    platforms.update(ours["platforms"])
+ours["platforms"] = platforms
+Path(sys.argv[1]).write_text(json.dumps(ours, indent=2) + "\n")
+PY
+  fi
+  rm -rf "$MERGE_DIR"
+fi
+
 # ── Publication GitHub ───────────────────────────────────────────────────
 echo "▶ Publication de la release ${TAG}…"
 if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
   gh release upload "$TAG" "$TAR_FILE" "$SIG_FILE" "$MANIFEST" ${DMG_FILE:+"$DMG_FILE"} \
     --repo "$REPO" --clobber
 else
+  TARGET_SHA="$(gh api "repos/${REPO}/commits/main" --jq .sha)"
   gh release create "$TAG" "$TAR_FILE" "$SIG_FILE" "$MANIFEST" ${DMG_FILE:+"$DMG_FILE"} \
-    --repo "$REPO" --title "Slate ${VERSION}" --notes "$RELEASE_NOTES" --latest
+    --repo "$REPO" --title "Slate ${VERSION}" --notes "$RELEASE_NOTES" --latest \
+    --target "$TARGET_SHA"
 fi
 
 # GitHub peut laisser /releases/latest/download/latest.json pointer sur

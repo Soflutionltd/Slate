@@ -48,6 +48,14 @@ pub fn recognize_png(
         }
     }
 
+    #[cfg(target_os = "windows")]
+    match recognize_with_windows_ocr(image_bytes, language.clone()) {
+        Ok(blocks) => return Ok(blocks),
+        Err(error) => {
+            tracing::warn!("Windows OCR unavailable, falling back to Tesseract: {error}");
+        }
+    }
+
     recognize_with_tesseract(image_bytes, language)
 }
 
@@ -614,6 +622,181 @@ fn rotate_luma_same(image: &GrayImage, angle_degrees: f64) -> GrayImage {
     })
 }
 
+fn tesseract_missing_message() -> String {
+    #[cfg(target_os = "macos")]
+    {
+        return "L’OCR local nécessite Tesseract. Installe-le avec `brew install tesseract tesseract-lang` puis réessaie.".to_string();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        return "OCR Windows indisponible. Installe le pack de langue OCR (Paramètres → Heure et langue → Langue et région) ou Tesseract, puis réessaie.".to_string();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        return "L’OCR local nécessite Tesseract. Installe-le avec `sudo apt install tesseract-ocr tesseract-ocr-fra` puis réessaie.".to_string();
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        "Tesseract is required for OCR on this platform.".to_string()
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn recognize_with_windows_ocr(
+    image_bytes: &[u8],
+    language: Option<String>,
+) -> Result<Vec<OcrBlock>, String> {
+    let prefix = unique_prefix("slate-win-ocr");
+    let image_path = prefix.with_extension("png");
+    fs::write(&image_path, image_bytes)
+        .map_err(|e| format!("Unable to prepare Windows OCR image: {e}"))?;
+    let result = recognize_windows_ocr_file(&image_path, language.as_deref());
+    let _ = fs::remove_file(&image_path);
+    result
+}
+
+#[cfg(target_os = "windows")]
+fn recognize_windows_ocr_file(
+    image_path: &std::path::Path,
+    language: Option<&str>,
+) -> Result<Vec<OcrBlock>, String> {
+    use windows::core::HSTRING;
+    use windows::Graphics::Imaging::{BitmapDecoder, BitmapPixelFormat, SoftwareBitmap};
+    use windows::Media::Ocr::OcrEngine;
+    use windows::Storage::{FileAccessMode, StorageFile};
+    use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
+
+    unsafe {
+        let _ = RoInitialize(RO_INIT_MULTITHREADED);
+    }
+
+    let path = image_path
+        .canonicalize()
+        .unwrap_or_else(|_| image_path.to_path_buf())
+        .to_string_lossy()
+        .replacen(r"\\?\", "", 1);
+    let file = StorageFile::GetFileFromPathAsync(&HSTRING::from(path))
+        .map_err(|e| format!("Windows OCR open: {e}"))?
+        .get()
+        .map_err(|e| format!("Windows OCR open: {e}"))?;
+    let stream = file
+        .OpenAsync(FileAccessMode::Read)
+        .map_err(|e| format!("Windows OCR stream: {e}"))?
+        .get()
+        .map_err(|e| format!("Windows OCR stream: {e}"))?;
+    let decoder = BitmapDecoder::CreateAsync(&stream)
+        .map_err(|e| format!("Windows OCR decode: {e}"))?
+        .get()
+        .map_err(|e| format!("Windows OCR decode: {e}"))?;
+    let bitmap = decoder
+        .GetSoftwareBitmapAsync()
+        .map_err(|e| format!("Windows OCR bitmap: {e}"))?
+        .get()
+        .map_err(|e| format!("Windows OCR bitmap: {e}"))?;
+    let bitmap = SoftwareBitmap::Convert(&bitmap, BitmapPixelFormat::Bgra8).unwrap_or(bitmap);
+
+    let engine = windows_ocr_engine(language)?;
+    let result = engine
+        .RecognizeAsync(&bitmap)
+        .map_err(|e| format!("Windows OCR run: {e}"))?
+        .get()
+        .map_err(|e| format!("Windows OCR run: {e}"))?;
+    let lines = result
+        .Lines()
+        .map_err(|e| format!("Windows OCR lines: {e}"))?;
+    let count = lines.Size().map_err(|e| format!("Windows OCR lines: {e}"))?;
+    let mut blocks = Vec::new();
+    for index in 0..count {
+        let line = lines
+            .GetAt(index)
+            .map_err(|e| format!("Windows OCR line: {e}"))?;
+        let text = line
+            .Text()
+            .map_err(|e| format!("Windows OCR text: {e}"))?
+            .to_string();
+        if text.trim().is_empty() {
+            continue;
+        }
+        let words = line
+            .Words()
+            .map_err(|e| format!("Windows OCR words: {e}"))?;
+        let word_count = words.Size().unwrap_or(0);
+        let mut x0 = f64::MAX;
+        let mut y0 = f64::MAX;
+        let mut x1 = f64::MIN;
+        let mut y1 = f64::MIN;
+        for word_index in 0..word_count {
+            let Ok(word) = words.GetAt(word_index) else {
+                continue;
+            };
+            let Ok(rect) = word.BoundingRect() else {
+                continue;
+            };
+            x0 = x0.min(f64::from(rect.X));
+            y0 = y0.min(f64::from(rect.Y));
+            x1 = x1.max(f64::from(rect.X + rect.Width));
+            y1 = y1.max(f64::from(rect.Y + rect.Height));
+        }
+        if !x0.is_finite() || !y0.is_finite() || x1 <= x0 || y1 <= y0 {
+            continue;
+        }
+        blocks.push(OcrBlock {
+            id: format!("winocr-{index}-{x0:.0}-{y0:.0}"),
+            text,
+            x: x0,
+            y: y0,
+            width: x1 - x0,
+            height: y1 - y0,
+            confidence: 90.0,
+        });
+    }
+    Ok(blocks)
+}
+
+#[cfg(target_os = "windows")]
+fn windows_ocr_engine(language: Option<&str>) -> Result<windows::Media::Ocr::OcrEngine, String> {
+    use windows::core::HSTRING;
+    use windows::Globalization::Language;
+    use windows::Media::Ocr::OcrEngine;
+
+    if let Ok(engine) = OcrEngine::TryCreateFromUserProfileLanguages() {
+        return Ok(engine);
+    }
+
+    let prefer_french = language
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .contains("fr");
+    let tags = if prefer_french {
+        ["fr-FR", "en-US", "en"]
+    } else {
+        ["en-US", "fr-FR", "en"]
+    };
+    for tag in tags {
+        let Ok(lang) = Language::CreateLanguage(&HSTRING::from(tag)) else {
+            continue;
+        };
+        if OcrEngine::IsLanguageSupported(&lang).unwrap_or(false) {
+            if let Ok(engine) = OcrEngine::TryCreateFromLanguage(&lang) {
+                return Ok(engine);
+            }
+        }
+    }
+
+    let langs = OcrEngine::AvailableRecognizerLanguages()
+        .map_err(|e| format!("Windows OCR languages: {e}"))?;
+    let size = langs.Size().unwrap_or(0);
+    for index in 0..size {
+        if let Ok(lang) = langs.GetAt(index) {
+            if let Ok(engine) = OcrEngine::TryCreateFromLanguage(&lang) {
+                return Ok(engine);
+            }
+        }
+    }
+
+    Err(tesseract_missing_message())
+}
+
 fn recognize_with_tesseract(
     image_bytes: &[u8],
     language: Option<String>,
@@ -625,9 +808,7 @@ fn recognize_with_tesseract(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|_| {
-            "Local OCR requires Tesseract to be installed on this Mac. Install it with `brew install tesseract tesseract-lang` and retry.".to_string()
-        })?;
+        .map_err(|_| tesseract_missing_message())?;
 
     let mut stdin = child
         .stdin
