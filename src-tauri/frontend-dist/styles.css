@@ -1971,6 +1971,65 @@ button:hover:not(:disabled),
 	opacity: 0.55;
 }
 
+.recent-context-menu {
+	position: fixed;
+	z-index: 1400;
+	display: flex;
+	flex-direction: column;
+	min-width: 220px;
+	padding: 6px;
+	border: 1px solid rgba(23, 23, 23, 0.08);
+	border-radius: 14px;
+	background: rgba(255, 255, 255, 0.97);
+	box-shadow:
+		0 1px 2px rgba(23, 23, 23, 0.05),
+		0 8px 24px rgba(23, 23, 23, 0.1),
+		0 20px 48px rgba(23, 23, 23, 0.08);
+	backdrop-filter: blur(24px) saturate(1.25);
+	-webkit-backdrop-filter: blur(24px) saturate(1.25);
+}
+
+.recent-context-menu[hidden] {
+	display: none;
+}
+
+.recent-context-menu-item {
+	display: block;
+	width: 100%;
+	padding: 9px 12px;
+	border: 0;
+	border-radius: 9px;
+	background: transparent;
+	color: var(--text);
+	font-size: 13px;
+	font-weight: 500;
+	text-align: left;
+	cursor: pointer;
+	transition: all 150ms ease-out;
+}
+
+.recent-context-menu-item:hover:not([disabled]),
+.recent-context-menu-item:focus-visible {
+	background: rgba(23, 23, 23, 0.06);
+	outline: none;
+}
+
+.recent-context-menu-item[disabled] {
+	opacity: 0.4;
+	cursor: default;
+}
+
+.recent-context-menu-item.is-danger:hover:not([disabled]) {
+	background: rgba(229, 72, 63, 0.1);
+	color: #c8352d;
+}
+
+.recent-context-menu-sep {
+	height: 1px;
+	margin: 5px 8px;
+	background: rgba(23, 23, 23, 0.08);
+}
+
 .recent-card.is-missing {
 	opacity: 0.5;
 }
@@ -6156,7 +6215,7 @@ input.setting-switch:checked::after {
 	left: 50%;
 	bottom: 28px;
 	z-index: 9999;
-	width: min(420px, calc(100vw - 32px));
+	width: min(460px, calc(100vw - 32px));
 	transform: translate(-50%, 24px);
 	opacity: 0;
 	display: flex;
@@ -6247,6 +6306,7 @@ input.setting-switch:checked::after {
 
 .slate-update-toast-actions {
 	display: flex;
+	flex-wrap: wrap;
 	justify-content: flex-end;
 	gap: 10px;
 }
@@ -6279,6 +6339,16 @@ input.setting-switch:checked::after {
 .slate-update-now:hover {
 	transform: scale(1.03);
 	box-shadow: 0 6px 18px rgba(210, 38, 28, 0.4);
+}
+
+.slate-update-always {
+	flex: 1 1 100%;
+	background: rgba(255, 255, 255, 0.08);
+	color: rgba(244, 244, 245, 0.92);
+}
+
+.slate-update-always:hover {
+	background: rgba(255, 255, 255, 0.14);
 }
 
 .slate-update-progress {

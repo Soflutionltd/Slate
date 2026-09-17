@@ -1976,6 +1976,53 @@ fn sanitize_autosave_component(value: &str, fallback: &str) -> String {
     safe
 }
 
+fn edit_history_path(app: &tauri::AppHandle, file_path: &str) -> Result<std::path::PathBuf, String> {
+    let trimmed = file_path.trim();
+    if trimmed.is_empty() {
+        return Err("missing_path".to_string());
+    }
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    trimmed.hash(&mut hasher);
+    let key = format!("{:016x}", hasher.finish());
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("edit-history");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join(format!("{key}.json")))
+}
+
+/// Historique d'édition (undo/redo) persisté hors localStorage — l'autosave
+/// écrase le PDF sans dialogue, il faut pouvoir revenir en arrière à la réouverture.
+#[tauri::command]
+fn write_edit_history(
+    app: tauri::AppHandle,
+    file_path: String,
+    payload: String,
+) -> Result<(), String> {
+    if payload.len() > 12 * 1024 * 1024 {
+        return Err("history_too_large".to_string());
+    }
+    let path = edit_history_path(&app, &file_path)?;
+    std::fs::write(&path, payload.as_bytes()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn read_edit_history(app: tauri::AppHandle, file_path: String) -> Result<Option<String>, String> {
+    let path = edit_history_path(&app, &file_path)?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let data = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    if data.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(data))
+}
+
 /// Copie de secours (document sans chemin, ou autosave décoché avant màj/fermeture).
 #[tauri::command]
 fn write_autosave(
@@ -2424,6 +2471,8 @@ fn main() {
             save_file,
             save_file_dialog,
             write_autosave,
+            write_edit_history,
+            read_edit_history,
             prepare_share_pdf,
             reveal_file_in_folder,
             take_pending_open_files,

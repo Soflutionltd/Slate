@@ -79,6 +79,7 @@ const defaultSettings = {
 	showPageNotes: true,
 	showAlignmentGuides: true,
 	autoSave: true,
+	autoUpdate: false,
 	highlightColor: '#f5c542',
 	identityName: '',
 	identityEmail: ''
@@ -254,6 +255,7 @@ const elements = {
 	settingDefaultZoom: document.getElementById('setting-default-zoom'),
 	settingPageLayout: document.getElementById('setting-page-layout'),
 	settingAutoSave: document.getElementById('setting-auto-save'),
+	settingAutoUpdate: document.getElementById('setting-auto-update'),
 	settingIdentityName: document.getElementById('setting-identity-name'),
 	settingIdentityEmail: document.getElementById('setting-identity-email'),
 	settingAiProvider: document.getElementById('setting-ai-provider'),
@@ -585,6 +587,8 @@ const translations = {
 		pageLayoutDesc: 'Continuous scrolling or one page at a time.',
 		autoSaveSetting: 'Default for new documents',
 		autoSaveDesc: 'Used when a file has no saved preference yet.',
+		autoUpdateSetting: 'Automatic updates',
+		autoUpdateDesc: 'Download and install new versions without asking, then restart Slate.',
 		autoSaveToolbar: 'Auto-save',
 		autoSaved: 'Saved automatically.',
 		pageLayoutContinuous: 'Continuous',
@@ -921,6 +925,8 @@ const translations = {
 		pageLayoutDesc: 'Défilement continu ou page par page.',
 		autoSaveSetting: 'Par défaut pour les nouveaux documents',
 		autoSaveDesc: 'Appliqué à l’ouverture d’un fichier qui n’a pas encore de préférence.',
+		autoUpdateSetting: 'Mises à jour automatiques',
+		autoUpdateDesc: 'Télécharge et installe les nouvelles versions sans demander, puis redémarre Slate.',
 		autoSaveToolbar: 'Enreg. auto',
 		autoSaved: 'Enregistré automatiquement.',
 		pageLayoutContinuous: 'Continu',
@@ -1332,6 +1338,7 @@ function localizeUi() {
 	setText('#settings-title', 'settings');
 	const settingTitles = [
 		['autoSaveSetting', 'autoSaveDesc'],
+		['autoUpdateSetting', 'autoUpdateDesc'],
 		['defaultZoom', 'defaultZoomDesc'],
 		['language', 'languageDesc'],
 		['pageLayoutSetting', 'pageLayoutDesc'],
@@ -1736,6 +1743,175 @@ function loadOpenSession() {
 	}
 }
 
+const HISTORY_DISK_MAX_ENTRIES = 80;
+const HISTORY_DISK_MAX_BYTES = 8 * 1024 * 1024;
+const HISTORY_DISK_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+let _historyPersistTimer = null;
+let _historyPersistInFlight = false;
+
+function historyPersistPath(tab = currentTab()) {
+	return (tab && (tab.filePath || tab.recoveryPath)) || '';
+}
+
+function compactHistorySnap(snap) {
+	if (!snap) return null;
+	return {
+		page: snap.page,
+		signaturePlacements: (snap.signaturePlacements || []).map((placement) => ({ ...placement })),
+		editBlocks: (snap.editBlocks || []).map((block) => {
+			const compact = stripTransientBlockFields(block);
+			delete compact.pdfChars;
+			delete compact.snapshotDataUrl;
+			delete compact.inkSnapshotDataUrl;
+			return compact;
+		})
+	};
+}
+
+function compactHistoryStack(stack) {
+	if (!Array.isArray(stack) || !stack.length) return [];
+	const start = Math.max(0, stack.length - HISTORY_DISK_MAX_ENTRIES);
+	return stack.slice(start).map((entry) => ({
+		label: entry.label || 'histEdit',
+		time: entry.time || Date.now(),
+		snap: compactHistorySnap(entry.snap)
+	}));
+}
+
+function serializeTouchedBlocks(tab) {
+	const map = tab?.nativeTouchedBlocks;
+	if (!(map instanceof Map) || !map.size) return {};
+	const out = {};
+	for (const [id, value] of map) {
+		const record = nativeTouchedRecord(value);
+		if (record) out[id] = record;
+	}
+	return out;
+}
+
+function buildPersistedHistoryPayload(tab) {
+	const undoStack = compactHistoryStack(tab.undoStack);
+	const redoStack = compactHistoryStack(tab.redoStack);
+	if (!undoStack.length && !redoStack.length) return null;
+	let payload = {
+		v: 1,
+		filePath: tab.filePath || null,
+		fingerprint: tab.fingerprint || null,
+		savedAt: Date.now(),
+		historyEvicted: Boolean(tab._historyEvicted),
+		undoStack,
+		redoStack,
+		touchedPages: [...(tab.nativeTouchedPages instanceof Set ? tab.nativeTouchedPages : [])],
+		touchedBlocks: serializeTouchedBlocks(tab),
+		whitespaceTouched: [
+			...(tab.nativeWhitespaceTouchedBlocks instanceof Set ? tab.nativeWhitespaceTouchedBlocks : [])
+		]
+	};
+	let encoded = JSON.stringify(payload);
+	while (encoded.length > HISTORY_DISK_MAX_BYTES && payload.undoStack.length > 1) {
+		payload.undoStack = payload.undoStack.slice(Math.ceil(payload.undoStack.length / 4));
+		payload.historyEvicted = true;
+		encoded = JSON.stringify(payload);
+	}
+	if (encoded.length > HISTORY_DISK_MAX_BYTES) return null;
+	return encoded;
+}
+
+function schedulePersistedEditHistory() {
+	if (_restoringSession || !window.__TAURI__) return;
+	if (!historyPersistPath()) return;
+	if (_historyPersistTimer) clearTimeout(_historyPersistTimer);
+	_historyPersistTimer = setTimeout(() => void flushPersistedEditHistory(), 500);
+}
+
+async function flushPersistedEditHistory(tab = currentTab()) {
+	if (_historyPersistTimer) {
+		clearTimeout(_historyPersistTimer);
+		_historyPersistTimer = null;
+	}
+	if (_restoringSession || !window.__TAURI__ || _historyPersistInFlight) return;
+	const target = tab || currentTab();
+	const path = historyPersistPath(target);
+	if (!target || !path) return;
+	const payload =
+		buildPersistedHistoryPayload(target) ||
+		JSON.stringify({
+			v: 1,
+			filePath: target.filePath || null,
+			fingerprint: target.fingerprint || null,
+			savedAt: Date.now(),
+			undoStack: [],
+			redoStack: []
+		});
+	_historyPersistInFlight = true;
+	try {
+		await invokeCommand('write_edit_history', { filePath: path, payload });
+	} catch (error) {
+		console.warn('Edit history persist failed', error);
+	} finally {
+		_historyPersistInFlight = false;
+	}
+}
+
+function hydrateHistoryStack(stack) {
+	if (!Array.isArray(stack)) return [];
+	return stack
+		.filter((entry) => entry && entry.snap && Array.isArray(entry.snap.editBlocks))
+		.map((entry) => ({
+			label: entry.label || 'histEdit',
+			time: Number(entry.time) || Date.now(),
+			snap: {
+				page: entry.snap.page,
+				signaturePlacements: Array.isArray(entry.snap.signaturePlacements)
+					? entry.snap.signaturePlacements.map((placement) => ({ ...placement }))
+					: [],
+				editBlocks: entry.snap.editBlocks.map((block) => stripTransientBlockFields(block))
+			},
+			bytes: approxSnapshotBytes(entry.snap)
+		}));
+}
+
+async function restorePersistedEditHistory(tab) {
+	if (!window.__TAURI__ || !tab) return;
+	const path = historyPersistPath(tab);
+	if (!path) return;
+	if ((tab.undoStack && tab.undoStack.length) || (tab.redoStack && tab.redoStack.length)) return;
+	let raw = null;
+	try {
+		raw = await invokeCommand('read_edit_history', { filePath: path });
+	} catch (error) {
+		console.warn('Edit history read failed', error);
+		return;
+	}
+	if (!raw || typeof raw !== 'string') return;
+	let parsed = null;
+	try {
+		parsed = JSON.parse(raw);
+	} catch {
+		return;
+	}
+	if (!parsed || parsed.v !== 1) return;
+	if (parsed.savedAt && Date.now() - Number(parsed.savedAt) > HISTORY_DISK_TTL_MS) return;
+	tab.undoStack = hydrateHistoryStack(parsed.undoStack);
+	tab.redoStack = hydrateHistoryStack(parsed.redoStack);
+	tab._historyEvicted = Boolean(parsed.historyEvicted);
+	tab.nativeTouchedPages = new Set(
+		(Array.isArray(parsed.touchedPages) ? parsed.touchedPages : []).map((page) => Number(page)).filter((page) => page > 0)
+	);
+	tab.nativeTouchedBlocks = new Map(
+		Object.entries(parsed.touchedBlocks && typeof parsed.touchedBlocks === 'object' ? parsed.touchedBlocks : {})
+			.map(([id, value]) => [id, nativeTouchedRecord(value)])
+			.filter(([, value]) => value)
+	);
+	tab.nativeWhitespaceTouchedBlocks = new Set(
+		Array.isArray(parsed.whitespaceTouched) ? parsed.whitespaceTouched : []
+	);
+	if (tab.id === state.activeTabId) {
+		updateUndoRedoButtons();
+		refreshHistoryPanelIfVisible();
+	}
+}
+
 function scheduleAutosave() {
 	persistOpenSession();
 	if (_restoringSession || !window.__TAURI__) return;
@@ -1810,6 +1986,9 @@ async function flushAutosave({ reason = 'idle', allTabs = false } = {}) {
 		}
 		persistOpenSession();
 		if (wroteFile) renderTabs();
+		for (const tab of tabs) {
+			if (historyPersistPath(tab)) await flushPersistedEditHistory(tab);
+		}
 	} catch (error) {
 		console.warn('Autosave failed', error);
 	} finally {
@@ -1981,6 +2160,7 @@ async function openPdfFromBytes(bytes, fileName, options = {}) {
 		}
 		setTimeout(maybePromptDefaultApp, 600);
 		persistOpenSession();
+		if (tab.filePath || tab.recoveryPath) await restorePersistedEditHistory(tab);
 	} catch (error) {
 		console.error(error);
 		setStatus(error instanceof Error ? error.message : 'Failed to open PDF.', 'error');
@@ -3225,6 +3405,7 @@ function commitSnapshot(snap, label) {
 	tab.redoStack = [];
 	updateUndoRedoButtons();
 	refreshHistoryPanelIfVisible();
+	schedulePersistedEditHistory();
 }
 
 function pushHistory(label) {
@@ -3241,6 +3422,7 @@ function applyEditableSnapshot(snap) {
 	// Strip défensif : un snapshot ne doit jamais réinjecter d'origines de
 	// montage/drag périmées (cf. stripTransientBlockFields).
 	state.editBlocks = snap.editBlocks.map((b) => stripTransientBlockFields(b));
+	state.editingBlockId = null;
 	state.selectedBlockId = null;
 	state.selectedBlockIds = [];
 	state.selectedSignatureId = null;
@@ -3285,6 +3467,7 @@ async function historyJumpBack(steps) {
 	await applyEditableSnapshot(current);
 	updateUndoRedoButtons();
 	refreshHistoryPanelIfVisible();
+	schedulePersistedEditHistory();
 }
 
 async function historyJumpForward(steps) {
@@ -3306,6 +3489,7 @@ async function historyJumpForward(steps) {
 	await applyEditableSnapshot(current);
 	updateUndoRedoButtons();
 	refreshHistoryPanelIfVisible();
+	schedulePersistedEditHistory();
 }
 
 function undoEdit() {
@@ -4882,56 +5066,220 @@ function isDateWidget(widget) {
 	return /^date([_-]|$)/i.test(widget.fieldName || '');
 }
 
+// ── Formats de date Acrobat (AFDate_FormatEx) ────────────────────────────
+// Jetons SENSIBLES À LA CASSE : d/dd (jour), m/mm (mois numérique), mmm/mmmm
+// (mois en lettres), yy/yyyy (année) ; H/HH/h/M/MM/tt sont l'heure — jamais le
+// mois. Les anciennes fonctions ne connaissaient que dd/mm/yyyy : un champ en
+// « d/m/yy » (très courant dans les PDF français faits sous Acrobat) donnait
+// « d/m/26 » au clic dans le calendrier, masqué ensuite en « 26/ ».
+const DATE_FORMAT_TOKEN_RE = /yyyy|yy|mmmm|mmm|mm|m|dd|d|HH|H|hh|h|MM|tt|t/g;
+const DATE_TIME_TOKENS = new Set(['HH', 'H', 'hh', 'h', 'MM', 'tt', 't']);
+// Affichage / stockage : toujours jj/mm/aaaa (05/07/2026). Le format Acrobat
+// du PDF (souvent d/m/yy) ne sert plus qu'à lire une valeur déjà saisie.
+const DATE_DISPLAY_FORMAT = 'dd/mm/yyyy';
+
+function parseFlexibleDateToIso(value, acrobatFormat) {
+	return (
+		dateToIso(value, DATE_DISPLAY_FORMAT) ||
+		dateToIso(value, acrobatFormat) ||
+		''
+	);
+}
+
+function normalizeDateFormat(format) {
+	const raw = String(format || '').trim();
+	return raw || 'dd/mm/yyyy';
+}
+
+function dateFormatTokens(format) {
+	const pattern = normalizeDateFormat(format);
+	const tokens = [];
+	let last = 0;
+	for (const match of pattern.matchAll(DATE_FORMAT_TOKEN_RE)) {
+		if (match.index > last) tokens.push({ literal: pattern.slice(last, match.index) });
+		tokens.push({ token: match[0] });
+		last = match.index + match[0].length;
+	}
+	if (last < pattern.length) tokens.push({ literal: pattern.slice(last) });
+	return tokens;
+}
+
+function dateMonthNames(kind) {
+	const names = [];
+	for (const locale of ['fr-FR', 'en-US']) {
+		const formatter = new Intl.DateTimeFormat(locale, { month: kind });
+		for (let month = 0; month < 12; month += 1) {
+			names.push({ month: month + 1, name: formatter.format(new Date(2024, month, 1)) });
+		}
+	}
+	return names;
+}
+
+function foldDateText(value) {
+	return String(value || '')
+		.normalize('NFD')
+		.replace(/[\u0300-\u036f]/g, '')
+		.replace(/\./g, '')
+		.toLowerCase();
+}
+
+function monthFromName(value) {
+	const needle = foldDateText(value);
+	if (!needle) return null;
+	for (const kind of ['long', 'short']) {
+		for (const entry of dateMonthNames(kind)) {
+			const name = foldDateText(entry.name);
+			if (name === needle || name.startsWith(needle) || needle.startsWith(name)) return entry.month;
+		}
+	}
+	return null;
+}
+
+function expandTwoDigitYear(year) {
+	const value = Number(year);
+	return value >= 50 ? 1900 + value : 2000 + value;
+}
+
+function buildIsoDate(year, month, day) {
+	if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return '';
+	if (month < 1 || month > 12 || day < 1 || day > 31) return '';
+	const probe = new Date(year, month - 1, day);
+	if (probe.getMonth() !== month - 1 || probe.getDate() !== day) return '';
+	return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+// Analyse stricte pilotée par le format (jetons dans l'ordre, séparateurs
+// souples), puis repli numérique : ordre jour/mois/année déduit du format.
 function dateToIso(value, format) {
 	const raw = String(value || '').trim();
 	if (!raw) return '';
 	if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-	const nums = raw.match(/\d{1,4}/g);
-	if (!nums || nums.length < 3) return '';
-	const pattern = String(format || 'dd/mm/yyyy').toLowerCase();
-	let day;
-	let month;
-	let year;
-	if (pattern.startsWith('yyyy')) {
-		[year, month, day] = nums;
-	} else if (pattern.startsWith('mm')) {
-		[month, day, year] = nums;
-	} else {
-		[day, month, year] = nums;
+	const tokens = dateFormatTokens(format);
+	const dateTokens = tokens.filter((entry) => entry.token && !DATE_TIME_TOKENS.has(entry.token));
+
+	let source = '';
+	const groups = [];
+	for (const entry of tokens) {
+		if (entry.literal) {
+			source += '[^\\p{L}\\d]*';
+			continue;
+		}
+		if (DATE_TIME_TOKENS.has(entry.token)) {
+			source += entry.token === 'tt' || entry.token === 't' ? '(?:[AaPp][Mm]?)?' : '\\d{0,2}';
+			continue;
+		}
+		if (entry.token === 'yyyy') source += '(\\d{4})';
+		else if (entry.token === 'yy') source += '(\\d{2}|\\d{4})';
+		else if (entry.token === 'mmm' || entry.token === 'mmmm') source += '([\\p{L}.]+)';
+		else source += '(\\d{1,2})';
+		groups.push(entry.token);
 	}
-	if (String(year).length === 2) year = Number(year) >= 50 ? `19${year}` : `20${year}`;
-	const yyyy = String(year).padStart(4, '0');
-	const mm = String(month).padStart(2, '0');
-	const dd = String(day).padStart(2, '0');
-	if (Number(mm) < 1 || Number(mm) > 12 || Number(dd) < 1 || Number(dd) > 31) return '';
-	return `${yyyy}-${mm}-${dd}`;
+	let matched = null;
+	try {
+		matched = raw.match(new RegExp(`^\\s*${source}\\s*$`, 'u'));
+	} catch (_err) {
+		matched = null;
+	}
+	if (matched) {
+		let day = null;
+		let month = null;
+		let year = null;
+		groups.forEach((token, index) => {
+			const part = matched[index + 1];
+			if (token === 'yyyy') year = Number(part);
+			else if (token === 'yy') year = part.length === 4 ? Number(part) : expandTwoDigitYear(part);
+			else if (token === 'mmm' || token === 'mmmm') month = monthFromName(part);
+			else if (token === 'mm' || token === 'm') month = Number(part);
+			else day = Number(part);
+		});
+		const iso = buildIsoDate(year, month, day);
+		if (iso) return iso;
+	}
+
+	const nameMonth = monthFromName((raw.match(/\p{L}{3,}/u) || [])[0]);
+	const nums = raw.match(/\d{1,4}/g) || [];
+	const order = dateTokens.map((entry) =>
+		entry.token.startsWith('y') ? 'y' : entry.token.startsWith('m') ? 'm' : 'd'
+	);
+	let day = null;
+	let month = nameMonth;
+	let year = null;
+	let cursor = 0;
+	for (const kind of order) {
+		if (kind === 'm' && nameMonth) continue;
+		if (cursor >= nums.length) break;
+		const part = nums[cursor];
+		cursor += 1;
+		if (kind === 'y') year = part.length <= 2 ? expandTwoDigitYear(part) : Number(part);
+		else if (kind === 'm') month = Number(part);
+		else day = Number(part);
+	}
+	if (year == null && cursor < nums.length) {
+		const part = nums[cursor];
+		year = part.length <= 2 ? expandTwoDigitYear(part) : Number(part);
+	}
+	return buildIsoDate(year, month, day);
 }
 
 function dateDigits(raw) {
 	return String(raw || '').replace(/\D/g, '').slice(0, 8);
 }
 
-function maskDateInput(raw) {
-	const digits = dateDigits(raw);
+// Masque de saisie piloté par le format : chiffres regroupés par jeton
+// (jj, mm, aaaa…) avec les séparateurs du format. Les formats à mois en
+// lettres ne sont pas masqués (saisie libre, analyse au commit).
+function dateMaskGroups(format) {
+	const tokens = dateFormatTokens(format);
+	if (tokens.some((entry) => entry.token === 'mmm' || entry.token === 'mmmm')) return null;
+	const groups = [];
+	let pendingLiteral = '';
+	for (const entry of tokens) {
+		if (entry.literal) {
+			if (groups.length) groups[groups.length - 1].after += entry.literal;
+			else pendingLiteral += entry.literal;
+			continue;
+		}
+		if (DATE_TIME_TOKENS.has(entry.token)) break;
+		const size = entry.token === 'yyyy' ? 4 : 2;
+		groups.push({ size, after: '', before: pendingLiteral });
+		pendingLiteral = '';
+	}
+	return groups.length ? groups : null;
+}
+
+function maskDateInput(raw, format) {
+	const groups = dateMaskGroups(format);
+	if (!groups) return String(raw || '');
+	const capacity = groups.reduce((sum, group) => sum + group.size, 0);
+	const digits = String(raw || '').replace(/\D/g, '').slice(0, capacity);
 	if (!digits.length) return '';
-	const day = digits.slice(0, 2);
-	const month = digits.slice(2, 4);
-	const year = digits.slice(4, 8);
-	let out = day;
-	if (digits.length >= 2) out += '/';
-	if (digits.length > 2) out += month;
-	if (digits.length >= 4) out += '/';
-	if (digits.length > 4) out += year;
+	let out = '';
+	let cursor = 0;
+	for (const group of groups) {
+		if (cursor >= digits.length) break;
+		const chunk = digits.slice(cursor, cursor + group.size);
+		out += group.before + chunk;
+		cursor += chunk.length;
+		if (chunk.length === group.size && cursor < capacity) out += group.after;
+	}
 	return out;
 }
 
 function dateStorageValue(masked) {
-	const trimmed = String(masked || '').replace(/\/+$/, '');
-	return !trimmed || trimmed === '/' ? '' : trimmed;
+	const trimmed = String(masked || '').replace(/[^\p{L}\d]+$/u, '');
+	return trimmed || '';
 }
 
 function dateGuideOf(format) {
-	return String(format || 'dd/mm/yyyy').toLowerCase() === 'dd/mm/yyyy' ? 'jj/mm/aaaa' : format;
+	const pattern = normalizeDateFormat(format);
+	if (currentLocale() !== 'fr') return pattern;
+	return pattern.replace(DATE_FORMAT_TOKEN_RE, (token) => {
+		if (token === 'dd') return 'jj';
+		if (token === 'd') return 'j';
+		if (token === 'yyyy') return 'aaaa';
+		if (token === 'yy') return 'aa';
+		return token;
+	});
 }
 
 function syncDateGuide(guide, value, format) {
@@ -4964,10 +5312,10 @@ function caretPosAfterDateDigits(formatted, count) {
 	return formatted.length;
 }
 
-function applyDateMask(input, raw) {
+function applyDateMask(input, raw, format) {
 	const sel = input.selectionStart ?? String(raw || '').length;
 	const digitsBefore = dateDigits(String(raw || '').slice(0, sel)).length;
-	const next = maskDateInput(raw);
+	const next = maskDateInput(raw, format);
 	input.value = next;
 	const pos = caretPosAfterDateDigits(next, digitsBefore);
 	try {
@@ -4981,11 +5329,44 @@ function applyDateMask(input, raw) {
 function isoToDate(iso, format) {
 	if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
 	const [yyyy, mm, dd] = iso.split('-');
-	return String(format || 'dd/mm/yyyy')
-		.replace(/yyyy/gi, yyyy)
-		.replace(/yy/gi, yyyy.slice(2))
-		.replace(/mm/gi, mm)
-		.replace(/dd/gi, dd);
+	const locale = currentLocale() === 'fr' ? 'fr-FR' : 'en-US';
+	const date = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+	return dateFormatTokens(format)
+		.map((entry) => {
+			if (entry.literal) return entry.literal;
+			switch (entry.token) {
+				case 'yyyy':
+					return yyyy;
+				case 'yy':
+					return yyyy.slice(2);
+				case 'mmmm':
+					return new Intl.DateTimeFormat(locale, { month: 'long' }).format(date);
+				case 'mmm':
+					return new Intl.DateTimeFormat(locale, { month: 'short' }).format(date).replace(/\.$/, '');
+				case 'mm':
+					return mm;
+				case 'm':
+					return String(Number(mm));
+				case 'dd':
+					return dd;
+				case 'd':
+					return String(Number(dd));
+				case 'HH':
+				case 'hh':
+				case 'MM':
+					return '00';
+				case 'H':
+				case 'h':
+					return '0';
+				case 'tt':
+					return 'AM';
+				case 't':
+					return 'A';
+				default:
+					return entry.token;
+			}
+		})
+		.join('');
 }
 
 async function pageWidgetAnnotations(page) {
@@ -5356,10 +5737,13 @@ function bindDateWidget(container, widget) {
 	const section = container.querySelector(`[data-annotation-id="${widget.id}"]`);
 	const input = section?.querySelector('input:not(.form-date-picker)');
 	if (!input) return;
-	const format = dateFormatOf(widget);
+	const acrobatFormat = dateFormatOf(widget);
+	const format = DATE_DISPLAY_FORMAT;
 	const stored = formStorage()?.getRawValue(widget.id)?.value ?? widget.fieldValue ?? input.value;
 	const formatted =
-		isoToDate(dateToIso(String(stored ?? ''), format), format) || maskDateInput(stored) || '';
+		isoToDate(parseFlexibleDateToIso(String(stored ?? ''), acrobatFormat), format) ||
+		maskDateInput(stored, format) ||
+		'';
 	section.classList.add('form-date-field');
 	section.querySelector('input.form-date-picker')?.remove();
 	let guide = section.querySelector('.form-date-guide');
@@ -5389,7 +5773,7 @@ function bindDateWidget(container, widget) {
 	if (input.disabled || widget.readOnly) return;
 
 	const persist = (masked) => {
-		const iso = dateToIso(masked, format);
+		const iso = parseFlexibleDateToIso(masked, acrobatFormat);
 		const storedValue = iso ? isoToDate(iso, format) : dateStorageValue(masked);
 		formStorage()?.setValue(widget.id, { value: storedValue });
 		syncDateGuide(guide, masked, format);
@@ -5402,6 +5786,9 @@ function bindDateWidget(container, widget) {
 			}
 		}
 	};
+	// Valeur posée par le calendrier : déjà au format exact du champ, le masque
+	// de saisie ne doit pas la retoucher (l'événement input sert au bake PDF.js).
+	let committing = false;
 	const commit = (iso) => {
 		const next = isoToDate(iso, format);
 		input.value = next;
@@ -5412,7 +5799,12 @@ function bindDateWidget(container, widget) {
 		}
 		formStorage()?.setValue(widget.id, { value: next });
 		syncDateGuide(guide, next, format);
-		input.dispatchEvent(new Event('input', { bubbles: true }));
+		committing = true;
+		try {
+			input.dispatchEvent(new Event('input', { bubbles: true }));
+		} finally {
+			committing = false;
+		}
 	};
 	const open = () => {
 		openDateCalendar(input, section, { format, commit });
@@ -5421,7 +5813,8 @@ function bindDateWidget(container, widget) {
 	input.addEventListener('focus', open);
 	input.addEventListener('click', open);
 	input.addEventListener('input', () => {
-		const next = applyDateMask(input, input.value);
+		if (committing) return;
+		const next = applyDateMask(input, input.value, format);
 		persist(next);
 	});
 	input.addEventListener('keydown', (event) => {
@@ -5433,7 +5826,7 @@ function bindDateWidget(container, widget) {
 		const digits = dateDigits(input.value);
 		const before = dateDigits(input.value.slice(0, start)).length;
 		const nextDigits = digits.slice(0, Math.max(0, before - 1)) + digits.slice(before);
-		const next = maskDateInput(nextDigits);
+		const next = maskDateInput(nextDigits, format);
 		input.value = next;
 		const pos = caretPosAfterDateDigits(next, Math.max(0, before - 1));
 		try {
@@ -5445,9 +5838,9 @@ function bindDateWidget(container, widget) {
 		input.dispatchEvent(new Event('input', { bubbles: true }));
 	});
 	input.addEventListener('change', () => {
-		const iso = dateToIso(input.value, format);
+		const iso = parseFlexibleDateToIso(input.value, acrobatFormat);
 		if (iso) commit(iso);
-		else persist(maskDateInput(input.value));
+		else persist(maskDateInput(input.value, format));
 	});
 }
 
@@ -5799,7 +6192,7 @@ async function collectFormFields() {
 					readOnly: Boolean(widget.readOnly),
 					widgets: [],
 					options: Array.isArray(widget.options) ? widget.options : [],
-					dateFormat: kind === 'date' ? dateFormatOf(widget) : null
+					dateFormat: kind === 'date' ? DATE_DISPLAY_FORMAT : null
 				};
 				byName.set(widget.fieldName, field);
 			}
@@ -6644,6 +7037,7 @@ async function pdfiumEditBlocks(viewport) {
 				};
 			})
 			.filter((block) => block.width > 2 && block.height > 2 && (block.text || block.kind !== 'text'))
+			.filter((block) => block.kind === 'image' || !looksLikeGarbledExtraction(block.text))
 			.filter((block, _index, all) => {
 				if (block.kind !== 'image') return true;
 				// Image qui recouvre du texte = fond / bandeau, pas un logo.
@@ -6712,6 +7106,7 @@ function visibleBlockRatio(blocks, viewport) {
 
 async function runOcrForCurrentPage(openPanel = false, options = {}) {
 	if (!state.pdf) return;
+	if (state.editingBlockId) return 0;
 	const silent = Boolean(options.silent);
 
 	try {
@@ -6748,14 +7143,30 @@ async function runOcrForCurrentPage(openPanel = false, options = {}) {
 			};
 		}
 
+		if (state.editingBlockId) return 0;
+
 		const blocks = mapOcrBlocksToPage(ocrResult, data);
 		renderOcrTextLayer(data, blocks);
 
-		const existing = state.editBlocks.filter((block) => !(block.page === state.page && block.source === 'ocr'));
+		// Les blocs OCR déjà modifiés par l'utilisateur sont du contenu document :
+		// on ne les jette jamais lors d'une nouvelle passe OCR.
+		const existing = state.editBlocks.filter(
+			(block) =>
+				!(block.page === state.page && block.source === 'ocr' && !isPersistedPageContent(block))
+		);
 		annotateBlockIntelligence([...existing.filter((block) => block.page === state.page), ...blocks]);
+		const keepSelection = state.selectedBlockId;
+		const keepSelections = Array.isArray(state.selectedBlockIds) ? [...state.selectedBlockIds] : [];
 		state.editBlocks = mergeAnalysisSources(existing, blocks);
-		state.selectedBlockId = null;
-		state.selectedBlockIds = [];
+		if (keepSelection && state.editBlocks.some((block) => block.id === keepSelection)) {
+			state.selectedBlockId = keepSelection;
+			state.selectedBlockIds = keepSelections.filter((id) =>
+				state.editBlocks.some((block) => block.id === id)
+			);
+		} else {
+			state.selectedBlockId = null;
+			state.selectedBlockIds = [];
+		}
 		renderEditBlocks();
 		updateSelectedEditField();
 		if (openPanel) {
@@ -6778,6 +7189,7 @@ function mapOcrBlocksToPage(ocrResult, data) {
 	const cssScaleY = data.viewportHeight / imageHeight;
 	return (Array.isArray(ocrResult?.blocks) ? ocrResult.blocks : [])
 		.filter((block) => block?.text && (block.confidence ?? 100) >= 30)
+		.filter((block) => !looksLikeGarbledExtraction(block.text))
 		.map((block, index) => {
 			const x = block.x * cssScaleX;
 			const y = block.y * cssScaleY;
@@ -8511,6 +8923,46 @@ function annotateBlockIntelligence(blocks) {
 	return documentInfo;
 }
 
+// Extraction / OCR Windows : ToUnicode cassé ou lecture d'un filet décoratif
+// sous un titre tracking → "r 1-x-111-11. 1 MILLNN 1 0 0 0 0".
+// Un texte est jugé corrompu s'il ne contient AUCUN mot réel et au moins deux
+// jetons typiques d'une lecture de traits verticaux/filets : chiffres collés à
+// une lettre isolée ("1x", "1-1x-111-11."), suites majuscules I/L/M/N/V/W/T
+// sans voyelle ("IVILLN", "MILLNN"), lettre minuscule seule ("r"). Les nombres,
+// dates, téléphones, IBAN, montants restent intacts (jetons numériques neutres).
+function looksLikeGarbledExtraction(text) {
+	const raw = String(text || '').replace(/\s+/g, ' ').trim();
+	if (!raw) return false;
+	if (/\d-\d*x-\d/i.test(raw)) return true;
+	const tokens = raw.split(' ').filter(Boolean);
+	let realWords = 0;
+	let garbage = 0;
+	for (const token of tokens) {
+		const bare = token.replace(/^[(\["'«]+|[)\]"'».,;:!?»]+$/g, '');
+		if (!bare) continue;
+		if (/^[A-Za-zÀ-ÿ'’-]{2,}$/.test(bare)) {
+			// Suite de lettres « bâtons » (I L M N V W T) : lecture de traits, pas un
+			// mot — comptée comme suspecte AVANT le test des voyelles (I en est une).
+			if (/^[ILMNVWT]{4,}$/.test(bare)) {
+				garbage += 1;
+				continue;
+			}
+			if (/[AEIOUYaeiouyÀ-ÿ]/.test(bare) || bare.length <= 3) realWords += 1;
+			continue;
+		}
+		// Lettre minuscule isolée en forme de trait (r, l, i, t, f, j). Les unités
+		// (x, m, h, s, g, k…) restent neutres : « 2 x 3 m » est un texte légitime.
+		if (/^[rltifj]$/.test(bare)) {
+			garbage += 1;
+			continue;
+		}
+		if (/\d/.test(bare) && /[a-z]/.test(bare) && !/[A-Z]/.test(bare)) {
+			garbage += 1;
+		}
+	}
+	return realWords === 0 && garbage >= 2;
+}
+
 function blockOverlapRatio(a, b) {
 	const left = Math.max(a.x, b.x);
 	const top = Math.max(a.y, b.y);
@@ -8525,6 +8977,16 @@ function blockOverlapRatio(a, b) {
 function mergeAnalysisSources(existingBlocks, incomingBlocks) {
 	const merged = [...existingBlocks];
 	for (const block of incomingBlocks) {
+		if (block.source === 'ocr' && looksLikeGarbledExtraction(block.text)) continue;
+		if (block.source === 'ocr') {
+			const covered = merged.some(
+				(candidate) =>
+					candidate.page === block.page &&
+					(candidate.source !== 'ocr' || isPersistedPageContent(candidate)) &&
+					blockOverlapRatio(candidate, block) > 0.2
+			);
+			if (covered) continue;
+		}
 		const duplicate = merged.find((candidate) =>
 			candidate.page === block.page &&
 			candidate.kind === block.kind &&
@@ -11034,6 +11496,15 @@ function applyNativeAnalysisToPage(pageNumber, analysis, editedBlock, expectedTe
 			best = { ...best, chars: projected };
 		}
 		const docText = nativeCharsText(best.chars);
+		if (
+			isEdited &&
+			expectedText != null &&
+			looksLikeGarbledExtraction(docText) &&
+			!looksLikeGarbledExtraction(expectedText)
+		) {
+			block._nativeStale = true;
+			continue;
+		}
 		if (isEdited) {
 			block.x = best.x;
 			block.y = best.y;
@@ -12464,6 +12935,10 @@ function startInlineEdit(id, opts = {}) {
 	// MAINTENANT (avant la première frappe), pour que les bandes re-rendues à
 	// chaque frappe soient issues du même rasteriseur que la page affichée.
 	if (nativeTextEditEligible(block)) void primeNativePageCanvas(block.page);
+	if (isAddedTextBlock(block)) {
+		block._sessionStartText = block.text || '';
+		block._sessionSnapshot = captureEditableSnapshot();
+	}
 	state.editingBlockId = id;
 	state.selectedBlockId = id;
 	renderEditBlocks();
@@ -12530,6 +13005,10 @@ function finishInlineEdit(id, newText) {
 		// HTML opaque (carré blanc vide). On ne diff le texte que si frappe réelle.
 		const typed = Boolean(block.inlineEditDirty || block.htmlEdited);
 		block.inlineEditDirty = false;
+		const sessionStart = block._sessionStartText;
+		const sessionSnap = block._sessionSnapshot;
+		delete block._sessionStartText;
+		delete block._sessionSnapshot;
 		const trimmed = (newText || '')
 			.replace(/\r\n?/g, '\n')
 			.split('\n')
@@ -12544,9 +13023,10 @@ function finishInlineEdit(id, newText) {
 			block.emptyPlaceholder = true;
 			block.textEdited = true;
 			ensureAddedPlaceholderGeometry(block);
-			if (block._addSnapshot) {
-				commitSnapshot(block._addSnapshot, 'histBlockAdd');
-				delete block._addSnapshot;
+			delete block._addSnapshot;
+			// 2ᵉ session vidée : undo restaure le texte d'avant, pas le bloc entier.
+			if ((sessionStart || '') !== '' && sessionSnap) {
+				commitSnapshot(sessionSnap, 'histTextEdit');
 				markDirty();
 			}
 			renderEditBlocks();
@@ -12554,7 +13034,8 @@ function finishInlineEdit(id, newText) {
 			return;
 		}
 		if (block.added) block.emptyPlaceholder = false;
-		const textChanged = typed && trimmed && trimmed !== block.text;
+		const baseline = sessionStart !== undefined ? sessionStart : block.text;
+		const textChanged = typed && trimmed && trimmed !== baseline;
 		// On ne touche JAMAIS la géométrie du bloc si le texte n'a pas changé,
 		// sinon le padding d'édition ferait grossir le bloc à chaque entrée/sortie.
 		if (textChanged) {
@@ -12575,10 +13056,17 @@ function finishInlineEdit(id, newText) {
 				block.height = Math.min(block.pageHeight - block.y, nextHeight);
 				if (isAddedTextBlock(block)) block.originalHeight = block.height;
 			}
-			commitSnapshot(
-				block.added && block._addSnapshot ? block._addSnapshot : editSnapshot,
-				block.added ? 'histBlockAdd' : 'histTextEdit'
-			);
+			if (block.added) {
+				if (block._addSnapshot) {
+					commitSnapshot(block._addSnapshot, 'histBlockAdd');
+				} else if ((sessionStart || '') !== '' && sessionSnap) {
+					// 2ᵉ session (clic ailleurs puis retour) : undo n'enlève
+					// que le rajout, le bloc et le 1ᵉʳ texte restent.
+					commitSnapshot(sessionSnap, 'histTextEdit');
+				}
+			} else {
+				commitSnapshot(editSnapshot, 'histTextEdit');
+			}
 			delete block._addSnapshot;
 			markDirty();
 		}
@@ -14070,6 +14558,11 @@ function createAddedTextBlock(pageNumber, pageX, pageY) {
 	// Empêche un blur immédiat (panneau latéral) de sortir d'édition → Aa gris.
 	block._addedEditFocusGuard = Date.now() + 500;
 	state.editBlocks.push(block);
+	// Un palier dès la pose : ⌘Z / Précédent retire le bloc (même si on
+	// écrit encore dedans). Sans ça, undo prenait l'action d'avant et
+	// mettait l'ajout en « Suivant ».
+	commitSnapshot(block._addSnapshot, 'histBlockAdd');
+	delete block._addSnapshot;
 	state.page = pageNumber;
 	state.selectedBlockId = block.id;
 	state.selectedBlockIds = [block.id];
@@ -14195,14 +14688,44 @@ function exitEditMode() {
 	updateUi();
 }
 
+// Une seule détection automatique à la fois, et une seule tentative OCR par
+// page et par document : sans ce verrou, chaque re-rendu (zoom, scroll, bande
+// native) relançait scan + OCR — deux OCR en vol se remplaçaient mutuellement
+// et écrasaient les blocs en cours d'édition (coupure de frappe sur Windows,
+// où l'OCR est lent).
+let _autoDetectInFlight = null;
+
+function autoOcrAttemptedSet() {
+	const tab = currentTab();
+	if (tab) {
+		if (!(tab.autoOcrAttempted instanceof Set)) tab.autoOcrAttempted = new Set();
+		return tab.autoOcrAttempted;
+	}
+	if (!(state.autoOcrAttempted instanceof Set)) state.autoOcrAttempted = new Set();
+	return state.autoOcrAttempted;
+}
+
 async function autoDetectEditableContent() {
 	if (!state.pdf) return;
-	const detected = await scanEditableBlocks();
-	if (detected) return;
-	const text = await extractPageText(state.page);
-	if (!text) {
-		await runOcrForCurrentPage(false, { silent: true });
-	}
+	if (_autoDetectInFlight) return _autoDetectInFlight;
+	const pageNumber = state.page;
+	_autoDetectInFlight = (async () => {
+		try {
+			if (state.editingBlockId) return;
+			const detected = await scanEditableBlocks();
+			if (detected) return;
+			if (state.page !== pageNumber || state.editingBlockId) return;
+			const attempted = autoOcrAttemptedSet();
+			if (attempted.has(pageNumber)) return;
+			const text = await extractPageText(pageNumber);
+			if (text) return;
+			attempted.add(pageNumber);
+			await runOcrForCurrentPage(false, { silent: true });
+		} finally {
+			_autoDetectInFlight = null;
+		}
+	})();
+	return _autoDetectInFlight;
 }
 
 function updateUi(renderPanels = true) {
@@ -14350,6 +14873,7 @@ function markDocumentSaved(bytes, savedPath) {
 	if (savedPath) applySavedDocumentName(savedPath);
 	// updateUi persiste + re-render les onglets (titre à jour sans relancer).
 	updateUi(false);
+	if (savedPath) schedulePersistedEditHistory();
 	if (tab) tab.dirty = false;
 	renderTabs();
 	if (tab) flashSavedTab(tab.id);
@@ -16906,10 +17430,129 @@ function renderHome() {
 
 		card.append(thumb, info, remove);
 		card.addEventListener('click', () => void openRecentFile(item));
+		card.addEventListener('contextmenu', (event) => {
+			event.preventDefault();
+			event.stopPropagation();
+			openRecentContextMenu(event.clientX, event.clientY, item, () => doRemove(event));
+		});
 		body.append(card);
 	}
 
 	if (pendingThumbs.length) void generateMissingThumbs(pendingThumbs, renderToken);
+}
+
+// ── Menu contextuel des fichiers récents ──────────────────────────────────
+// Clic droit sur une carte : Ouvrir · Afficher dans le Finder/Explorateur
+// (fichier sélectionné dans son dossier) · Retirer des récents.
+function hostPlatform() {
+	const raw = String(navigator.userAgentData?.platform || navigator.platform || '').toLowerCase();
+	if (raw.includes('mac')) return 'mac';
+	if (raw.includes('win')) return 'windows';
+	return 'linux';
+}
+
+function revealInFolderLabel() {
+	const fr = currentLocale() === 'fr';
+	switch (hostPlatform()) {
+		case 'mac':
+			return fr ? 'Afficher dans le Finder' : 'Show in Finder';
+		case 'windows':
+			return fr ? 'Afficher dans l’Explorateur' : 'Show in Explorer';
+		default:
+			return fr ? 'Afficher dans le dossier' : 'Show in folder';
+	}
+}
+
+function recentContextMenuRoot() {
+	let el = document.getElementById('recent-context-menu');
+	if (el) return el;
+	el = document.createElement('div');
+	el.id = 'recent-context-menu';
+	el.className = 'recent-context-menu';
+	el.setAttribute('role', 'menu');
+	el.hidden = true;
+	document.body.append(el);
+	const close = () => closeRecentContextMenu();
+	document.addEventListener(
+		'pointerdown',
+		(event) => {
+			if (el.hidden) return;
+			if (event.target instanceof Element && event.target.closest('#recent-context-menu')) return;
+			close();
+		},
+		true
+	);
+	document.addEventListener('keydown', (event) => {
+		if (event.key === 'Escape' && !el.hidden) close();
+	});
+	window.addEventListener('resize', close);
+	document.addEventListener('scroll', close, true);
+	window.addEventListener('blur', close);
+	return el;
+}
+
+function closeRecentContextMenu() {
+	const el = document.getElementById('recent-context-menu');
+	if (el) el.hidden = true;
+}
+
+async function revealRecentFile(item) {
+	if (!item?.path) return;
+	try {
+		await invokeCommand('reveal_file_in_folder', { path: item.path });
+	} catch (error) {
+		console.warn('reveal_file_in_folder failed', error);
+		setStatus(
+			currentLocale() === 'fr'
+				? 'Fichier introuvable : il a été déplacé ou supprimé.'
+				: 'File not found: it was moved or deleted.',
+			'error'
+		);
+	}
+}
+
+function openRecentContextMenu(x, y, item, onRemove) {
+	const el = recentContextMenuRoot();
+	const fr = currentLocale() === 'fr';
+	const entries = [
+		{ label: fr ? 'Ouvrir' : 'Open', action: () => void openRecentFile(item) },
+		{
+			label: revealInFolderLabel(),
+			disabled: !item.path,
+			action: () => void revealRecentFile(item)
+		},
+		{ separator: true },
+		{ label: fr ? 'Retirer des récents' : 'Remove from recents', danger: true, action: onRemove }
+	];
+	el.replaceChildren();
+	for (const entry of entries) {
+		if (entry.separator) {
+			const sep = document.createElement('div');
+			sep.className = 'recent-context-menu-sep';
+			el.append(sep);
+			continue;
+		}
+		const button = document.createElement('button');
+		button.type = 'button';
+		button.className = `recent-context-menu-item${entry.danger ? ' is-danger' : ''}`;
+		button.setAttribute('role', 'menuitem');
+		button.textContent = entry.label;
+		button.disabled = Boolean(entry.disabled);
+		button.addEventListener('click', (event) => {
+			event.stopPropagation();
+			closeRecentContextMenu();
+			entry.action?.();
+		});
+		el.append(button);
+	}
+	el.hidden = false;
+	const width = el.offsetWidth || 220;
+	const height = el.offsetHeight || 140;
+	const left = Math.min(Math.max(8, x), window.innerWidth - width - 8);
+	const top = Math.min(Math.max(8, y), window.innerHeight - height - 8);
+	el.style.left = `${Math.round(left)}px`;
+	el.style.top = `${Math.round(top)}px`;
+	el.querySelector('button:not([disabled])')?.focus({ preventScroll: true });
 }
 
 let _compareState = {
@@ -18362,10 +19005,10 @@ async function renderFormsPanel() {
 			const input = document.createElement('input');
 			input.type = 'date';
 			input.className = 'forms-field-input';
-			input.value = dateToIso(String(value ?? ''), field.dateFormat);
+			input.value = parseFlexibleDateToIso(String(value ?? ''), field.dateFormat);
 			input.disabled = field.readOnly;
 			input.addEventListener('change', () =>
-				setFormFieldValue(field, isoToDate(input.value, field.dateFormat))
+				setFormFieldValue(field, isoToDate(input.value, DATE_DISPLAY_FORMAT))
 			);
 			row.append(input);
 		} else if (field.kind === 'checkbox') {
@@ -18471,6 +19114,7 @@ function syncSettingsForm() {
 	elements.settingDefaultZoom.value = String(state.settings.defaultZoom);
 	elements.settingPageLayout.value = state.settings.pageLayout === 'single' ? 'single' : 'continuous';
 	if (elements.settingAutoSave) elements.settingAutoSave.checked = state.settings.autoSave !== false;
+	if (elements.settingAutoUpdate) elements.settingAutoUpdate.checked = Boolean(state.settings.autoUpdate);
 	elements.settingFitWidth.checked = state.settings.fitWidth;
 	elements.settingShowTools.checked = state.settings.showTools;
 	elements.settingShowRail.checked = state.settings.showRail;
@@ -18491,6 +19135,7 @@ function applySettingsFromForm() {
 	state.settings.defaultZoom = Number(elements.settingDefaultZoom.value);
 	state.settings.pageLayout = elements.settingPageLayout.value === 'single' ? 'single' : 'continuous';
 	state.settings.autoSave = elements.settingAutoSave ? elements.settingAutoSave.checked : true;
+	state.settings.autoUpdate = elements.settingAutoUpdate ? elements.settingAutoUpdate.checked : false;
 	state.settings.fitWidth = elements.settingFitWidth.checked;
 	state.settings.showTools = elements.settingShowTools.checked;
 	state.settings.showRail = elements.settingShowRail.checked;
@@ -19104,9 +19749,16 @@ function destroyAppWindow() {
 	}
 }
 
+async function flushAllPersistedEditHistory() {
+	for (const tab of state.tabs) {
+		if (historyPersistPath(tab)) await flushPersistedEditHistory(tab);
+	}
+}
+
 async function requestCloseWindow() {
 	persistCurrentTabState();
 	await flushAutosave({ reason: 'exit', allTabs: true });
+	await flushAllPersistedEditHistory();
 	const dirty = state.tabs.find((tab) => tab.dirty && !(tab.autoSave && tab.filePath));
 	if (!dirty) {
 		destroyAppWindow();
@@ -19120,6 +19772,7 @@ async function requestCloseWindow() {
 async function requestQuitApp() {
 	persistCurrentTabState();
 	await flushAutosave({ reason: 'exit', allTabs: true });
+	await flushAllPersistedEditHistory();
 	const dirty = state.tabs.find((tab) => tab.dirty && !(tab.autoSave && tab.filePath));
 	if (!dirty) {
 		try {
@@ -20508,6 +21161,16 @@ let _updateRetryCount = 0;
 const UPDATE_AUTO_RETRIES = 2;
 const UPDATE_RETRY_DELAY_MS = 15 * 1000;
 
+function isAutoUpdateEnabled() {
+	return Boolean(state.settings?.autoUpdate);
+}
+
+function enableAutoUpdate() {
+	state.settings.autoUpdate = true;
+	saveSettings();
+	if (elements.settingAutoUpdate) elements.settingAutoUpdate.checked = true;
+}
+
 async function checkForUpdates() {
 	try {
 		_lastUpdateCheck = Date.now();
@@ -20530,18 +21193,19 @@ function maybeCheckForUpdates() {
 }
 
 function showUpdateToast(info) {
-	// Rejetée pour cette session : on attend le prochain lancement pour la reproposer.
-	if (info && info.version && _updateDismissedVersion === info.version) return;
+	const auto = isAutoUpdateEnabled();
+	if (!auto && info && info.version && _updateDismissedVersion === info.version) return;
 	const fr = currentLocale() === 'fr';
 	const existing = document.getElementById('slate-update-toast');
 	if (existing) {
-		// Pop-up déjà affiché : si une version plus récente vient de sortir, on met à
-		// jour le texte en place au lieu de laisser l'utilisateur installer l'ancienne.
 		if (info.version && existing.dataset.version !== info.version) {
 			existing.dataset.version = info.version;
 			const sub = existing.querySelector('.slate-update-toast-sub');
-			if (sub) sub.textContent = fr ? `Slate ${info.version} est prêt à être installé.` : `Slate ${info.version} is ready to install.`;
+			if (sub && !_updateInProgress) {
+				sub.textContent = fr ? `Slate ${info.version} est prêt à être installé.` : `Slate ${info.version} is ready to install.`;
+			}
 		}
+		if (auto && !_updateInProgress) void startUpdateInstall(existing);
 		return;
 	}
 	_updateRetryCount = 0;
@@ -20566,6 +21230,7 @@ function showUpdateToast(info) {
 		<div class="slate-update-toast-actions">
 			<button type="button" class="slate-update-later">${fr ? 'Plus tard' : 'Later'}</button>
 			<button type="button" class="slate-update-now">${fr ? 'Mettre à jour' : 'Update'}</button>
+			<button type="button" class="slate-update-always">${fr ? 'Mettre à jour automatiquement' : 'Update automatically'}</button>
 		</div>
 		<div class="slate-update-progress" hidden><div class="slate-update-progress-bar"></div></div>
 	`;
@@ -20575,6 +21240,11 @@ function showUpdateToast(info) {
 	toast.querySelector('.slate-update-toast-close').addEventListener('click', () => dismissUpdateToast(toast));
 	toast.querySelector('.slate-update-later').addEventListener('click', () => dismissUpdateToast(toast));
 	toast.querySelector('.slate-update-now').addEventListener('click', () => void startUpdateInstall(toast));
+	toast.querySelector('.slate-update-always').addEventListener('click', () => {
+		enableAutoUpdate();
+		void startUpdateInstall(toast);
+	});
+	if (auto) void startUpdateInstall(toast);
 }
 
 function dismissUpdateToast(toast) {
@@ -20596,6 +21266,7 @@ async function startUpdateInstall(toast) {
 	const progress = toast.querySelector('.slate-update-progress');
 	const bar = toast.querySelector('.slate-update-progress-bar');
 	if (actions) actions.remove();
+	toast.querySelector('.slate-update-toast-close')?.remove();
 	if (progress) progress.hidden = false;
 	if (sub) sub.textContent = fr ? 'Téléchargement de la mise à jour…' : 'Downloading update…';
 
