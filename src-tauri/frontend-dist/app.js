@@ -1992,8 +1992,14 @@ async function writeTabBytes(tab, bytes, overwriteFile) {
 async function flushAutosave({ reason = 'idle', allTabs = false } = {}) {
 	if (!window.__TAURI__ || _restoringSession) return;
 	if (_autosaveInFlight) {
-		if (reason === 'idle') scheduleAutosave();
-		return;
+		if (reason === 'idle') {
+			scheduleAutosave();
+			return;
+		}
+		for (let i = 0; i < 50 && _autosaveInFlight; i += 1) {
+			await new Promise((resolve) => setTimeout(resolve, 50));
+		}
+		if (_autosaveInFlight) return;
 	}
 	const force = reason === 'exit' || reason === 'update';
 	_autosaveInFlight = true;
@@ -19891,6 +19897,12 @@ async function requestCloseTab(tabId) {
 	if (!tab) return;
 	if (tab.id === state.activeTabId) {
 		persistCurrentTabState();
+	}
+	if (tabAutosaveEnabled(tab)) {
+		await flushAutosave({ reason: 'exit', allTabs: true });
+		if (historyPersistPath(tab)) await flushPersistedEditHistory(tab);
+		await closeTab(tab.id);
+		return;
 	}
 	if (tab.dirty) {
 		state.pendingCloseTabId = tab.id;
