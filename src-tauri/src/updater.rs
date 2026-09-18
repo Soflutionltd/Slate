@@ -139,6 +139,10 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?;
 
+    if let Err(err) = crate::write_update_relaunch_flag(&app) {
+        tracing::warn!("Slate update relaunch flag failed: {err}");
+    }
+
     tracing::info!("Slate update installed — restarting");
     app.restart();
 }

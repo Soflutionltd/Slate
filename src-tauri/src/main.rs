@@ -2023,6 +2023,66 @@ fn read_edit_history(app: tauri::AppHandle, file_path: String) -> Result<Option<
     Ok(Some(data))
 }
 
+fn app_data_file(app: &tauri::AppHandle, name: &str) -> Result<std::path::PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join(name))
+}
+
+fn write_fsync(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
+    use std::io::Write;
+    let mut file = std::fs::File::create(path).map_err(|e| e.to_string())?;
+    file.write_all(bytes).map_err(|e| e.to_string())?;
+    file.sync_all().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Onglets ouverts hors localStorage — survit au remplacement du .app par l'updater.
+#[tauri::command]
+fn write_open_session(app: tauri::AppHandle, payload: String) -> Result<(), String> {
+    if payload.len() > 512 * 1024 {
+        return Err("session_too_large".to_string());
+    }
+    let path = app_data_file(&app, "open-session.json")?;
+    write_fsync(&path, payload.as_bytes())
+}
+
+#[tauri::command]
+fn read_open_session(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let path = app_data_file(&app, "open-session.json")?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let data = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    if data.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(data))
+}
+
+pub(crate) fn write_update_relaunch_flag(app: &tauri::AppHandle) -> Result<(), String> {
+    let path = app_data_file(app, "relaunch-from-update")?;
+    write_fsync(&path, b"1")
+}
+
+#[tauri::command]
+fn mark_update_relaunch(app: tauri::AppHandle) -> Result<(), String> {
+    write_update_relaunch_flag(&app)
+}
+
+#[tauri::command]
+fn consume_update_relaunch(app: tauri::AppHandle) -> Result<bool, String> {
+    let path = app_data_file(&app, "relaunch-from-update")?;
+    if !path.exists() {
+        return Ok(false);
+    }
+    let _ = std::fs::remove_file(&path);
+    Ok(true)
+}
+
 /// Copie de secours (document sans chemin, ou autosave décoché avant màj/fermeture).
 #[tauri::command]
 fn write_autosave(
@@ -2473,6 +2533,10 @@ fn main() {
             write_autosave,
             write_edit_history,
             read_edit_history,
+            write_open_session,
+            read_open_session,
+            mark_update_relaunch,
+            consume_update_relaunch,
             prepare_share_pdf,
             reveal_file_in_folder,
             take_pending_open_files,

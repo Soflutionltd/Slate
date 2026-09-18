@@ -1707,40 +1707,87 @@ let _autosaveInFlight = false;
 let _restoringSession = false;
 let _sessionRestoreReady = Promise.resolve();
 
+let _sessionDiskTimer = null;
+let _sessionDiskPayload = null;
+let _ignorePendingOpensAfterUpdate = false;
+
+function buildOpenSessionPayload() {
+	const tabs = state.tabs
+		.map((tab) => ({
+			id: tab.id,
+			fileName: tab.fileName,
+			filePath: tab.filePath || null,
+			recoveryPath: tab.recoveryPath || null,
+			page: tab.page || 1,
+			fingerprint: tab.fingerprint || null,
+			autoSave: tab.autoSave !== false
+		}))
+		.filter((tab) => tab.filePath || tab.recoveryPath);
+	return JSON.stringify({
+		tabs,
+		activeTabId: state.activeTabId,
+		at: Date.now()
+	});
+}
+
 function persistOpenSession() {
 	try {
-		const tabs = state.tabs
-			.map((tab) => ({
-				id: tab.id,
-				fileName: tab.fileName,
-				filePath: tab.filePath || null,
-				recoveryPath: tab.recoveryPath || null,
-				page: tab.page || 1,
-				fingerprint: tab.fingerprint || null,
-				autoSave: tab.autoSave !== false
-			}))
-			.filter((tab) => tab.filePath || tab.recoveryPath);
-		localStorage.setItem(
-			SESSION_KEY,
-			JSON.stringify({
-				tabs,
-				activeTabId: state.activeTabId,
-				at: Date.now()
-			})
-		);
+		const payload = buildOpenSessionPayload();
+		localStorage.setItem(SESSION_KEY, payload);
+		if (!window.__TAURI__) return;
+		_sessionDiskPayload = payload;
+		if (_sessionDiskTimer) clearTimeout(_sessionDiskTimer);
+		_sessionDiskTimer = setTimeout(() => void flushOpenSessionToDisk(), 80);
 	} catch (_err) {
 		/* stockage indisponible */
 	}
 }
 
-function loadOpenSession() {
+async function flushOpenSessionToDisk() {
+	if (_sessionDiskTimer) {
+		clearTimeout(_sessionDiskTimer);
+		_sessionDiskTimer = null;
+	}
+	if (!window.__TAURI__) return;
+	const payload = _sessionDiskPayload || buildOpenSessionPayload();
+	_sessionDiskPayload = payload;
 	try {
-		const parsed = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+		await invokeCommand('write_open_session', { payload });
+	} catch (error) {
+		console.warn('Open session persist failed', error);
+	}
+}
+
+function parseOpenSession(raw) {
+	try {
+		const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
 		if (!parsed || !Array.isArray(parsed.tabs)) return null;
 		return parsed;
 	} catch {
 		return null;
 	}
+}
+
+function loadOpenSessionFromLocalStorage() {
+	try {
+		return parseOpenSession(localStorage.getItem(SESSION_KEY) || 'null');
+	} catch {
+		return null;
+	}
+}
+
+async function loadOpenSession() {
+	let disk = null;
+	if (window.__TAURI__) {
+		try {
+			disk = parseOpenSession(await invokeCommand('read_open_session'));
+		} catch (_err) {
+			disk = null;
+		}
+	}
+	const local = loadOpenSessionFromLocalStorage();
+	if (disk && local) return (Number(disk.at) || 0) >= (Number(local.at) || 0) ? disk : local;
+	return disk || local;
 }
 
 const HISTORY_DISK_MAX_ENTRIES = 80;
@@ -1998,7 +2045,7 @@ async function flushAutosave({ reason = 'idle', allTabs = false } = {}) {
 
 async function restoreOpenSession() {
 	if (!window.__TAURI__ || state.tabs.length) return;
-	const session = loadOpenSession();
+	const session = await loadOpenSession();
 	if (!session?.tabs?.length) return;
 	_restoringSession = true;
 	try {
@@ -2108,6 +2155,7 @@ async function openPdfFromBytes(bytes, fileName, options = {}) {
 					if (wasMissing) existing.autoSave = resolveDocumentAutoSave(options.filePath, options.autoSave);
 				}
 				await activateTab(existing.id);
+				persistOpenSession();
 				setStatus(
 					currentLocale() === 'fr' ? 'Ce document est déjà ouvert.' : 'This document is already open.'
 				);
@@ -2131,6 +2179,7 @@ async function openPdfFromBytes(bytes, fileName, options = {}) {
 		state.tabs.push(tab);
 		state.activeTabId = tab.id;
 		loadTabIntoState(tab);
+		persistOpenSession();
 		state.annotations = readSavedAnnotations();
 		tab.annotations = state.annotations.map((annotation) => ({ ...annotation }));
 		// On restaure uniquement la page, jamais le zoom : le zoom d'ouverture
@@ -4265,6 +4314,7 @@ async function activateTab(tabId) {
 	state.viewingHome = false;
 	state.activeTabId = tab.id;
 	loadTabIntoState(tab);
+	persistOpenSession();
 	renderTabs();
 	elements.emptyState.classList.add('hidden');
 	elements.pagesStack.classList.remove('hidden');
@@ -19242,7 +19292,14 @@ function createId() {
 function bindTauriMenuEvents() {
 	const tauriListen = window.__TAURI__?.event?.listen;
 	if (!tauriListen) return;
-	_sessionRestoreReady = restoreOpenSession();
+	_sessionRestoreReady = (async () => {
+		try {
+			_ignorePendingOpensAfterUpdate = Boolean(await invokeCommand('consume_update_relaunch'));
+		} catch (_err) {
+			_ignorePendingOpensAfterUpdate = false;
+		}
+		await restoreOpenSession();
+	})();
 	tauriListen('alto-open-settings', openSettings);
 	tauriListen('alto-open-pdf', () => void openViaNativeDialog());
 	tauriListen('alto-export-notes', exportAnnotations);
@@ -19399,6 +19456,16 @@ async function drainDetachedTab() {
 
 async function drainPendingOpenFiles() {
 	try {
+		if (_ignorePendingOpensAfterUpdate && state.tabs.length) {
+			try {
+				await invokeCommand('take_pending_open_files');
+			} catch (_err) {
+				/* leftovers macOS après updater */
+			}
+			_ignorePendingOpensAfterUpdate = false;
+			return;
+		}
+		_ignorePendingOpensAfterUpdate = false;
 		const pending = await invokeCommand('take_pending_open_files');
 		if (!Array.isArray(pending) || !pending.length) return;
 		for (const file of pending) {
@@ -21288,6 +21355,12 @@ async function startUpdateInstall(toast) {
 		if (sub) sub.textContent = fr ? 'Enregistrement du travail…' : 'Saving your work…';
 		await flushAutosave({ reason: 'update', allTabs: true });
 		persistOpenSession();
+		await flushOpenSessionToDisk();
+		try {
+			await invokeCommand('mark_update_relaunch');
+		} catch (_err) {
+			/* install_update pose le flag côté Rust */
+		}
 		if (sub) sub.textContent = fr ? 'Téléchargement de la mise à jour…' : 'Downloading update…';
 		await invokeCommand('install_update');
 	} catch (err) {
