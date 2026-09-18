@@ -17336,11 +17336,11 @@ function notifyRecentMissing() {
 }
 
 function homeGreetingText() {
+	// Heure locale du fuseau de la machine (pas UTC).
 	const hour = new Date().getHours();
 	const fr = currentLocale() === 'fr';
 	let salutation;
-	if (hour < 6) salutation = fr ? 'Bonsoir' : 'Good evening';
-	else if (hour < 18) salutation = fr ? 'Bonjour' : 'Hello';
+	if (hour < 18) salutation = fr ? 'Bonjour' : hour < 12 ? 'Good morning' : 'Hello';
 	else salutation = fr ? 'Bonsoir' : 'Good evening';
 	const name = (state.settings.identityName || '').trim();
 	const first = name ? name.split(/\s+/)[0] : '';
