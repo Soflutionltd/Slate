@@ -109,7 +109,7 @@ jobs:
           ls -la binaries
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           OPENSSL_SRC_PERL: C:\Strawberry\perl\bin\perl.exe
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
