@@ -4909,7 +4909,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "underskrift",
- "windows 0.58.0",
+ "windows 0.61.3",
 ]
 
 [[package]]
@@ -6608,16 +6608,6 @@ dependencies = [
  "windows-core 0.52.0",
  "windows-implement 0.52.0",
  "windows-interface 0.52.0",
- "windows-targets 0.52.6",
-]
-
-[[package]]
-name = "windows"
-version = "0.58.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd04d41d93c4992d421894c18c8b43496aa748dd4c081bac0dc93eb0489272b6"
-dependencies = [
- "windows-core 0.58.0",
  "windows-targets 0.52.6",
 ]
 

@@ -64,7 +64,7 @@ openssl = { version = "0.10", features = ["vendored"] }
 # On force la compilation vendored (le runner Windows a Perl + NASM).
 [target.'cfg(windows)'.dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
-windows = { version = "0.58", features = [
+windows = { version = "0.61", features = [
 	"Foundation",
 	"Foundation_Collections",
 	"Globalization",
