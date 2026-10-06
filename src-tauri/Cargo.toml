@@ -37,7 +37,7 @@ alto-pdf-engine = { path = "../crates/pdf-engine" }
 pdfium-render = { git = "https://github.com/ajrcarey/pdfium-render", rev = "0d7f99ad660317d5fd2e9df732db77764873a6d7" }
 dirs = "6.0.0"
 lopdf = "0.40"
-rand = "0.9"
+rand = "0.10"
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg"] }
