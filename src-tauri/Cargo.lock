@@ -4895,7 +4895,7 @@ dependencies = [
  "lopdf 0.40.0",
  "openssl",
  "pdfium-render",
- "rand 0.9.4",
+ "rand 0.10.1",
  "rayon",
  "regex",
  "reqwest 0.12.28",
