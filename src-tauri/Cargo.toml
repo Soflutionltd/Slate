@@ -36,7 +36,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 alto-pdf-engine = { path = "../crates/pdf-engine" }
 pdfium-render = { git = "https://github.com/ajrcarey/pdfium-render", rev = "0d7f99ad660317d5fd2e9df732db77764873a6d7" }
 dirs = "6.0.0"
-lopdf = "0.40"
+lopdf = "0.45"
 rand = "0.9"
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
