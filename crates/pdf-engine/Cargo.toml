@@ -11,7 +11,7 @@ path = "src/lib.rs"
 
 [dependencies]
 pdfium-render = { git = "https://github.com/ajrcarey/pdfium-render", rev = "0d7f99ad660317d5fd2e9df732db77764873a6d7" }
-lopdf = "0.40"
+lopdf = "0.45"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg"] }
