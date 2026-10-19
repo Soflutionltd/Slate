@@ -48,7 +48,7 @@ name = "alto-pdf-engine"
 version = "0.1.0"
 dependencies = [
  "image",
- "lopdf 0.40.0",
+ "lopdf 0.42.0",
  "mupdf",
  "pdfium-render",
  "rand 0.10.1",
@@ -2600,9 +2600,9 @@ dependencies = [
 
 [[package]]
 name = "lopdf"
-version = "0.40.0"
+version = "0.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73fdcbab5b237a03984f83b1394dc534e0b1960675c7f3ec4d04dccc9032b56d"
+checksum = "25aab26d99567469098e64a02f42679f8965c6401263eefa31d8f2dcc37a221c"
 dependencies = [
  "aes",
  "bitflags 2.11.0",
@@ -2618,7 +2618,6 @@ dependencies = [
  "log",
  "md-5",
  "nom 8.0.0",
- "nom_locate",
  "rand 0.10.1",
  "rangemap",
  "rayon",
@@ -4892,7 +4891,7 @@ dependencies = [
  "drag",
  "font-kit",
  "image",
- "lopdf 0.40.0",
+ "lopdf 0.42.0",
  "openssl",
  "pdfium-render",
  "rand 0.9.4",
