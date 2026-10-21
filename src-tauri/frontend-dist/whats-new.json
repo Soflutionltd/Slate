@@ -1,0 +1,132 @@
+{
+	"releases": [
+		{
+			"version": "0.3.155",
+			"title": {
+				"fr": "Les PDF s’ouvrent sur tous les Mac",
+				"en": "PDFs open on every Mac"
+			},
+			"changes": [
+				{
+					"area": { "fr": "Ouverture", "en": "Opening" },
+					"text": {
+						"fr": "Les PDF s’ouvrent de nouveau sur les versions plus anciennes de macOS, par glisser-déposer comme avec Ouvrir.",
+						"en": "PDFs open again on older macOS versions, by drag and drop as well as with Open."
+					}
+				},
+				{
+					"area": { "fr": "Enregistrement", "en": "Saving" },
+					"text": {
+						"fr": "Slate vérifie que le PDF enregistré se rouvre avant de remplacer votre fichier, y compris sur clé USB ou disque réseau.",
+						"en": "Slate checks that the saved PDF reopens before replacing your file, including on USB drives and network disks."
+					}
+				},
+				{
+					"area": { "fr": "Sécurité", "en": "Security" },
+					"text": {
+						"fr": "Un PDF piégé ne peut plus saturer la mémoire.",
+						"en": "A booby-trapped PDF can no longer exhaust memory."
+					}
+				},
+				{
+					"area": { "fr": "Défilement", "en": "Scrolling" },
+					"text": {
+						"fr": "Plus de rebond saccadé en arrivant en bas du document.",
+						"en": "No more jittery bounce at the bottom of the document."
+					}
+				},
+				{
+					"area": { "fr": "Nouveautés", "en": "What’s new" },
+					"text": {
+						"fr": "Cette fenêtre tient sans défilement, avec un bouton « Voir plus ».",
+						"en": "This window fits without scrolling, with a “See more” button."
+					}
+				}
+			]
+		},
+		{
+			"version": "0.3.154",
+			"title": {
+				"fr": "Slate travaille avec ton IA",
+				"en": "Slate works with your AI"
+			},
+			"media": {
+				"webm": "whats-new/0.3.154.webm",
+				"mp4": "whats-new/0.3.154.mp4",
+				"poster": "whats-new/0.3.154.jpg"
+			},
+			"changes": [
+				{
+					"area": { "fr": "Assistant", "en": "Assistant" },
+					"text": {
+						"fr": "L’assistant intégré répond en direct et agit vraiment sur le document : il lit, cherche, modifie, organise les pages.",
+						"en": "The built-in assistant answers live and really works on the document: it reads, searches, edits and organizes pages."
+					}
+				},
+				{
+					"area": { "fr": "Modèles", "en": "Models" },
+					"text": {
+						"fr": "Claude, OpenAI, Gemini, Mistral, Grok et OpenRouter (connexion en un clic). Ollama et LM Studio sont détectés tout seuls.",
+						"en": "Claude, OpenAI, Gemini, Mistral, Grok and OpenRouter (one-click sign-in). Ollama and LM Studio are detected automatically."
+					}
+				},
+				{
+					"area": { "fr": "Sécurité", "en": "Security" },
+					"text": {
+						"fr": "Les clés API sont rangées dans le trousseau du système, plus jamais dans un fichier.",
+						"en": "API keys live in the system keychain, never in a file."
+					}
+				},
+				{
+					"area": { "fr": "IA connectées", "en": "Connected AIs" },
+					"text": {
+						"fr": "ChatGPT, Claude, Le Chat… gagnent 16 outils : formulaires, commentaires, signets, pages, numérotation, en-tête, filigrane, aperçu de page, recherche, rétablir.",
+						"en": "ChatGPT, Claude, Le Chat… get 16 new tools: forms, comments, bookmarks, pages, numbering, header, watermark, page preview, search, redo."
+					}
+				},
+				{
+					"area": { "fr": "Contrôle", "en": "Control" },
+					"text": {
+						"fr": "Supprimer des pages, enregistrer, poser un filigrane : une IA attend ton accord dans Slate avant d’agir.",
+						"en": "Deleting pages, saving, adding a watermark: an AI waits for your approval in Slate first."
+					}
+				},
+				{
+					"area": { "fr": "Agents", "en": "Agents" },
+					"text": {
+						"fr": "Claude Code, Codex et Gemini CLI se branchent sur Slate depuis ton ordinateur, avec leur propre compte.",
+						"en": "Claude Code, Codex and Gemini CLI plug into Slate from your computer, with their own account."
+					}
+				},
+				{
+					"area": { "fr": "Fiabilité", "en": "Reliability" },
+					"text": {
+						"fr": "Enregistrement atomique : un fichier n’est jamais à moitié écrit, même si le Mac s’éteint pendant l’enregistrement.",
+						"en": "Atomic saving: a file is never half-written, even if the Mac shuts down mid-save."
+					}
+				},
+				{
+					"area": { "fr": "Gros PDF", "en": "Large PDFs" },
+					"text": {
+						"fr": "Vignettes et pages rendues par le moteur natif, sans copie inutile : les gros documents défilent plus vite.",
+						"en": "Thumbnails and pages rendered by the native engine, without needless copies: large documents scroll faster."
+					}
+				},
+				{
+					"area": { "fr": "Édition", "en": "Editing" },
+					"text": {
+						"fr": "Supprimer un texte ne laisse plus de rectangle blanc : le fond reste identique, et les textes voisins restent modifiables.",
+						"en": "Deleting text no longer leaves a white box: the background stays untouched and nearby text stays editable."
+					}
+				},
+				{
+					"area": { "fr": "Mac Intel", "en": "Intel Macs" },
+					"text": {
+						"fr": "Slate fonctionne aussi sur les Mac à processeur Intel.",
+						"en": "Slate now also runs on Intel-based Macs."
+					}
+				}
+			]
+		}
+	]
+}

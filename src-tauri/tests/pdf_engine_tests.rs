@@ -238,6 +238,13 @@ fn rotate_pages_sets_rotation_angle() {
 }
 
 #[test]
+fn rotate_pages_180_turns_upside_down() {
+    let input = build_pdf(&[&["ALPHA"]]);
+    let out = pdf_ops::rotate_pages(input, vec![1], 180).expect("rotate");
+    assert_eq!(page_rotation(&out, 1), 180);
+}
+
+#[test]
 fn merge_pdfs_concatenates_pages() {
     let a = build_pdf(&[&["ALPHA"]]);
     let b = build_pdf(&[&["BETA"], &["GAMMA"]]);
@@ -277,4 +284,130 @@ fn invalid_pdf_returns_error_not_panic() {
 fn redact_with_no_areas_errors() {
     let input = build_pdf(&[&["ALPHA"]]);
     assert!(pdf_edit::redact(&input, &[], false).is_err());
+}
+
+#[test]
+fn save_check_refuses_a_pdf_that_does_not_reopen() {
+    let pdf = build_pdf(&[&["ALPHA"]]);
+    assert!(pdf_engine::check_pdf_reopens(&pdf).is_ok());
+
+    let truncated = b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog".to_vec();
+    let err = pdf_engine::check_pdf_reopens(&truncated).unwrap_err();
+    assert!(err.starts_with("save_does_not_reopen"), "obtenu: {err}");
+
+    // Une image exportée n'est pas un PDF : elle n'est pas contrôlée.
+    assert!(pdf_engine::check_pdf_reopens(b"\x89PNG\r\n\x1a\n").is_ok());
+}
+
+fn predictor_stream(params: lopdf::Dictionary) -> Stream {
+    let mut stream = Stream::new(dictionary! {}, vec![0u8; 4096]);
+    stream.compress().unwrap();
+    stream.dict.set("DecodeParms", params);
+    stream
+}
+
+#[test]
+fn png_predictor_refuses_rows_longer_than_the_data() {
+    let hostile = predictor_stream(dictionary! { "Predictor" => 12, "Columns" => 4_294_967_295i64 });
+    assert!(hostile.decompressed_content().is_err());
+
+    let overflow = predictor_stream(dictionary! {
+        "Predictor" => 12,
+        "Columns" => 2,
+        "Colors" => i64::MAX,
+        "BitsPerComponent" => 16,
+    });
+    assert!(overflow.decompressed_content().is_err());
+
+    // 4096 octets = 1024 lignes de (1 octet de filtre + 3 colonnes).
+    let valid = predictor_stream(dictionary! { "Predictor" => 12, "Columns" => 3 });
+    assert_eq!(valid.decompressed_content().unwrap(), vec![0u8; 3072]);
+}
+
+/// Page 200×100 pt : aplat rouge (contenu), puis trois carrés noirs dessinés par
+/// leur apparence : un champ texte, un bouton poussoir, une annotation carrée.
+fn build_view_pdf() -> Vec<u8> {
+    let mut doc = Document::with_version("1.7");
+    let pages_id = doc.new_object_id();
+    let page_id = doc.new_object_id();
+    let black_square = |doc: &mut Document| {
+        doc.add_object(Stream::new(
+            dictionary! {
+                "Type" => "XObject",
+                "Subtype" => "Form",
+                "BBox" => vec![0.into(), 0.into(), 30.into(), 30.into()],
+            },
+            b"0 0 0 rg 0 0 30 30 re f".to_vec(),
+        ))
+    };
+    let rect = |x: i64| vec![x.into(), 10.into(), (x + 30).into(), 40.into()];
+    let text_ap = black_square(&mut doc);
+    let text_field = doc.add_object(dictionary! {
+        "Type" => "Annot", "Subtype" => "Widget", "FT" => "Tx", "T" => Object::string_literal("nom"),
+        "Rect" => rect(60), "F" => 4, "P" => page_id, "AP" => dictionary! { "N" => text_ap },
+    });
+    let button_ap = black_square(&mut doc);
+    let button = doc.add_object(dictionary! {
+        "Type" => "Annot", "Subtype" => "Widget", "FT" => "Btn", "Ff" => 65536,
+        "T" => Object::string_literal("ok"),
+        "Rect" => rect(110), "F" => 4, "P" => page_id, "AP" => dictionary! { "N" => button_ap },
+    });
+    let square_ap = black_square(&mut doc);
+    let square = doc.add_object(dictionary! {
+        "Type" => "Annot", "Subtype" => "Square",
+        "Rect" => rect(160), "F" => 4, "P" => page_id, "AP" => dictionary! { "N" => square_ap },
+    });
+    let content_id = doc.add_object(Stream::new(dictionary! {}, b"1 0 0 rg 10 10 30 30 re f".to_vec()));
+    doc.objects.insert(
+        page_id,
+        Object::Dictionary(dictionary! {
+            "Type" => "Page", "Parent" => pages_id, "Contents" => content_id,
+            "MediaBox" => vec![0.into(), 0.into(), 200.into(), 100.into()],
+            "Annots" => vec![text_field.into(), button.into(), square.into()],
+        }),
+    );
+    doc.objects.insert(
+        pages_id,
+        Object::Dictionary(dictionary! { "Type" => "Pages", "Kids" => vec![page_id.into()], "Count" => 1 }),
+    );
+    let catalog_id = doc.add_object(dictionary! {
+        "Type" => "Catalog", "Pages" => pages_id,
+        "AcroForm" => dictionary! { "Fields" => vec![text_field.into(), button.into()] },
+    });
+    doc.trailer.set("Root", catalog_id);
+    let mut buf = Vec::new();
+    doc.save_to(&mut Cursor::new(&mut buf)).expect("save pdf");
+    buf
+}
+
+#[test]
+fn view_render_is_exact_rgba_without_html_form_fields() {
+    let pdf = build_view_pdf();
+    // Canvas plus étroit et plus haut que la page à l'échelle 2 (400×200) :
+    // recadrage à droite, marge blanche en bas, jamais d'étirement.
+    let (width, height) = (380u32, 210u32);
+    let rgba = pdf_engine::render_page_rgba_for_view(&pdf, 1, 2.0, width, height).unwrap();
+    assert_eq!(rgba.len(), (width * height * 4) as usize);
+    let pixel = |x: u32, y: u32| {
+        let at = ((y * width + x) * 4) as usize;
+        [rgba[at], rgba[at + 1], rgba[at + 2], rgba[at + 3]]
+    };
+    // Points → pixels (×2, axe vertical inversé) : centre de chaque carré à y = 150 px.
+    assert_eq!(pixel(50, 150), [255, 0, 0, 255], "aplat rouge en RGBA");
+    assert_eq!(pixel(150, 150), [255, 255, 255, 255], "champ texte laissé à la couche HTML");
+    assert_eq!(pixel(250, 150)[..3], [0, 0, 0], "bouton poussoir peint");
+    assert_eq!(pixel(350, 150)[..3], [0, 0, 0], "annotation peinte");
+    // Bord gauche de l'aplat exactement à 20 px (10 pt × 2) : rien n'a glissé.
+    assert_eq!(pixel(19, 150), [255, 255, 255, 255]);
+    assert_eq!(pixel(20, 150), [255, 0, 0, 255]);
+    assert_eq!(pixel(50, 205), [255, 255, 255, 255], "marge sous la page");
+
+    // Témoin : le rendu complet peint bien le champ texte (le test n'est pas vide).
+    let (png, _, _) = pdf_engine::render_pdf_page_png_bytes(&pdf, 1, 2.0).unwrap();
+    let full = image::load_from_memory(&png).unwrap().to_rgba8();
+    assert_eq!(full.get_pixel(150, 150).0[..3], [0, 0, 0]);
+
+    assert!(pdf_engine::render_page_rgba_for_view(&pdf, 1, 2.0, 0, 10).is_err());
+    assert!(pdf_engine::render_page_rgba_for_view(&pdf, 1, 0.0, 10, 10).is_err());
+    assert!(pdf_engine::render_page_rgba_for_view(&pdf, 2, 2.0, 10, 10).is_err());
 }

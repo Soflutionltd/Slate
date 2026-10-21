@@ -165,6 +165,11 @@
 		'pick_certificate_file',
 		'extract_images_to_folder',
 		'print_pdf',
+		'list_printers',
+		'list_paper_sizes',
+		'list_printer_options',
+		'fit_label_to_media',
+		'print_pdf_with_options',
 		'set_default_pdf_handler',
 		'is_default_pdf_handler',
 		'read_pdf_path',
@@ -288,6 +293,19 @@
 			const api = await ensureWasm();
 			return JSON.parse(api.document_properties(toUint8Array(bytes)));
 		},
+		async set_pdf_metadata({ bytes, title, author, subject, keywords }) {
+			const api = await ensureWasm();
+			if (typeof api.set_pdf_metadata !== 'function') {
+				throw new Error('set_pdf_metadata indisponible dans ce build WASM.');
+			}
+			return api.set_pdf_metadata(
+				toUint8Array(bytes),
+				title ?? null,
+				author ?? null,
+				subject ?? null,
+				keywords ?? null
+			);
+		},
 		async list_form_fields({ bytes }) {
 			const api = await ensureWasm();
 			return JSON.parse(api.list_form_fields(toUint8Array(bytes)));
@@ -367,11 +385,25 @@
 		}
 	};
 
+	const browserLocale = () => {
+		try {
+			const language = JSON.parse(localStorage.getItem('alto-pdf-settings:v1') || '{}').language;
+			if (language === 'fr' || language === 'en') return language;
+		} catch (_err) {
+			// Réglages illisibles : on retombe sur la langue du navigateur.
+		}
+		return navigator.language?.toLowerCase().startsWith('fr') ? 'fr' : 'en';
+	};
+
 	global.slatePdfBridge = {
 		ready: ensureWasm,
 		async invoke(command, args = {}) {
 			if (DESKTOP_ONLY.has(command)) {
-				throw new Error(`${command} n'est pas disponible dans le navigateur.`);
+				throw new Error(
+					browserLocale() === 'fr'
+						? `${command} n'est pas disponible dans le navigateur.`
+						: `${command} is not available in the browser.`
+				);
 			}
 			const handler = handlers[command];
 			if (!handler) {

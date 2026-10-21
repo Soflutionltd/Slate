@@ -1,4 +1,5 @@
-src-tauri/target/
+# Artefacts de build Rust (tous les crates)
+target/
 
 # PDFium native libraries — fetched per-OS by CI, kept local for dev
 src-tauri/libpdfium.dylib

@@ -10,7 +10,8 @@ const _FRONTEND_FINGERPRINT: &str =
     include_str!(concat!(env!("OUT_DIR"), "/frontend_fingerprint.txt"));
 
 use sofdocs_desktop::{
-    llm, ocr, pdf_compress, pdf_engine, pdf_forms, pdf_ops, pdf_sign, pdf_tools, system_fonts,
+    acp, llm, ocr, pdf_compress, pdf_edit, pdf_engine, pdf_forms, pdf_ops, pdf_sign, pdf_tools,
+    system_fonts,
 };
 
 // Module local au binaire (pas dans la lib partagée) : l'auto-update n'est utile
@@ -23,20 +24,32 @@ mod updater;
 #[cfg(target_os = "macos")]
 mod mac_print;
 
+// Ouverture à chaud (Mail / Finder) quand `RunEvent::Opened` est droppé pour
+// les fichiers en quarantaine — handler Apple Event `odoc` + openFile fallback.
+#[cfg(target_os = "macos")]
+mod mac_open;
+
+mod atomic_write;
+mod ipc_bytes;
+mod pdf_color;
+mod print_cups;
+use sofdocs_desktop::print_layout;
+
+use ipc_bytes::DocBytes;
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder},
-    Emitter, Manager, State,
+    Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
 
 #[derive(Serialize, Clone)]
 struct FileResult {
     path: String,
     file_name: String,
-    bytes: Vec<u8>,
+    bytes: DocBytes,
 }
 
 #[derive(Default)]
@@ -47,11 +60,126 @@ struct PendingOpens(Mutex<Vec<FileResult>>);
 #[derive(Default)]
 struct PendingPrints(Mutex<Vec<FileResult>>);
 
+/// Document arraché d'un onglet, à ouvrir dans la fenêtre `win-*` qui démarre.
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DetachedTab {
+    file_name: String,
+    file_path: Option<String>,
+    bytes: DocBytes,
+    #[serde(default)]
+    annotations: serde_json::Value,
+    #[serde(default)]
+    edit_blocks: serde_json::Value,
+    #[serde(default)]
+    page: u32,
+    #[serde(default)]
+    dirty: bool,
+}
+
+#[derive(Default)]
+struct PendingDetachedTabs(Mutex<std::collections::HashMap<String, DetachedTab>>);
+
+/// Drag d'onglet en cours (tear-off, fusion vers une autre fenêtre, ou dépôt du
+/// PDF comme fichier dans une app tierce).
+struct LiveTabDrag {
+    source_label: String,
+    payload: DetachedTab,
+    claimed_by: Option<String>,
+    /// Renseigné quand la session de drag native est terminée. On garde alors
+    /// l'entrée quelques secondes : le `drop` HTML de la fenêtre Slate visée
+    /// arrive APRÈS la fin de session AppKit, et doit savoir que ce fichier
+    /// déposé est notre onglet (déjà fusionné) et non un PDF à ouvrir.
+    ended_at: Option<std::time::Instant>,
+}
+
+const TAB_DRAG_LINGER: std::time::Duration = std::time::Duration::from_secs(2);
+
+#[derive(Default)]
+struct ActiveTabDrag(Mutex<Option<LiveTabDrag>>);
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TabDragEnded {
+    action: String,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MergeTabPayload {
+    #[serde(flatten)]
+    tab: DetachedTab,
+    relative_x: f64,
+}
+
+fn detached_tab_from_parts(
+    file_name: String,
+    file_path: Option<String>,
+    mut bytes: Vec<u8>,
+    annotations: Option<serde_json::Value>,
+    edit_blocks: Option<serde_json::Value>,
+    page: Option<u32>,
+    dirty: Option<bool>,
+) -> Result<DetachedTab, String> {
+    if bytes.is_empty() {
+        if let Some(path) = file_path.as_deref().filter(|p| !p.is_empty()) {
+            bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+        }
+    }
+    if bytes.is_empty() {
+        return Err("empty_document".into());
+    }
+    Ok(DetachedTab {
+        file_name,
+        file_path,
+        bytes: bytes.into(),
+        annotations: annotations.unwrap_or_else(|| serde_json::Value::Array(Vec::new())),
+        edit_blocks: edit_blocks.unwrap_or_else(|| serde_json::Value::Array(Vec::new())),
+        page: page.unwrap_or(1),
+        dirty: dirty.unwrap_or(false),
+    })
+}
+
 /// Cache des octets de document, indexé par un id stable (empreinte du PDF).
 /// Évite de resérialiser tout le fichier en JSON à CHAQUE appel `analyze_pdf_page`
 /// (un scan par page/entrée en mode édition). On l'envoie une seule fois par doc.
+/// `Arc` : chaque commande lit le document sans le recopier.
 #[derive(Default)]
-struct DocCache(Mutex<std::collections::HashMap<String, Vec<u8>>>);
+struct DocCache(Mutex<std::collections::HashMap<String, Arc<Vec<u8>>>>);
+
+/// Octets exacts du document PDF.js affiché dans chaque onglet, avec leur
+/// génération (un numéro par document chargé). Les pages à l'écran sont
+/// rendues par PDFium depuis ces octets-là, jamais depuis `DocCache`, qui peut
+/// porter des éditions natives pas encore synchronisées. Une entrée par onglet,
+/// rangée sous la fenêtre qui l'affiche et libérée avec elle.
+type ViewEntries = std::collections::HashMap<(String, String), (u64, Arc<Vec<u8>>)>;
+
+#[derive(Default)]
+struct ViewCache(Mutex<ViewEntries>);
+
+impl ViewCache {
+    fn forget_window(&self, label: &str) {
+        if let Ok(mut map) = self.0.lock() {
+            map.retain(|(window, _), _| window != label);
+        }
+    }
+}
+
+/// Flux de contenu D'ORIGINE des pages éditées nativement (chantier « undo par
+/// versionnage ») : capturé à la PREMIÈRE édition de chaque page après le
+/// primage du cache. Un undo restaure ce flux EXACTEMENT (le document redevient
+/// octet-pour-octet ce qu'il était), puis le frontend rejoue le texte de l'UI
+/// en une édition avant propre — plus d'« édition inverse » recalculée par
+/// diff de texte, fragile quand l'analyse re-segmente les blocs.
+#[derive(Default)]
+struct DocBaselines(
+    Mutex<
+        std::collections::HashMap<
+            String,
+            std::collections::HashMap<u32, alto_pdf_engine::pdf_versioning::PageBaseline>,
+        >,
+    >,
+);
 
 fn read_pdf_as_file_result(path: &Path) -> Option<FileResult> {
     let ext_ok = path
@@ -71,27 +199,464 @@ fn read_pdf_as_file_result(path: &Path) -> Option<FileResult> {
     Some(FileResult {
         path: path.to_string_lossy().to_string(),
         file_name,
-        bytes,
+        bytes: bytes.into(),
     })
 }
 
+/// Empile un PDF à ouvrir (Finder / Mail / AEM odoc) et prévient le frontend.
+/// Déduplique par chemin pour éviter un double onglet si `RunEvent::Opened` et
+/// le handler Apple Event arrivent tous les deux.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-fn dispatch_open_path(app: &tauri::AppHandle, path: &Path) {
+pub(crate) fn dispatch_open_path(app: &tauri::AppHandle, path: &Path) {
     let Some(result) = read_pdf_as_file_result(path) else {
         return;
     };
+    let path_key = result.path.clone();
+    let mut queued = false;
     if let Some(state) = app.try_state::<PendingOpens>() {
         if let Ok(mut buf) = state.0.lock() {
-            buf.push(result);
+            if buf.iter().any(|f| f.path == path_key) {
+                // Déjà en file (Opened + odoc simultanés).
+            } else {
+                buf.push(result);
+                queued = true;
+            }
         }
     }
-    if let Some(window) = app.get_webview_window("main") {
+    if !queued {
+        // Même sans nouvel item : ramener la fenêtre focus (2ᵉ clic Mail).
+        if let Some(window) = focused_webview(app) {
+            bring_window_to_front(&window);
+        }
+        return;
+    }
+    if let Some(window) = focused_webview(app) {
         let _ = window.emit("alto-open-files-available", ());
         bring_window_to_front(&window);
     }
 }
 
-fn bring_window_to_front(window: &tauri::WebviewWindow) {
+fn focused_webview(app: &tauri::AppHandle) -> Option<WebviewWindow> {
+    app.webview_windows()
+        .into_values()
+        .find(|window| window.is_focused().unwrap_or(false))
+        .or_else(|| app.get_webview_window("main"))
+        .or_else(|| app.webview_windows().into_values().next())
+}
+
+fn next_window_label() -> String {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(1);
+    format!("win-{stamp}")
+}
+
+fn spawn_slate_window(
+    app: &tauri::AppHandle,
+    label: &str,
+    title: &str,
+    x: Option<f64>,
+    y: Option<f64>,
+) -> Result<WebviewWindow, String> {
+    let mut builder = WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
+        .title(title)
+        .inner_size(1440.0, 920.0)
+        .min_inner_size(800.0, 600.0)
+        .resizable(true);
+    if let (Some(px), Some(py)) = (x, y) {
+        builder = builder.position(px - 48.0, py - 16.0);
+    }
+    builder.build().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn spawn_document_window(
+    app: tauri::AppHandle,
+    pending: State<'_, PendingDetachedTabs>,
+    file_name: String,
+    file_path: Option<String>,
+    bytes: DocBytes,
+    annotations: Option<serde_json::Value>,
+    edit_blocks: Option<serde_json::Value>,
+    page: Option<u32>,
+    dirty: Option<bool>,
+    x: Option<f64>,
+    y: Option<f64>,
+) -> Result<String, String> {
+    let doc = detached_tab_from_parts(
+        file_name,
+        file_path,
+        bytes.0,
+        annotations,
+        edit_blocks,
+        page,
+        dirty,
+    )?;
+    spawn_detached_window(&app, &pending, doc, x, y)
+}
+
+fn spawn_detached_window(
+    app: &tauri::AppHandle,
+    pending: &PendingDetachedTabs,
+    doc: DetachedTab,
+    x: Option<f64>,
+    y: Option<f64>,
+) -> Result<String, String> {
+    let title = doc.file_name.clone();
+    let label = next_window_label();
+    if let Ok(mut map) = pending.0.lock() {
+        map.insert(label.clone(), doc);
+    }
+    if let Err(err) = spawn_slate_window(app, &label, &title, x, y) {
+        if let Ok(mut map) = pending.0.lock() {
+            map.remove(&label);
+        }
+        return Err(err);
+    }
+    Ok(label)
+}
+
+#[tauri::command]
+fn spawn_empty_window(app: tauri::AppHandle) -> Result<String, String> {
+    let label = next_window_label();
+    spawn_slate_window(&app, &label, "Slate", None, None)?;
+    Ok(label)
+}
+
+#[tauri::command]
+fn take_detached_tab(
+    window: WebviewWindow,
+    pending: State<'_, PendingDetachedTabs>,
+) -> Option<DetachedTab> {
+    pending.0.lock().ok()?.remove(window.label())
+}
+
+#[tauri::command]
+fn begin_tab_drag(
+    window: WebviewWindow,
+    drag: State<'_, ActiveTabDrag>,
+    file_name: String,
+    file_path: Option<String>,
+    bytes: DocBytes,
+    annotations: Option<serde_json::Value>,
+    edit_blocks: Option<serde_json::Value>,
+    page: Option<u32>,
+    dirty: Option<bool>,
+) -> Result<(), String> {
+    let payload = detached_tab_from_parts(
+        file_name,
+        file_path,
+        bytes.0,
+        annotations,
+        edit_blocks,
+        page,
+        dirty,
+    )?;
+    let mut slot = drag.0.lock().map_err(|e| e.to_string())?;
+    *slot = Some(LiveTabDrag {
+        source_label: window.label().to_string(),
+        payload,
+        claimed_by: None,
+        ended_at: None,
+    });
+    Ok(())
+}
+
+/// Le geste s'est terminé dans la barre (simple réordonnancement) ou a été
+/// abandonné avant le drag natif : on libère l'onglet préparé.
+#[tauri::command]
+fn cancel_tab_drag(window: WebviewWindow, drag: State<'_, ActiveTabDrag>) {
+    if let Ok(mut slot) = drag.0.lock() {
+        let owned = slot
+            .as_ref()
+            .map(|active| active.source_label == window.label() && active.ended_at.is_none())
+            .unwrap_or(false);
+        if owned {
+            *slot = None;
+        }
+    }
+}
+
+/// Vrai pendant un drag d'onglet et quelques secondes après sa fin : le `drop`
+/// HTML qui reçoit le fichier temporaire doit l'ignorer (ce n'est pas un PDF
+/// que l'utilisateur ouvre, c'est l'onglet lui-même).
+#[tauri::command]
+fn is_tab_drag_active(drag: State<'_, ActiveTabDrag>) -> bool {
+    let Ok(slot) = drag.0.lock() else {
+        return false;
+    };
+    match slot.as_ref() {
+        Some(active) => active
+            .ended_at
+            .map(|ended| ended.elapsed() < TAB_DRAG_LINGER)
+            .unwrap_or(true),
+        None => false,
+    }
+}
+
+#[tauri::command]
+fn claim_tab_drag(
+    window: WebviewWindow,
+    drag: State<'_, ActiveTabDrag>,
+) -> Option<DetachedTab> {
+    let mut slot = drag.0.lock().ok()?;
+    let active = slot.as_mut()?;
+    if active.source_label == window.label()
+        || active.claimed_by.is_some()
+        || active.ended_at.is_some()
+    {
+        return None;
+    }
+    active.claimed_by = Some(window.label().to_string());
+    Some(active.payload.clone())
+}
+
+fn tab_drag_temp_root() -> std::path::PathBuf {
+    std::env::temp_dir().join("slate-tab-drag")
+}
+
+fn sanitize_drag_file_name(name: &str) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|c| match c {
+            '/' | '\\' | ':' | '\0' => '_',
+            other => other,
+        })
+        .collect();
+    let trimmed = cleaned.trim();
+    let base = if trimmed.is_empty() { "document.pdf" } else { trimmed };
+    if base.to_ascii_lowercase().ends_with(".pdf") {
+        base.to_string()
+    } else {
+        format!("{base}.pdf")
+    }
+}
+
+/// Démarre le drag natif (AppKit/OLE) de l'onglet en cours : le PDF est glissé
+/// comme un vrai fichier. Un document propre déjà sur disque est glissé tel
+/// quel ; sinon on écrit une copie (export des éditions si fourni) dans un
+/// dossier temporaire. Commande synchrone : Tauri l'exécute sur le main thread,
+/// condition requise par `beginDraggingSessionWithItems:`.
+#[tauri::command]
+fn start_tab_native_drag(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    drag: State<'_, ActiveTabDrag>,
+    icon: Vec<u8>,
+    export_bytes: Option<DocBytes>,
+) -> Result<(), String> {
+    let (source_label, path) = {
+        let slot = drag.0.lock().map_err(|e| e.to_string())?;
+        let active = slot
+            .as_ref()
+            .filter(|active| active.source_label == window.label() && active.ended_at.is_none())
+            .ok_or_else(|| "no_active_tab_drag".to_string())?;
+        let on_disk = active
+            .payload
+            .file_path
+            .as_deref()
+            .filter(|_| !active.payload.dirty && export_bytes.is_none())
+            .map(std::path::PathBuf::from)
+            .filter(|p| p.is_file());
+        let path = match on_disk {
+            Some(path) => path,
+            None => {
+                let root = tab_drag_temp_root();
+                let _ = std::fs::remove_dir_all(&root);
+                let stamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis())
+                    .unwrap_or(1);
+                let dir = root.join(stamp.to_string());
+                std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+                let path = dir.join(sanitize_drag_file_name(&active.payload.file_name));
+                let bytes = export_bytes.as_deref().unwrap_or(&active.payload.bytes);
+                std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+                path
+            }
+        };
+        (active.source_label.clone(), path)
+    };
+    if icon.is_empty() {
+        return Err("missing_drag_icon".into());
+    }
+    start_native_file_drag(&window, path, icon, move |dropped| {
+        finish_native_tab_drag(&app, &source_label, dropped);
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn start_native_file_drag<F: Fn(bool) + Send + 'static>(
+    window: &WebviewWindow,
+    path: std::path::PathBuf,
+    icon: Vec<u8>,
+    on_end: F,
+) -> Result<(), String> {
+    drag::start_drag(
+        window,
+        drag::DragItem::Files(vec![path]),
+        drag::Image::Raw(icon),
+        move |result, _cursor| on_end(matches!(result, drag::DragResult::Dropped)),
+        drag::Options {
+            skip_animatation_on_cancel_or_failure: true,
+            mode: drag::DragMode::Copy,
+        },
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "linux")]
+fn start_native_file_drag<F: Fn(bool) + Send + 'static>(
+    _window: &WebviewWindow,
+    _path: std::path::PathBuf,
+    _icon: Vec<u8>,
+    _on_end: F,
+) -> Result<(), String> {
+    Err("native_tab_drag_unsupported".into())
+}
+
+/// Fin de la session de drag native (callback AppKit, main thread). Décide du
+/// sort de l'onglet et prévient la fenêtre source :
+/// - `claimed`  : une autre fenêtre Slate a déjà récupéré l'onglet (drop HTML) ;
+/// - `merged`   : lâché sur une autre fenêtre Slate → on lui pousse l'onglet ;
+/// - `local`    : lâché sur (ou annulé au-dessus de) la fenêtre source → rien ;
+/// - `copied`   : accepté par une app tierce (Finder, Mail…) → le fichier est parti,
+///                l'onglet reste ouvert ;
+/// - `detached` : annulé hors de toute cible → tear-off dans une nouvelle fenêtre.
+fn finish_native_tab_drag(app: &tauri::AppHandle, source_label: &str, dropped: bool) {
+    let drag = app.state::<ActiveTabDrag>();
+    let Ok(mut slot) = drag.0.lock() else {
+        return;
+    };
+    let Some(active) = slot.as_mut() else {
+        return;
+    };
+    if active.source_label != source_label || active.ended_at.is_some() {
+        return;
+    }
+    active.ended_at = Some(std::time::Instant::now());
+    let source = app.get_webview_window(source_label);
+    let cursor = source
+        .as_ref()
+        .and_then(|win| win.cursor_position().ok())
+        .map(|pos| (pos.x as f64, pos.y as f64));
+    let over_source = match (&source, cursor) {
+        (Some(win), Some((x, y))) => point_in_window(win, x, y).is_some(),
+        _ => false,
+    };
+
+    let action = if active.claimed_by.is_some() {
+        "claimed"
+    } else if over_source {
+        "local"
+    } else if dropped {
+        let merged = cursor
+            .and_then(|(x, y)| find_tab_merge_target(app, source_label, x, y))
+            .and_then(|(label, relative_x)| {
+                let target = app.get_webview_window(&label)?;
+                target
+                    .emit(
+                        "slate-merge-tab",
+                        MergeTabPayload {
+                            tab: active.payload.clone(),
+                            relative_x,
+                        },
+                    )
+                    .ok()?;
+                bring_window_to_front(&target);
+                Some(())
+            });
+        if merged.is_some() {
+            active.claimed_by = Some("merged".into());
+            "merged"
+        } else {
+            "copied"
+        }
+    } else {
+        let (x, y) = match (&source, cursor) {
+            (Some(win), Some((px, py))) => {
+                let scale = win.scale_factor().unwrap_or(1.0);
+                (Some(px / scale), Some(py / scale))
+            }
+            _ => (None, None),
+        };
+        let pending = app.state::<PendingDetachedTabs>();
+        match spawn_detached_window(app, &pending, active.payload.clone(), x, y) {
+            Ok(_) => "detached",
+            Err(_) => "local",
+        }
+    };
+    // Le fichier est parti ailleurs (ou en nouvelle fenêtre) : aucun `drop` HTML
+    // Slate n'est à attendre, on libère tout de suite pour qu'un vrai PDF déposé
+    // juste après soit bien ouvert.
+    if matches!(action, "copied" | "detached") {
+        *slot = None;
+    }
+    if let Some(win) = source {
+        let _ = win.emit(
+            "slate-tab-drag-ended",
+            TabDragEnded {
+                action: action.into(),
+            },
+        );
+    }
+}
+
+fn point_in_window(win: &WebviewWindow, phys_x: f64, phys_y: f64) -> Option<(f64, f64, f64)> {
+    let pos = win.inner_position().ok()?;
+    let size = win.inner_size().ok()?;
+    let scale = win.scale_factor().unwrap_or(1.0);
+    let left = pos.x as f64;
+    let top = pos.y as f64;
+    let width = size.width as f64;
+    let height = size.height as f64;
+    const PAD: f64 = 20.0;
+    // La barre d'onglets est sous la titlebar macOS : on accepte aussi un drop
+    // un peu au-dessus du webview (là où on vise « à côté » de l'onglet).
+    let top_pad = 56.0 * scale;
+    if phys_x + PAD < left
+        || phys_x - PAD > left + width
+        || phys_y + top_pad < top
+        || phys_y - PAD > top + height
+    {
+        return None;
+    }
+    Some((left, top, (phys_x - left) / scale))
+}
+
+fn find_tab_merge_target(
+    app: &tauri::AppHandle,
+    source_label: &str,
+    phys_x: f64,
+    phys_y: f64,
+) -> Option<(String, f64)> {
+    const TAB_STRIP_H: f64 = 72.0;
+    let mut strip_hit = None;
+    let mut window_hit = None;
+    for (label, win) in app.webview_windows() {
+        if label == source_label {
+            continue;
+        }
+        let Some((_left, top, relative_x)) = point_in_window(&win, phys_x, phys_y) else {
+            continue;
+        };
+        let scale = win.scale_factor().unwrap_or(1.0);
+        if phys_y <= top + TAB_STRIP_H * scale {
+            strip_hit = Some((label, relative_x));
+        } else {
+            window_hit = Some((label, relative_x));
+        }
+    }
+    strip_hit.or(window_hit)
+}
+
+#[tauri::command]
+fn quit_application(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
+pub(crate) fn bring_window_to_front(window: &tauri::WebviewWindow) {
     let _ = window.show();
     let _ = window.unminimize();
     let _ = window.set_focus();
@@ -114,20 +679,112 @@ fn take_pending_print_files(state: State<'_, PendingPrints>) -> Vec<FileResult> 
 }
 
 #[tauri::command]
-async fn analyze_pdf_page(bytes: Vec<u8>, page: u32) -> Result<pdf_engine::PdfAnalysis, String> {
+async fn analyze_pdf_page(bytes: DocBytes, page: u32) -> Result<pdf_engine::PdfAnalysis, String> {
     pdf_engine::analyze_pdf_page(&bytes, page)
+}
+
+/// Réparation à l'ouverture (MuPDF) : réécrit les PDF dont la structure est
+/// cassée (xref corrompue, objets tronqués) pour que l'édition native
+/// (lopdf/PDFium) fonctionne. Réponse binaire : octets réparés, ou VIDE si le
+/// document est déjà sain (les octets d'origine restent la référence).
+/// Requête binaire brute (Uint8Array côté JS) : pas de tableau JSON à
+/// sérialiser, ce qui coûtait plusieurs secondes sur un gros document.
+#[tauri::command]
+async fn repair_pdf_bytes(request: tauri::ipc::Request<'_>) -> Result<tauri::ipc::Response, String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("raw_body_required".to_string());
+    };
+    match alto_pdf_engine::pdf_mupdf::repair_pdf_if_needed(bytes)? {
+        Some(repaired) => Ok(tauri::ipc::Response::new(repaired)),
+        None => Ok(tauri::ipc::Response::new(Vec::<u8>::new())),
+    }
 }
 
 /// Met en cache les octets d'un document (envoyés une seule fois à l'ouverture/
 /// premier scan). Borne mémoire : on purge si trop d'entrées s'accumulent.
 #[tauri::command]
-fn cache_document(state: State<'_, DocCache>, id: String, bytes: Vec<u8>) {
+fn cache_document(state: State<'_, DocCache>, views: State<'_, ViewCache>, id: String, bytes: DocBytes) {
+    let shared = shared_view_bytes(&views, &bytes.0).unwrap_or_else(|| Arc::new(bytes.0));
     if let Ok(mut map) = state.0.lock() {
         if map.len() >= 8 {
             map.clear();
         }
-        map.insert(id, bytes);
+        map.insert(id, shared);
     }
+}
+
+/// Copie déjà détenue par le cache d'affichage pour ces mêmes octets : un même
+/// document n'occupe la mémoire qu'une fois, quel que soit le cache qui le tient.
+fn shared_view_bytes(views: &ViewCache, bytes: &[u8]) -> Option<Arc<Vec<u8>>> {
+    let map = views.0.lock().ok()?;
+    map.values()
+        .find(|(_, held)| held.as_slice() == bytes)
+        .map(|(_, held)| held.clone())
+}
+
+/// Enregistre les octets du document affiché dans l'onglet `tab` (génération
+/// `generation`). `doc` : id `DocCache` à amorcer avec la même copie s'il est
+/// vide, ce qui évite un second envoi à l'entrée en édition.
+#[tauri::command]
+fn cache_view_document(
+    window: WebviewWindow,
+    views: State<'_, ViewCache>,
+    docs: State<'_, DocCache>,
+    tab: String,
+    generation: u64,
+    bytes: DocBytes,
+    doc: Option<String>,
+) -> Result<(), String> {
+    let shared = {
+        let map = docs.0.lock().map_err(|_| "cache lock poisoned".to_string())?;
+        map.values().find(|held| held.as_slice() == bytes.0.as_slice()).cloned()
+    }
+    .unwrap_or_else(|| Arc::new(bytes.0));
+    if let Some(id) = doc {
+        let mut map = docs.0.lock().map_err(|_| "cache lock poisoned".to_string())?;
+        if map.len() >= 8 && !map.contains_key(&id) {
+            map.clear();
+        }
+        map.entry(id).or_insert_with(|| shared.clone());
+    }
+    let mut map = views.0.lock().map_err(|_| "view cache lock poisoned".to_string())?;
+    map.insert((window.label().to_string(), tab), (generation, shared));
+    Ok(())
+}
+
+#[tauri::command]
+fn drop_view_document(window: WebviewWindow, views: State<'_, ViewCache>, tab: String) -> Result<(), String> {
+    let mut map = views.0.lock().map_err(|_| "view cache lock poisoned".to_string())?;
+    map.remove(&(window.label().to_string(), tab));
+    Ok(())
+}
+
+/// Page à l'écran : RGBA brut `width`×`height` (réponse binaire), rendu par
+/// PDFium depuis le document affiché de l'onglet. `cache_miss` si l'onglet n'a
+/// pas encore envoyé ce document (génération absente ou dépassée).
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+async fn render_view_page(
+    window: WebviewWindow,
+    views: State<'_, ViewCache>,
+    tab: String,
+    generation: u64,
+    page: u32,
+    scale: f64,
+    width: u32,
+    height: u32,
+) -> Result<tauri::ipc::Response, String> {
+    let bytes = {
+        let map = views.0.lock().map_err(|_| "view cache lock poisoned".to_string())?;
+        match map.get(&(window.label().to_string(), tab)) {
+            Some((held, bytes)) if *held == generation => bytes.clone(),
+            _ => return Err("cache_miss".to_string()),
+        }
+    };
+    tauri::async_runtime::spawn_blocking(move || pdf_engine::render_page_rgba_for_view(&bytes, page, scale, width, height))
+        .await
+        .map_err(|e| e.to_string())?
+        .map(tauri::ipc::Response::new)
 }
 
 /// Analyse une page à partir des octets DÉJÀ en cache (par id). Renvoie une erreur
@@ -149,6 +806,205 @@ async fn analyze_pdf_page_cached(
     pdf_engine::analyze_pdf_page(&bytes, page)
 }
 
+/// Édition de texte NATIVE (façon Adobe) : modifie l'objet texte du PDF en
+/// place via PDFium (police embarquée réutilisée), stocke le document édité
+/// dans le cache (les analyses/exports suivants la voient), et renvoie la
+/// bande re-rendue + la ré-analyse de la page. Le frontend récupère les octets
+/// complets via `get_cached_document` au moment de la synchronisation.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+async fn edit_pdf_text_cached(
+    state: State<'_, DocCache>,
+    baselines: State<'_, DocBaselines>,
+    id: String,
+    page: u32,
+    removed: Vec<u32>,
+    insert_after: i64,
+    insert_before: i64,
+    inserted: String,
+    strip_top: f64,
+    strip_height: f64,
+    scale: f64,
+    expected_block_text: Option<String>,
+    block_rect: Option<Vec<f64>>,
+    replace_whitespace_run: bool,
+) -> Result<pdf_engine::NativeTextEditReport, String> {
+    let bytes = {
+        let map = state.0.lock().map_err(|_| "cache lock poisoned".to_string())?;
+        map.get(&id).cloned()
+    };
+    let Some(bytes) = bytes else {
+        return Err("cache_miss".to_string());
+    };
+    let rect = block_rect
+        .as_ref()
+        .filter(|r| r.len() == 4)
+        .map(|r| (r[0], r[1], r[2], r[3]));
+    // Versionnage : mémoriser le flux de contenu de la page AVANT sa toute
+    // première édition (point de restauration exact pour l'undo).
+    if let Ok(mut docs) = baselines.0.lock() {
+        if docs.len() >= 8 && !docs.contains_key(&id) {
+            docs.clear();
+        }
+        let pages = docs.entry(id.clone()).or_default();
+        if !pages.contains_key(&page) {
+            if let Ok(snapshot) = alto_pdf_engine::pdf_versioning::page_baseline(&bytes, page) {
+                pages.insert(page, snapshot);
+            }
+        }
+    }
+    let outcome = pdf_engine::edit_pdf_text_with_options(
+        &bytes,
+        page,
+        &removed,
+        insert_after,
+        insert_before,
+        &inserted,
+        strip_top,
+        strip_height,
+        scale,
+        expected_block_text.as_deref(),
+        rect,
+        replace_whitespace_run,
+    )?;
+    if let Ok(mut map) = state.0.lock() {
+        map.insert(id, Arc::new(outcome.bytes));
+    }
+    Ok(outcome.report)
+}
+
+/// Restaure le flux de contenu D'ORIGINE d'une page dans le document en cache
+/// (undo par versionnage). Renvoie false si aucun point de restauration
+/// n'existe pour cette page (aucune édition native depuis l'ouverture) — le
+/// frontend retombe alors sur la réconciliation par diff.
+#[tauri::command]
+fn restore_native_page(
+    state: State<'_, DocCache>,
+    baselines: State<'_, DocBaselines>,
+    id: String,
+    page: u32,
+) -> Result<bool, String> {
+    let baseline = {
+        let docs = baselines
+            .0
+            .lock()
+            .map_err(|_| "baseline lock poisoned".to_string())?;
+        docs.get(&id).and_then(|pages| pages.get(&page)).cloned()
+    };
+    let Some(snapshot) = baseline else {
+        return Ok(false);
+    };
+    let bytes = {
+        let map = state.0.lock().map_err(|_| "cache lock poisoned".to_string())?;
+        map.get(&id).cloned()
+    };
+    let Some(bytes) = bytes else {
+        return Err("cache_miss".to_string());
+    };
+    let restored =
+        alto_pdf_engine::pdf_versioning::restore_page_baselines(&bytes, &[(page, snapshot)])?;
+    if let Ok(mut map) = state.0.lock() {
+        map.insert(id, Arc::new(restored));
+    }
+    Ok(true)
+}
+
+/// Rendu PDFium pleine page (PNG, réponse binaire) à partir du document en cache. Le
+/// frontend bascule le canvas dessus à l'entrée en édition native : les bandes
+/// re-rendues après chaque frappe (même rasteriseur) deviennent alors
+/// pixel-identiques hors caractères réellement modifiés — plus aucun
+/// « changement d'état » perçu à la première frappe.
+/// `hidden` : zones [x0,y0,x1,y1] (points, origine haut-gauche) des blocs
+/// supprimés, dont le texte est retiré du rendu (fond intact, pas de masque).
+#[tauri::command]
+async fn render_pdf_page_cached(
+    state: State<'_, DocCache>,
+    id: String,
+    page: u32,
+    scale: f64,
+    hidden: Option<Vec<Vec<f64>>>,
+) -> Result<tauri::ipc::Response, String> {
+    let bytes = {
+        let map = state.0.lock().map_err(|_| "cache lock poisoned".to_string())?;
+        map.get(&id).cloned()
+    };
+    let Some(bytes) = bytes else {
+        return Err("cache_miss".to_string());
+    };
+    let regions = hidden
+        .unwrap_or_default()
+        .into_iter()
+        .map(|r| match r.as_slice() {
+            [x0, y0, x1, y1] if x1 > x0 && y1 > y0 => Ok((*x0, *y0, *x1, *y1)),
+            _ => Err("invalid_hidden_region".to_string()),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        if regions.is_empty() {
+            pdf_engine::render_pdf_page_png_bytes(&bytes, page, scale)
+        } else {
+            pdf_edit::render_page_without_text(&bytes, page, scale, &regions)
+        }
+    })
+        .await
+        .map_err(|e| e.to_string())?
+        .map(|(png, _, _)| tauri::ipc::Response::new(png))
+}
+
+/// Miniature JPEG (réponse binaire) d'une page du document en cache, pour le
+/// tiroir des pages. `cache_miss` : même protocole que `analyze_pdf_page_cached`.
+#[tauri::command]
+async fn render_pdf_thumbnail_cached(
+    state: State<'_, DocCache>,
+    id: String,
+    page: u32,
+    width: u32,
+) -> Result<tauri::ipc::Response, String> {
+    let bytes = {
+        let map = state.0.lock().map_err(|_| "cache lock poisoned".to_string())?;
+        map.get(&id).cloned()
+    };
+    let Some(bytes) = bytes else {
+        return Err("cache_miss".to_string());
+    };
+    tauri::async_runtime::spawn_blocking(move || pdf_engine::render_pdf_page_thumbnail(&bytes, page, width))
+        .await
+        .map_err(|e| e.to_string())?
+        .map(tauri::ipc::Response::new)
+}
+
+/// Octets COURANTS du document en cache (édités nativement inclus). Réponse
+/// binaire brute (pas de JSON) : c'est le document complet.
+#[tauri::command]
+fn get_cached_document(state: State<'_, DocCache>, id: String) -> Result<tauri::ipc::Response, String> {
+    let map = state.0.lock().map_err(|_| "cache lock poisoned".to_string())?;
+    match map.get(&id) {
+        Some(bytes) => Ok(tauri::ipc::Response::new(bytes.to_vec())),
+        None => Err("cache_miss".to_string()),
+    }
+}
+
+/// Extrait les polices embarquées d'une page (octets base64 indexés par nom),
+/// à partir du document déjà en cache. Sert à charger la VRAIE police dans la
+/// WebView (FontFace) pour un aperçu d'édition fidèle au natif. Renvoie
+/// `cache_miss` si le document n'a pas encore été mis en cache (même protocole
+/// que `analyze_pdf_page_cached`).
+#[tauri::command]
+async fn extract_embedded_fonts_cached(
+    state: State<'_, DocCache>,
+    id: String,
+    page: u32,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    let bytes = {
+        let map = state.0.lock().map_err(|_| "cache lock poisoned".to_string())?;
+        map.get(&id).cloned()
+    };
+    let Some(bytes) = bytes else {
+        return Err("cache_miss".to_string());
+    };
+    pdf_engine::extract_embedded_fonts(&bytes, page)
+}
+
 #[tauri::command]
 fn alto_debug(line: String) {
     use std::io::Write;
@@ -163,7 +1019,7 @@ fn alto_debug(line: String) {
 
 #[tauri::command]
 async fn ocr_page(
-    image_bytes: Vec<u8>,
+    image_bytes: DocBytes,
     language: Option<String>,
 ) -> Result<Vec<ocr::OcrBlock>, String> {
     ocr::recognize_png(&image_bytes, language)
@@ -171,7 +1027,7 @@ async fn ocr_page(
 
 #[tauri::command]
 async fn ocr_pdf_page(
-    bytes: Vec<u8>,
+    bytes: DocBytes,
     page: u32,
     language: Option<String>,
 ) -> Result<ocr::OcrPageResult, String> {
@@ -185,6 +1041,69 @@ async fn export_edited_pdf(
     pdf_engine::export_flattened_pdf(pages).map(tauri::ipc::Response::new)
 }
 
+/// Export hybride : ne ré-aplatit que les pages éditées (jpeg fourni) et
+/// conserve les autres en texte natif depuis le PDF d'origine.
+#[tauri::command]
+async fn export_edited_pdf_native(
+    original: DocBytes,
+    pages: Vec<pdf_engine::EditedPage>,
+) -> Result<tauri::ipc::Response, String> {
+    pdf_engine::export_edited_pdf_native(&original, pages).map(tauri::ipc::Response::new)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VectorExportResponse {
+    bytes: DocBytes,
+    applied: usize,
+    warnings: Vec<String>,
+}
+
+#[tauri::command]
+async fn export_edited_pdf_vector(
+    original: DocBytes,
+    mut operations: Vec<pdf_engine::VectorTextOperation>,
+) -> Result<VectorExportResponse, String> {
+    // Résout chaque famille demandée en octets de police embarquables (font_kit).
+    // Le moteur (pdf-engine) ne dépend pas de font_kit : on lui passe les octets.
+    // Une seule résolution (et un seul sous-ensemble, couvrant tous les textes)
+    // par (famille, gras, italique) : les opérations partagent les mêmes octets.
+    let mut resolved: std::collections::HashMap<(String, bool, bool), Option<Vec<u8>>> = std::collections::HashMap::new();
+    for op in operations.iter() {
+        if let Some(family) = op.font_family.as_deref() {
+            resolved
+                .entry((family.to_string(), op.bold, op.italic))
+                .or_insert_with(|| None);
+        }
+    }
+    for ((family, bold, italic), bytes) in resolved.iter_mut() {
+        let text: String = operations
+            .iter()
+            .filter(|op| {
+                op.font_family.as_deref() == Some(family.as_str())
+                    && op.bold == *bold
+                    && op.italic == *italic
+            })
+            .map(|op| op.text.as_str())
+            .collect();
+        *bytes = system_fonts::font_data_for_family(family, *bold, *italic, &text);
+    }
+    for op in operations.iter_mut() {
+        if let Some(family) = op.font_family.clone() {
+            op.font_bytes = resolved
+                .get(&(family, op.bold, op.italic))
+                .cloned()
+                .flatten();
+        }
+    }
+    let result = pdf_engine::export_edited_pdf_vector(&original, operations)?;
+    Ok(VectorExportResponse {
+        bytes: result.bytes.into(),
+        applied: result.applied,
+        warnings: result.warnings,
+    })
+}
+
 /// Liste les familles de polices installées sur la machine, pour le sélecteur
 /// de police de l'éditeur. Énumération potentiellement coûteuse → exécutée hors
 /// du thread principal.
@@ -196,59 +1115,84 @@ async fn list_system_fonts() -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
-async fn merge_pdfs(sources: Vec<Vec<u8>>) -> Result<tauri::ipc::Response, String> {
-    pdf_ops::merge_pdfs(sources).map(tauri::ipc::Response::new)
+async fn merge_pdfs(sources: Vec<DocBytes>) -> Result<tauri::ipc::Response, String> {
+    pdf_ops::merge_pdfs(sources.into_iter().map(Vec::from).collect()).map(tauri::ipc::Response::new)
 }
 
 #[tauri::command]
 async fn encrypt_pdf(
-    bytes: Vec<u8>,
+    bytes: DocBytes,
     user_password: String,
     owner_password: Option<String>,
 ) -> Result<tauri::ipc::Response, String> {
-    pdf_ops::encrypt_pdf(bytes, user_password, owner_password).map(tauri::ipc::Response::new)
+    pdf_ops::encrypt_pdf(bytes.0, user_password, owner_password).map(tauri::ipc::Response::new)
 }
 
 #[tauri::command]
 async fn compress_pdf(
-    bytes: Vec<u8>,
+    bytes: DocBytes,
     level: Option<String>,
 ) -> Result<tauri::ipc::Response, String> {
     let level = level.unwrap_or_else(|| "medium".to_string());
-    pdf_compress::compress_pdf_images(bytes, &level).map(tauri::ipc::Response::new)
+    pdf_compress::compress_pdf_images(bytes.0, &level).map(tauri::ipc::Response::new)
 }
 
 #[tauri::command]
-async fn repair_pdf(bytes: Vec<u8>) -> Result<tauri::ipc::Response, String> {
+async fn repair_pdf(bytes: DocBytes) -> Result<tauri::ipc::Response, String> {
     pdf_engine::repair_pdf(&bytes).map(tauri::ipc::Response::new)
 }
 
+/// Enregistrement final : réécriture complète du document. Les éditions
+/// natives travaillent en mise à jour incrémentale (rapide, mais les anciennes
+/// révisions restent dans le fichier) ; ici on repart d'un fichier propre, sans
+/// historique ni objets orphelins.
 #[tauri::command]
-async fn remove_annotations(bytes: Vec<u8>) -> Result<tauri::ipc::Response, String> {
-    pdf_ops::remove_annotations(bytes).map(tauri::ipc::Response::new)
+async fn compact_pdf(bytes: DocBytes) -> Result<tauri::ipc::Response, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        alto_pdf_engine::pdf_incremental::compact_document(&bytes)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map(tauri::ipc::Response::new)
+}
+
+#[tauri::command]
+async fn remove_annotations(bytes: DocBytes) -> Result<tauri::ipc::Response, String> {
+    pdf_ops::remove_annotations(bytes.0).map(tauri::ipc::Response::new)
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RemoveBlankResult {
-    bytes: Vec<u8>,
+    bytes: DocBytes,
     removed: Vec<u32>,
 }
 
 #[tauri::command]
-async fn remove_blank_pages(bytes: Vec<u8>) -> Result<RemoveBlankResult, String> {
+async fn remove_blank_pages(bytes: DocBytes) -> Result<RemoveBlankResult, String> {
     let (bytes, removed) = pdf_engine::remove_blank_pages(&bytes)?;
-    Ok(RemoveBlankResult { bytes, removed })
+    Ok(RemoveBlankResult { bytes: bytes.into(), removed })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeskewResponse {
+    bytes: DocBytes,
+    corrected: Vec<ocr::DeskewedPage>,
 }
 
 #[tauri::command]
-async fn deskew_pdf(bytes: Vec<u8>) -> Result<ocr::DeskewResult, String> {
-    ocr::deskew_pdf(&bytes)
+async fn deskew_pdf(bytes: DocBytes) -> Result<DeskewResponse, String> {
+    let result = ocr::deskew_pdf(&bytes)?;
+    Ok(DeskewResponse {
+        bytes: result.bytes.into(),
+        corrected: result.corrected,
+    })
 }
 
 #[tauri::command]
 async fn ocr_searchable_pdf(
-    bytes: Vec<u8>,
+    bytes: DocBytes,
     language: Option<String>,
 ) -> Result<tauri::ipc::Response, String> {
     let (out, _count) = ocr::ocr_searchable_pdf(&bytes, language)?;
@@ -257,7 +1201,7 @@ async fn ocr_searchable_pdf(
 
 #[tauri::command]
 async fn sign_pdf_pades(
-    bytes: Vec<u8>,
+    bytes: DocBytes,
     p12_path: String,
     password: String,
     reason: Option<String>,
@@ -271,7 +1215,7 @@ async fn sign_pdf_pades(
 
 #[tauri::command]
 async fn watermark_pdf(
-    bytes: Vec<u8>,
+    bytes: DocBytes,
     text: String,
     font_size: f64,
     opacity: f64,
@@ -285,7 +1229,7 @@ async fn watermark_pdf(
 
 #[tauri::command]
 async fn add_page_numbers(
-    bytes: Vec<u8>,
+    bytes: DocBytes,
     position: String,
     start_at: i64,
     font_size: f64,
@@ -295,19 +1239,33 @@ async fn add_page_numbers(
         .map(tauri::ipc::Response::new)
 }
 
+/// En-tête ou pied de page : `template` accepte `{page}` et `{total}`.
 #[tauri::command]
-async fn images_to_pdf(images: Vec<Vec<u8>>) -> Result<tauri::ipc::Response, String> {
-    pdf_tools::images_to_pdf(images).map(tauri::ipc::Response::new)
+async fn add_page_text(
+    bytes: DocBytes,
+    template: String,
+    position: String,
+    start_at: i64,
+    font_size: f64,
+    margin: f64,
+) -> Result<tauri::ipc::Response, String> {
+    pdf_tools::add_page_text(&bytes, &template, &position, start_at, font_size, margin)
+        .map(tauri::ipc::Response::new)
 }
 
 #[tauri::command]
-async fn remove_password(bytes: Vec<u8>, password: String) -> Result<tauri::ipc::Response, String> {
+async fn images_to_pdf(images: Vec<DocBytes>) -> Result<tauri::ipc::Response, String> {
+    pdf_tools::images_to_pdf(images.into_iter().map(Vec::from).collect()).map(tauri::ipc::Response::new)
+}
+
+#[tauri::command]
+async fn remove_password(bytes: DocBytes, password: String) -> Result<tauri::ipc::Response, String> {
     pdf_tools::remove_password(&bytes, &password).map(tauri::ipc::Response::new)
 }
 
 #[tauri::command]
 async fn crop_pdf(
-    bytes: Vec<u8>,
+    bytes: DocBytes,
     left: f64,
     top: f64,
     right: f64,
@@ -317,57 +1275,73 @@ async fn crop_pdf(
 }
 
 #[tauri::command]
-async fn flatten_pdf(bytes: Vec<u8>) -> Result<tauri::ipc::Response, String> {
+async fn flatten_pdf(bytes: DocBytes) -> Result<tauri::ipc::Response, String> {
     pdf_tools::flatten(&bytes).map(tauri::ipc::Response::new)
 }
 
 #[tauri::command]
-async fn extract_images(bytes: Vec<u8>) -> Result<Vec<pdf_tools::ExtractedImage>, String> {
+async fn extract_images(bytes: DocBytes) -> Result<Vec<pdf_tools::ExtractedImage>, String> {
     pdf_tools::extract_images(&bytes)
 }
 
 #[tauri::command]
-async fn list_form_fields(bytes: Vec<u8>) -> Result<Vec<pdf_forms::FormField>, String> {
+async fn list_form_fields(bytes: DocBytes) -> Result<Vec<pdf_forms::FormField>, String> {
     pdf_forms::list_form_fields(&bytes)
 }
 
 #[tauri::command]
 async fn fill_form_fields(
-    bytes: Vec<u8>,
+    bytes: DocBytes,
     values: std::collections::HashMap<String, String>,
 ) -> Result<tauri::ipc::Response, String> {
     pdf_forms::fill_form_fields(&bytes, values).map(tauri::ipc::Response::new)
 }
 
+/// Bouton image d'un formulaire (équivalent du `buttonImportIcon()` d'Acrobat).
+#[tauri::command]
+async fn set_form_button_image(
+    bytes: DocBytes,
+    field_name: String,
+    image: DocBytes,
+) -> Result<tauri::ipc::Response, String> {
+    pdf_forms::set_form_button_image(&bytes, &field_name, &image).map(tauri::ipc::Response::new)
+}
+
+/// Après un remplissage PDF.js : bordures « soulignées » restaurées.
+#[tauri::command]
+async fn normalize_form_appearances(bytes: DocBytes) -> Result<tauri::ipc::Response, String> {
+    pdf_forms::normalize_form_appearances(&bytes).map(tauri::ipc::Response::new)
+}
+
 #[tauri::command]
 async fn auto_redact(
-    bytes: Vec<u8>,
+    bytes: DocBytes,
     terms: Vec<String>,
     match_case: bool,
 ) -> Result<AutoRedactResult, String> {
     let (out, count) = pdf_tools::auto_redact(&bytes, &terms, match_case)?;
-    Ok(AutoRedactResult { bytes: out, count })
+    Ok(AutoRedactResult { bytes: out.into(), count })
 }
 
 #[derive(serde::Serialize)]
 struct AutoRedactResult {
-    bytes: Vec<u8>,
+    bytes: DocBytes,
     count: usize,
 }
 
 #[tauri::command]
-async fn sanitize_pdf(bytes: Vec<u8>) -> Result<tauri::ipc::Response, String> {
+async fn sanitize_pdf(bytes: DocBytes) -> Result<tauri::ipc::Response, String> {
     pdf_tools::sanitize(&bytes).map(tauri::ipc::Response::new)
 }
 
 #[tauri::command]
-async fn get_bookmarks(bytes: Vec<u8>) -> Result<Vec<pdf_tools::BookmarkItem>, String> {
+async fn get_bookmarks(bytes: DocBytes) -> Result<Vec<pdf_tools::BookmarkItem>, String> {
     pdf_tools::get_bookmarks(&bytes)
 }
 
 #[tauri::command]
 async fn set_bookmarks(
-    bytes: Vec<u8>,
+    bytes: DocBytes,
     items: Vec<pdf_tools::BookmarkItem>,
 ) -> Result<tauri::ipc::Response, String> {
     pdf_tools::set_bookmarks(&bytes, &items).map(tauri::ipc::Response::new)
@@ -405,31 +1379,34 @@ fn connect_claude_desktop() -> Result<String, String> {
         .ok_or("Binaire alto-mcp introuvable à côté de l'application.")?;
 
     let config_path = config_dir.join("claude_desktop_config.json");
+    // Fichier illisible ou de forme inattendue : on refuse plutôt que d'écraser
+    // les autres serveurs MCP et réglages de l'utilisateur.
+    let unreadable = || {
+        format!(
+            "Le fichier de configuration de Claude Desktop est illisible ({}). Corrige-le ou supprime-le, puis réessaie.",
+            config_path.display()
+        )
+    };
     let mut config: serde_json::Value = if config_path.exists() {
         let raw = std::fs::read_to_string(&config_path).map_err(|e| e.to_string())?;
-        serde_json::from_str(&raw).unwrap_or_else(|_| serde_json::json!({}))
+        if raw.trim().is_empty() {
+            serde_json::json!({})
+        } else {
+            serde_json::from_str(&raw).map_err(|_| unreadable())?
+        }
     } else {
         serde_json::json!({})
     };
-    if !config.is_object() {
-        config = serde_json::json!({});
-    }
 
-    let config_obj = config
-        .as_object_mut()
-        .ok_or("Configuration Claude invalide.")?;
+    let config_obj = config.as_object_mut().ok_or_else(unreadable)?;
     let servers = config_obj
         .entry("mcpServers")
         .or_insert_with(|| serde_json::json!({}));
-    if !servers.is_object() {
-        *servers = serde_json::json!({});
-    }
-    if let Some(servers_obj) = servers.as_object_mut() {
-        servers_obj.insert(
-            "alto-pdf".to_string(),
-            serde_json::json!({ "command": mcp_path.to_string_lossy() }),
-        );
-    }
+    let servers_obj = servers.as_object_mut().ok_or_else(unreadable)?;
+    servers_obj.insert(
+        "alto-pdf".to_string(),
+        serde_json::json!({ "command": mcp_path.to_string_lossy() }),
+    );
 
     let serialized = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
     std::fs::write(&config_path, serialized).map_err(|e| e.to_string())?;
@@ -438,37 +1415,138 @@ fn connect_claude_desktop() -> Result<String, String> {
 
 #[tauri::command]
 async fn rotate_pages(
-    bytes: Vec<u8>,
+    bytes: DocBytes,
     page_numbers: Vec<u32>,
     angle: i32,
 ) -> Result<tauri::ipc::Response, String> {
-    pdf_ops::rotate_pages(bytes, page_numbers, angle).map(tauri::ipc::Response::new)
+    pdf_ops::rotate_pages(bytes.0, page_numbers, angle).map(tauri::ipc::Response::new)
 }
 
 #[tauri::command]
 async fn delete_pages(
-    bytes: Vec<u8>,
+    bytes: DocBytes,
     page_numbers: Vec<u32>,
 ) -> Result<tauri::ipc::Response, String> {
-    pdf_ops::delete_pages(bytes, page_numbers).map(tauri::ipc::Response::new)
+    pdf_ops::delete_pages(bytes.0, page_numbers).map(tauri::ipc::Response::new)
 }
 
 #[tauri::command]
 async fn extract_pages(
-    bytes: Vec<u8>,
+    bytes: DocBytes,
     page_numbers: Vec<u32>,
 ) -> Result<tauri::ipc::Response, String> {
-    pdf_ops::extract_pages(bytes, page_numbers).map(tauri::ipc::Response::new)
+    pdf_ops::extract_pages(bytes.0, page_numbers).map(tauri::ipc::Response::new)
 }
 
 #[tauri::command]
-async fn reorder_pages(bytes: Vec<u8>, new_order: Vec<u32>) -> Result<tauri::ipc::Response, String> {
-    pdf_ops::reorder_pages(bytes, new_order).map(tauri::ipc::Response::new)
+async fn reorder_pages(bytes: DocBytes, new_order: Vec<u32>) -> Result<tauri::ipc::Response, String> {
+    pdf_ops::reorder_pages(bytes.0, new_order).map(tauri::ipc::Response::new)
 }
 
 #[tauri::command]
-async fn document_properties(bytes: Vec<u8>) -> Result<pdf_ops::PdfProperties, String> {
-    pdf_ops::document_properties(bytes)
+async fn document_properties(bytes: DocBytes) -> Result<pdf_ops::PdfProperties, String> {
+    pdf_ops::document_properties(bytes.0)
+}
+
+#[tauri::command]
+async fn set_pdf_metadata(
+    bytes: DocBytes,
+    title: Option<String>,
+    author: Option<String>,
+    subject: Option<String>,
+    keywords: Option<String>,
+) -> Result<tauri::ipc::Response, String> {
+    pdf_edit::set_metadata(
+        &bytes,
+        title.as_deref(),
+        author.as_deref(),
+        subject.as_deref(),
+        keywords.as_deref(),
+    )
+    .map(tauri::ipc::Response::new)
+}
+
+#[tauri::command]
+async fn convert_pdf_colors_fogra39(
+    bytes: DocBytes,
+    icc_path: Option<String>,
+) -> Result<tauri::ipc::Response, String> {
+    // Ghostscript peut prendre plusieurs secondes : on sort du thread async Tauri.
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        pdf_color::convert_to_fogra39(&bytes, icc_path.as_deref())
+    })
+    .await
+    .map_err(|e| format!("Conversion interrompue : {e}"))??;
+    Ok(tauri::ipc::Response::new(result.bytes))
+}
+
+#[tauri::command]
+async fn fogra39_profile_status() -> Result<Option<String>, String> {
+    Ok(pdf_color::fogra39_profile_available())
+}
+
+#[tauri::command]
+async fn list_printers() -> Result<Vec<print_cups::PrinterInfo>, String> {
+    tauri::async_runtime::spawn_blocking(print_cups::list_printers)
+        .await
+        .map_err(|e| format!("list_printers interrompu : {e}"))?
+}
+
+#[tauri::command]
+async fn list_paper_sizes(printer: String) -> Result<Vec<print_cups::PaperSize>, String> {
+    tauri::async_runtime::spawn_blocking(move || print_cups::list_paper_sizes(&printer))
+        .await
+        .map_err(|e| format!("list_paper_sizes interrompu : {e}"))?
+}
+
+/// Recadre une étiquette sur son contenu et l’adapte au format cible.
+///
+/// N’altère jamais le document ouvert dans l’éditeur : la conversion porte
+/// uniquement sur les octets qu’on s’apprête à envoyer à l’imprimante (ou à
+/// afficher dans l’aperçu du panneau).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LabelFitResponse {
+    bytes: DocBytes,
+    scale: f64,
+    source_width_pt: f64,
+    source_height_pt: f64,
+    compacted_gutters: usize,
+}
+
+#[tauri::command]
+async fn fit_label_to_media(
+    bytes: DocBytes,
+    target: print_layout::LabelTarget,
+) -> Result<LabelFitResponse, String> {
+    let result =
+        tauri::async_runtime::spawn_blocking(move || print_layout::fit_label_to_media(&bytes, &target))
+            .await
+            .map_err(|e| format!("Recadrage d’étiquette interrompu : {e}"))??;
+    Ok(LabelFitResponse {
+        bytes: result.bytes.into(),
+        scale: result.scale,
+        source_width_pt: result.source_width_pt,
+        source_height_pt: result.source_height_pt,
+        compacted_gutters: result.compacted_gutters,
+    })
+}
+
+#[tauri::command]
+async fn list_printer_options(printer: String) -> Result<Vec<print_cups::PrinterOption>, String> {
+    tauri::async_runtime::spawn_blocking(move || print_cups::list_printer_options(&printer))
+        .await
+        .map_err(|e| format!("list_printer_options interrompu : {e}"))?
+}
+
+#[tauri::command]
+async fn print_pdf_with_options(
+    bytes: DocBytes,
+    options: print_cups::PrintOptions,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || print_cups::print_pdf_with_options(&bytes, &options))
+        .await
+        .map_err(|e| format!("Impression interrompue : {e}"))?
 }
 
 #[tauri::command]
@@ -478,9 +1556,48 @@ async fn read_pdf_path(path: String) -> Result<tauri::ipc::Response, String> {
         .map_err(|e| e.to_string())
 }
 
+fn handler_id_is_slate(id: &str) -> bool {
+    let id = id.trim().to_ascii_lowercase();
+    if id.is_empty() {
+        return false;
+    }
+    if id.contains("soflution.slate") {
+        return true;
+    }
+    let file_name = id.rsplit(['\\', '/']).next().unwrap_or(&id);
+    let stem = file_name
+        .strip_suffix(".desktop")
+        .or_else(|| file_name.strip_suffix(".exe"))
+        .unwrap_or(file_name);
+    stem == "slate" || stem == "com.soflution.slate"
+}
+
 #[cfg(target_os = "macos")]
-#[tauri::command]
-fn set_default_pdf_handler() -> Result<(), String> {
+fn macos_role_handler(uti: &str, role: u32) -> Option<String> {
+    use core_foundation::base::TCFType;
+    use core_foundation::string::{CFString, CFStringRef};
+
+    #[link(name = "CoreServices", kind = "framework")]
+    extern "C" {
+        fn LSCopyDefaultRoleHandlerForContentType(
+            in_content_type: CFStringRef,
+            in_role: u32,
+        ) -> CFStringRef;
+    }
+
+    let content_type = CFString::new(uti);
+    let handler_ref = unsafe {
+        LSCopyDefaultRoleHandlerForContentType(content_type.as_concrete_TypeRef(), role)
+    };
+    if handler_ref.is_null() {
+        return None;
+    }
+    let handler = unsafe { CFString::wrap_under_create_rule(handler_ref) };
+    Some(handler.to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn macos_set_role_handler(uti: &str, role: u32) -> i32 {
     use core_foundation::base::TCFType;
     use core_foundation::string::{CFString, CFStringRef};
 
@@ -493,78 +1610,267 @@ fn set_default_pdf_handler() -> Result<(), String> {
         ) -> i32;
     }
 
-    const K_LS_ROLES_ALL: u32 = 0xFFFF_FFFF;
-    let content_type = CFString::new("com.adobe.pdf");
+    let content_type = CFString::new(uti);
     let bundle_id = CFString::new("com.soflution.slate");
-
-    let status = unsafe {
+    unsafe {
         LSSetDefaultRoleHandlerForContentType(
             content_type.as_concrete_TypeRef(),
-            K_LS_ROLES_ALL,
+            role,
             bundle_id.as_concrete_TypeRef(),
         )
-    };
-
-    if status == 0 {
-        Ok(())
-    } else {
-        Err(format!(
-            "Impossible de définir Slate par défaut (code {status})."
-        ))
     }
-}
-
-#[cfg(not(target_os = "macos"))]
-#[tauri::command]
-fn set_default_pdf_handler() -> Result<(), String> {
-    Err("Disponible uniquement sur macOS pour le moment.".to_string())
 }
 
 #[cfg(target_os = "macos")]
-#[tauri::command]
-fn is_default_pdf_handler() -> bool {
-    use core_foundation::base::TCFType;
-    use core_foundation::string::{CFString, CFStringRef};
-
-    #[link(name = "CoreServices", kind = "framework")]
-    extern "C" {
-        fn LSCopyDefaultRoleHandlerForContentType(
-            in_content_type: CFStringRef,
-            in_role: u32,
-        ) -> CFStringRef;
-    }
-
-    const K_LS_ROLES_ALL: u32 = 0xFFFF_FFFF;
-    let content_type = CFString::new("com.adobe.pdf");
-
-    let handler_ref = unsafe {
-        LSCopyDefaultRoleHandlerForContentType(content_type.as_concrete_TypeRef(), K_LS_ROLES_ALL)
-    };
-
-    if handler_ref.is_null() {
-        return false;
-    }
-
-    let handler = unsafe { CFString::wrap_under_create_rule(handler_ref) };
-    handler
-        .to_string()
-        .eq_ignore_ascii_case("com.soflution.slate")
+fn open_default_app_settings() {
+    let _ = std::process::Command::new("open")
+        .arg("x-apple.systempreferences:com.apple.Default-Apps-Settings")
+        .spawn();
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+fn open_default_app_settings() {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let _ = std::process::Command::new("cmd")
+        .args(["/C", "start", "", "ms-settings:defaultapps"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn();
+}
+
+#[cfg(target_os = "linux")]
+fn open_default_app_settings() {
+    for command in ["xdg-open", "gnome-control-center"] {
+        if std::process::Command::new(command)
+            .arg("default-apps")
+            .spawn()
+            .is_ok()
+        {
+            return;
+        }
+    }
+}
+
+#[tauri::command]
+fn set_default_pdf_handler() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        const K_LS_ROLES_VIEWER: u32 = 0x0000_0002;
+        const K_LS_ROLES_EDITOR: u32 = 0x0000_0004;
+        const K_LS_ROLES_ALL: u32 = 0xFFFF_FFFF;
+        for uti in ["com.adobe.pdf", "org.iso.pdf"] {
+            for role in [K_LS_ROLES_VIEWER, K_LS_ROLES_EDITOR, K_LS_ROLES_ALL] {
+                let _ = macos_set_role_handler(uti, role);
+            }
+        }
+        if is_default_pdf_handler() {
+            return Ok(());
+        }
+        open_default_app_settings();
+        Ok(())
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if is_default_pdf_handler() {
+            return Ok(());
+        }
+        open_default_app_settings();
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let desktop_names = [
+            "com.soflution.slate.desktop",
+            "slate.desktop",
+            "Slate.desktop",
+        ];
+        let mut set_ok = false;
+        for desktop in desktop_names {
+            if std::process::Command::new("xdg-mime")
+                .args(["default", desktop, "application/pdf"])
+                .status()
+                .map(|status| status.success())
+                .unwrap_or(false)
+            {
+                set_ok = true;
+                break;
+            }
+        }
+        if set_ok && is_default_pdf_handler() {
+            return Ok(());
+        }
+        open_default_app_settings();
+        Ok(())
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        Err("Impossible de définir le lecteur PDF par défaut sur cette plateforme.".to_string())
+    }
+}
+
 #[tauri::command]
 fn is_default_pdf_handler() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        const K_LS_ROLES_VIEWER: u32 = 0x0000_0002;
+        const K_LS_ROLES_EDITOR: u32 = 0x0000_0004;
+        const K_LS_ROLES_ALL: u32 = 0xFFFF_FFFF;
+        for uti in ["com.adobe.pdf", "org.iso.pdf"] {
+            for role in [K_LS_ROLES_VIEWER, K_LS_ROLES_EDITOR, K_LS_ROLES_ALL] {
+                if macos_role_handler(uti, role).is_some_and(|id| handler_id_is_slate(&id)) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        windows_pdf_handler_is_slate()
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let output = std::process::Command::new("xdg-mime")
+            .args(["query", "default", "application/pdf"])
+            .output();
+        match output {
+            Ok(out) if out.status.success() => {
+                handler_id_is_slate(&String::from_utf8_lossy(&out.stdout))
+            }
+            _ => false,
+        }
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        false
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_pdf_handler_is_slate() -> bool {
+    const USER_CHOICE: &str =
+        r"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.pdf\UserChoice";
+    const CLASSES_PDF: &str = r"HKCU\Software\Classes\.pdf";
+    for key in [USER_CHOICE, CLASSES_PDF] {
+        if let Some(value) = windows_reg_query(key, "ProgId")
+            .or_else(|| windows_reg_query(key, "(Default)"))
+        {
+            if handler_id_is_slate(&value) {
+                return true;
+            }
+        }
+    }
     false
+}
+
+#[cfg(target_os = "windows")]
+fn windows_reg_query(key: &str, value_name: &str) -> Option<String> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let output = std::process::Command::new("reg")
+        .args(["query", key, "/v", value_name])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    for line in text.lines() {
+        let line = line.trim();
+        if let Some(pos) = line.find("REG_SZ").or_else(|| line.find("REG_EXPAND_SZ")) {
+            let start = if line[pos..].starts_with("REG_EXPAND_SZ") {
+                pos + "REG_EXPAND_SZ".len()
+            } else {
+                pos + "REG_SZ".len()
+            };
+            let value = line[start..].trim().trim_matches('"');
+            if !value.is_empty() {
+                return Some(value.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Langue pour les libellés de dialogues fichier (filtres). Sur macOS, suit
+/// le réglage Slate persisté ; sinon LANG/LC_ALL.
+fn dialog_ui_is_french() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        return mac_print::effective_ui_language().starts_with("fr");
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let locale = std::env::var("LANG")
+            .or_else(|_| std::env::var("LC_ALL"))
+            .unwrap_or_default()
+            .to_lowercase();
+        locale.starts_with("fr")
+    }
+}
+
+fn dialog_filter_pdf() -> &'static str {
+    if dialog_ui_is_french() {
+        "Documents PDF"
+    } else {
+        "PDF Documents"
+    }
+}
+
+fn dialog_filter_images() -> &'static str {
+    if dialog_ui_is_french() {
+        "Images"
+    } else {
+        "Images"
+    }
+}
+
+fn dialog_filter_certificates() -> &'static str {
+    if dialog_ui_is_french() {
+        "Certificats (.p12, .pfx)"
+    } else {
+        "Certificates (.p12, .pfx)"
+    }
+}
+
+fn dialog_filter_for_extension(extension: &str) -> &'static str {
+    match extension {
+        "pdf" => dialog_filter_pdf(),
+        "json" => {
+            if dialog_ui_is_french() {
+                "Fichiers JSON"
+            } else {
+                "JSON Files"
+            }
+        }
+        _ => {
+            if dialog_ui_is_french() {
+                "Fichiers"
+            } else {
+                "Files"
+            }
+        }
+    }
 }
 
 #[tauri::command]
 async fn pick_multiple_pdfs(app: tauri::AppHandle) -> Result<Vec<FileResult>, String> {
     use tauri_plugin_dialog::DialogExt;
 
+    #[cfg(target_os = "macos")]
+    mac_print::apply_persisted_apple_languages();
+
     let files = app
         .dialog()
         .file()
-        .add_filter("PDF Documents", &["pdf"])
+        .add_filter(dialog_filter_pdf(), &["pdf"])
         .blocking_pick_files();
 
     let mut out = Vec::new();
@@ -580,7 +1886,7 @@ async fn pick_multiple_pdfs(app: tauri::AppHandle) -> Result<Vec<FileResult>, St
             out.push(FileResult {
                 path: path_str,
                 file_name,
-                bytes,
+                bytes: bytes.into(),
             });
         }
     }
@@ -592,10 +1898,13 @@ async fn pick_multiple_pdfs(app: tauri::AppHandle) -> Result<Vec<FileResult>, St
 async fn pick_certificate_file(app: tauri::AppHandle) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
 
+    #[cfg(target_os = "macos")]
+    mac_print::apply_persisted_apple_languages();
+
     let file = app
         .dialog()
         .file()
-        .add_filter("Certificates (.p12, .pfx)", &["p12", "pfx"])
+        .add_filter(dialog_filter_certificates(), &["p12", "pfx"])
         .blocking_pick_file();
 
     Ok(file.map(|fp| fp.to_string()))
@@ -605,7 +1914,7 @@ async fn pick_certificate_file(app: tauri::AppHandle) -> Result<Option<String>, 
 /// `window.print()` est inopérant dans le WebView macOS (WKWebView), on passe
 /// donc par un fichier temporaire + l'imprimante du système.
 #[tauri::command]
-async fn print_pdf(app: tauri::AppHandle, bytes: Vec<u8>) -> Result<(), String> {
+async fn print_pdf(app: tauri::AppHandle, bytes: DocBytes) -> Result<(), String> {
     if !bytes.starts_with(b"%PDF-") {
         return Err("Le contenu à imprimer n'est pas un PDF valide.".into());
     }
@@ -614,7 +1923,7 @@ async fn print_pdf(app: tauri::AppHandle, bytes: Vec<u8>) -> Result<(), String> 
     // Émet `alto-print-finished` à la fermeture du panneau.
     #[cfg(target_os = "macos")]
     {
-        return mac_print::print_pdf_native(&app, bytes);
+        return mac_print::print_pdf_native(&app, bytes.0);
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -665,8 +1974,9 @@ fn hide_app(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 /// Force la langue des panneaux et menus natifs macOS (impression, enregistrer…)
-/// pour qu'ils suivent le réglage de langue de Slate. Effet au prochain lancement
-/// (AppKit lit `AppleLanguages` au démarrage). Passer "auto"/"" suit le système.
+/// pour qu'ils suivent le réglage de langue de Slate. Persiste sur disque et
+/// écrit `AppleLanguages` ; AppKit applique pleinement au (re)lancement.
+/// Passer "auto"/"" suit le système.
 #[tauri::command]
 fn set_native_language(lang: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
@@ -682,17 +1992,23 @@ fn set_native_language(lang: String) -> Result<(), String> {
 
 #[tauri::command]
 fn open_external(url: String) -> Result<(), String> {
-    if !(url.starts_with("https://") || url.starts_with("http://")) {
+    let url = url.trim();
+    let allowed = url.starts_with("https://")
+        || url.starts_with("http://")
+        || url.starts_with("mailto:")
+        || url.starts_with("ms-outlook:")
+        || url.starts_with("msteams:");
+    if !allowed {
         return Err("URL invalide".into());
     }
     #[cfg(target_os = "macos")]
-    let result = std::process::Command::new("open").arg(&url).spawn();
+    let result = std::process::Command::new("open").arg(url).spawn();
     #[cfg(target_os = "windows")]
     let result = std::process::Command::new("cmd")
-        .args(["/C", "start", "", &url])
+        .args(["/C", "start", "", url])
         .spawn();
     #[cfg(all(unix, not(target_os = "macos")))]
-    let result = std::process::Command::new("xdg-open").arg(&url).spawn();
+    let result = std::process::Command::new("xdg-open").arg(url).spawn();
     result.map(|_| ()).map_err(|e| e.to_string())
 }
 
@@ -702,10 +2018,13 @@ fn open_external(url: String) -> Result<(), String> {
 async fn pick_images(app: tauri::AppHandle) -> Result<Vec<Vec<u8>>, String> {
     use tauri_plugin_dialog::DialogExt;
 
+    #[cfg(target_os = "macos")]
+    mac_print::apply_persisted_apple_languages();
+
     let files = app
         .dialog()
         .file()
-        .add_filter("Images", &["png", "jpg", "jpeg"])
+        .add_filter(dialog_filter_images(), &["png", "jpg", "jpeg"])
         .blocking_pick_files();
 
     let mut out = Vec::new();
@@ -729,7 +2048,7 @@ struct ExtractImagesReport {
 #[tauri::command]
 async fn extract_images_to_folder(
     app: tauri::AppHandle,
-    bytes: Vec<u8>,
+    bytes: DocBytes,
 ) -> Result<Option<ExtractImagesReport>, String> {
     use tauri_plugin_dialog::DialogExt;
 
@@ -785,10 +2104,13 @@ async fn create_blank_pdf() -> Result<tauri::ipc::Response, String> {
 async fn open_file(app: tauri::AppHandle) -> Result<Option<FileResult>, String> {
     use tauri_plugin_dialog::DialogExt;
 
+    #[cfg(target_os = "macos")]
+    mac_print::apply_persisted_apple_languages();
+
     let file_path = app
         .dialog()
         .file()
-        .add_filter("PDF Documents", &["pdf"])
+        .add_filter(dialog_filter_pdf(), &["pdf"])
         .blocking_pick_file();
 
     match file_path {
@@ -803,7 +2125,7 @@ async fn open_file(app: tauri::AppHandle) -> Result<Option<FileResult>, String> 
             Ok(Some(FileResult {
                 path: path_str,
                 file_name,
-                bytes,
+                bytes: bytes.into(),
             }))
         }
         None => Ok(None),
@@ -811,25 +2133,29 @@ async fn open_file(app: tauri::AppHandle) -> Result<Option<FileResult>, String> 
 }
 
 #[tauri::command]
-async fn save_file(path: String, data: Vec<u8>) -> Result<(), String> {
-    std::fs::write(&path, &data).map_err(|e| e.to_string())
+async fn save_file(path: String, data: DocBytes) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        pdf_engine::check_pdf_reopens(&data)?;
+        atomic_write::write_atomic(Path::new(&path), &data)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 async fn save_file_dialog(
     app: tauri::AppHandle,
-    data: Vec<u8>,
+    data: DocBytes,
     filename: String,
     extension: String,
 ) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
 
+    #[cfg(target_os = "macos")]
+    mac_print::apply_persisted_apple_languages();
+
     let extension = extension.trim_start_matches('.').to_string();
-    let filter_name = match extension.as_str() {
-        "pdf" => "PDF Documents",
-        "json" => "JSON Files",
-        _ => "Files",
-    };
+    let filter_name = dialog_filter_for_extension(&extension);
 
     let mut dialog = app
         .dialog()
@@ -845,12 +2171,227 @@ async fn save_file_dialog(
 
     match file_path {
         Some(fp) => {
-            let path_str = fp.to_string();
-            std::fs::write(&path_str, &data).map_err(|e| e.to_string())?;
+            // Chemin filesystem (pas file://) pour que le front mette à jour
+            // le nom d'onglet immédiatement après un renommage à l'export.
+            let path_buf = fp.into_path().map_err(|e| e.to_string())?;
+            let path_str = path_buf.to_string_lossy().to_string();
+            pdf_engine::check_pdf_reopens(&data)?;
+            atomic_write::write_atomic(&path_buf, &data)?;
             Ok(Some(path_str))
         }
         None => Ok(None),
     }
+}
+
+/// Prépare une copie du PDF dans un dossier temporaire pour le partage
+/// (document modifié ou ouvert sans chemin disque connu).
+#[tauri::command]
+fn prepare_share_pdf(data: DocBytes, filename: String) -> Result<String, String> {
+    if data.is_empty() {
+        return Err("empty_document".to_string());
+    }
+    let dir = std::env::temp_dir().join("slate-share");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let mut safe: String = filename
+        .chars()
+        .map(|c| {
+            if c.is_control() || "/\\:".contains(c) {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+    if safe.is_empty() {
+        safe = "document.pdf".to_string();
+    }
+    if !safe.to_ascii_lowercase().ends_with(".pdf") {
+        safe.push_str(".pdf");
+    }
+    let path = dir.join(&safe);
+    atomic_write::write_atomic(&path, &data)?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+fn sanitize_autosave_component(value: &str, fallback: &str) -> String {
+    let mut safe: String = value
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if safe.is_empty() {
+        safe = fallback.to_string();
+    }
+    safe
+}
+
+fn edit_history_path(app: &tauri::AppHandle, file_path: &str) -> Result<std::path::PathBuf, String> {
+    let trimmed = file_path.trim();
+    if trimmed.is_empty() {
+        return Err("missing_path".to_string());
+    }
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    trimmed.hash(&mut hasher);
+    let key = format!("{:016x}", hasher.finish());
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("edit-history");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join(format!("{key}.json")))
+}
+
+/// Historique d'édition (undo/redo) persisté hors localStorage — l'autosave
+/// écrase le PDF sans dialogue, il faut pouvoir revenir en arrière à la réouverture.
+#[tauri::command]
+fn write_edit_history(
+    app: tauri::AppHandle,
+    file_path: String,
+    payload: String,
+) -> Result<(), String> {
+    if payload.len() > 12 * 1024 * 1024 {
+        return Err("history_too_large".to_string());
+    }
+    let path = edit_history_path(&app, &file_path)?;
+    std::fs::write(&path, payload.as_bytes()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn read_edit_history(app: tauri::AppHandle, file_path: String) -> Result<Option<String>, String> {
+    let path = edit_history_path(&app, &file_path)?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let data = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    if data.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(data))
+}
+
+fn app_data_file(app: &tauri::AppHandle, name: &str) -> Result<std::path::PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join(name))
+}
+
+fn write_fsync(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
+    atomic_write::write_atomic(path, bytes)
+}
+
+/// Onglets ouverts hors localStorage — survit au remplacement du .app par l'updater.
+#[tauri::command]
+fn write_open_session(app: tauri::AppHandle, payload: String) -> Result<(), String> {
+    if payload.len() > 512 * 1024 {
+        return Err("session_too_large".to_string());
+    }
+    let path = app_data_file(&app, "open-session.json")?;
+    write_fsync(&path, payload.as_bytes())
+}
+
+#[tauri::command]
+fn read_open_session(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let path = app_data_file(&app, "open-session.json")?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let data = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    if data.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(data))
+}
+
+pub(crate) fn write_update_relaunch_flag(app: &tauri::AppHandle) -> Result<(), String> {
+    let path = app_data_file(app, "relaunch-from-update")?;
+    write_fsync(&path, b"1")
+}
+
+#[tauri::command]
+fn mark_update_relaunch(app: tauri::AppHandle) -> Result<(), String> {
+    write_update_relaunch_flag(&app)
+}
+
+#[tauri::command]
+fn consume_update_relaunch(app: tauri::AppHandle) -> Result<bool, String> {
+    let path = app_data_file(&app, "relaunch-from-update")?;
+    if !path.exists() {
+        return Ok(false);
+    }
+    let _ = std::fs::remove_file(&path);
+    Ok(true)
+}
+
+/// Copie de secours (document sans chemin, ou autosave décoché avant màj/fermeture).
+#[tauri::command]
+fn write_autosave(
+    app: tauri::AppHandle,
+    id: String,
+    filename: String,
+    data: DocBytes,
+) -> Result<String, String> {
+    if data.is_empty() {
+        return Err("empty_document".to_string());
+    }
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("autosave");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let safe_id = sanitize_autosave_component(&id, "doc");
+    let mut safe_name = sanitize_autosave_component(&filename, "document.pdf");
+    if !safe_name.to_ascii_lowercase().ends_with(".pdf") {
+        safe_name.push_str(".pdf");
+    }
+    let path = dir.join(format!("{safe_id}-{safe_name}"));
+    write_fsync(&path, &data)?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// Affiche le fichier dans le Finder (macOS) ou l'explorateur (Windows/Linux).
+#[tauri::command]
+fn reveal_file_in_folder(path: String) -> Result<(), String> {
+    let path = path.trim();
+    if path.is_empty() || !std::path::Path::new(path).exists() {
+        return Err("file_not_found".to_string());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .args(["-R", path])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .args(["/select,", path])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let parent = std::path::Path::new(path)
+            .parent()
+            .ok_or_else(|| "file_not_found".to_string())?;
+        std::process::Command::new("xdg-open")
+            .arg(parent)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 fn main() {
@@ -861,6 +2402,11 @@ fn main() {
     if std::env::var_os("ALTO_PDFIUM_DIR").is_none() {
         std::env::set_var("ALTO_PDFIUM_DIR", env!("CARGO_MANIFEST_DIR"));
     }
+
+    // Langue AppKit AVANT le Builder : sinon NSSavePanel / impression restent
+    // en anglais (AppleLanguages lu trop tard dans setup()).
+    #[cfg(target_os = "macos")]
+    mac_print::apply_persisted_apple_languages();
 
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
@@ -873,8 +2419,15 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(PendingOpens::default())
         .manage(PendingPrints::default())
+        .manage(PendingDetachedTabs::default())
+        .manage(ActiveTabDrag::default())
         .manage(DocCache::default())
+        .manage(ViewCache::default())
+        .manage(DocBaselines::default())
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            mac_print::apply_persisted_apple_languages();
+
             // Pré-chauffe PDFium en arrière-plan : charge/initialise la lib native
             // dès le démarrage pour supprimer la latence du premier appel PDF.
             std::thread::spawn(|| {
@@ -917,7 +2470,13 @@ fn main() {
             let hide = PredefinedMenuItem::hide(app, Some("Masquer Slate"))?;
             let hide_others = PredefinedMenuItem::hide_others(app, Some("Masquer les autres"))?;
             let show_all = PredefinedMenuItem::show_all(app, Some("Afficher tout"))?;
-            let quit = PredefinedMenuItem::quit(app, Some("Quitter Slate"))?;
+            // Quitter via le frontend (et non PredefinedMenuItem::quit, qui
+            // termine le process immédiatement) : la page vérifie les
+            // modifications non enregistrées et propose de les sauvegarder.
+            let quit = MenuItemBuilder::new("Quitter Slate")
+                .id("request-quit")
+                .accelerator("CmdOrCtrl+Q")
+                .build(app)?;
             let app_menu = SubmenuBuilder::new(app, "Slate")
                 .item(&about)
                 .item(&plugins)
@@ -965,6 +2524,7 @@ fn main() {
                 .separator()
                 .text("save-copy", "Enregistrer")
                 .text("save-as", "Enregistrer sous...")
+                .text("save-copy-as", "Enregistrer une copie...")
                 .item(&save_as_other_menu)
                 .text("compress-pdf", "Compresser un fichier PDF")
                 .item(&export_menu)
@@ -974,7 +2534,7 @@ fn main() {
                     "unsupported-signatures",
                     "Demander des signatures électroniques",
                 )
-                .text("unsupported-share", "Partager le fichier")
+                .text("share-pdf", "Partager le fichier")
                 .separator()
                 .item(&print_item)
                 .text("focus-search", "Rechercher")
@@ -992,7 +2552,7 @@ fn main() {
                 .item(&redo_item)
                 .build()?;
             let add_image_menu = SubmenuBuilder::new(app, "Ajouter une image")
-                .text("unsupported-add-image-file", "Depuis un fichier...")
+                .text("add-image-file", "Depuis un fichier...")
                 .build()?;
             let protection_menu = SubmenuBuilder::new(app, "Protection")
                 .text("protect-pdf", "Ajouter un mot de passe")
@@ -1010,8 +2570,9 @@ fn main() {
                 .item(&undo_menu)
                 .separator()
                 .text("modify-pdf", "Modifier le PDF")
-                .text("unsupported-add-text", "Ajouter du texte")
+                .text("add-text", "Ajouter du texte")
                 .item(&add_image_menu)
+                .text("add-signature", "Ajouter une signature")
                 .separator()
                 .text("delete-page", "Supprimer la page")
                 .text("rotate-page-cw", "Faire pivoter la page (horaire)")
@@ -1054,11 +2615,17 @@ fn main() {
             let audio_menu = SubmenuBuilder::new(app, "Lecture audio")
                 .text("unsupported-read-aloud", "Lire à voix haute")
                 .build()?;
+            let prepress_menu = SubmenuBuilder::new(app, "Utiliser le prépresse")
+                .text("convert-colors", "Convertir les couleurs…")
+                .text("prepress", "Ouvrir le panneau prépresse")
+                .build()?;
             let view_menu = SubmenuBuilder::new(app, "Affichage")
                 .item(&rotate_view_menu)
                 .item(&page_navigation_menu)
                 .item(&display_menu)
                 .item(&zoom_menu)
+                .separator()
+                .item(&prepress_menu)
                 .separator()
                 .text("unsupported-reading-mode", "Mode Lecture")
                 .text("unsupported-fullscreen", "Mode plein écran")
@@ -1107,6 +2674,7 @@ fn main() {
                 .text("modify-pdf", "Aide “Modifier un PDF”")
                 .text("unsupported-help", "Aide Slate")
                 .text("unsupported-tutorials", "Tutoriels Slate")
+                .text("whats-new", "Nouveautés de Slate")
                 .separator()
                 .text("settings", "Gérer mon compte...")
                 .text("unsupported-updates", "Rechercher les mises à jour")
@@ -1127,6 +2695,11 @@ fn main() {
             // Branche l'impression depuis le Finder (Apple Event « print documents »).
             #[cfg(target_os = "macos")]
             mac_print::install(app.handle().clone());
+            // Ouverture à chaud (Mail / quarantaine) via Apple Event odoc.
+            #[cfg(target_os = "macos")]
+            mac_open::install(app.handle().clone());
+
+            updater::start_background_checks(app.handle().clone());
 
             Ok(())
         })
@@ -1138,7 +2711,12 @@ fn main() {
                 "export-edited-pdf" => Some("alto-export-edited-pdf"),
                 "save-copy" => Some("alto-save-copy"),
                 "save-as" => Some("alto-save-as"),
+                "save-copy-as" => Some("alto-save-copy-as"),
                 "modify-pdf" => Some("alto-modify-pdf"),
+                "whats-new" => Some("alto-whats-new"),
+                "add-text" => Some("alto-add-text"),
+                "add-image-file" => Some("alto-add-image"),
+                "add-signature" => Some("alto-add-signature"),
                 "focus-search" => Some("alto-focus-search"),
                 "ocr-page" => Some("alto-ocr-page"),
                 "toggle-tools" => Some("alto-toggle-tools"),
@@ -1146,6 +2724,7 @@ fn main() {
                 "prev-page" => Some("alto-prev-page"),
                 "next-page" => Some("alto-next-page"),
                 "close-file" => Some("alto-close-file"),
+                "request-quit" => Some("alto-request-quit"),
                 "fit-width" => Some("alto-fit-width"),
                 "zoom-in" => Some("alto-zoom-in"),
                 "zoom-out" => Some("alto-zoom-out"),
@@ -1160,10 +2739,12 @@ fn main() {
                 "rotate-page-cw" => Some("alto-rotate-page-cw"),
                 "rotate-page-ccw" => Some("alto-rotate-page-ccw"),
                 "organize-pages" => Some("alto-organize-pages"),
+                "share-pdf" => Some("alto-share-pdf"),
+                "prepress" => Some("alto-prepress"),
+                "convert-colors" => Some("alto-convert-colors"),
                 id if id.starts_with("unsupported")
                     || id == "about"
                     || id == "about-plugins"
-                    || id == "new-window"
                     || id == "window-current-file" =>
                 {
                     Some("alto-menu-unsupported")
@@ -1171,31 +2752,70 @@ fn main() {
                 _ => None,
             };
 
-            if let Some(event_name) = event_name {
-                if let Some(window) = app.get_webview_window("main") {
+            if event.id().as_ref() == "new-window" {
+                let _ = spawn_empty_window(app.clone());
+            } else if let Some(event_name) = event_name {
+                if let Some(window) = focused_webview(app) {
                     let _ = window.emit(event_name, ());
+                } else if event_name == "alto-request-quit" {
+                    // Aucune fenêtre pour arbitrer les modifications non
+                    // enregistrées : quitter directement (rien à perdre).
+                    app.exit(0);
                 }
             }
         })
         .invoke_handler(tauri::generate_handler![
+            ipc_bytes::stage_bytes,
+            ipc_bytes::take_staged_bytes,
+            render_pdf_thumbnail_cached,
             analyze_pdf_page,
             cache_document,
+            cache_view_document,
+            drop_view_document,
+            render_view_page,
             analyze_pdf_page_cached,
+            edit_pdf_text_cached,
+            restore_native_page,
+            repair_pdf_bytes,
+            render_pdf_page_cached,
+            get_cached_document,
+            extract_embedded_fonts_cached,
             alto_debug,
             ocr_page,
             ocr_pdf_page,
             export_edited_pdf,
+            export_edited_pdf_native,
+            export_edited_pdf_vector,
             list_system_fonts,
             create_blank_pdf,
             open_file,
             save_file,
             save_file_dialog,
+            write_autosave,
+            write_edit_history,
+            read_edit_history,
+            write_open_session,
+            read_open_session,
+            mark_update_relaunch,
+            consume_update_relaunch,
+            prepare_share_pdf,
+            reveal_file_in_folder,
             take_pending_open_files,
             take_pending_print_files,
+            spawn_document_window,
+            spawn_empty_window,
+            take_detached_tab,
+            begin_tab_drag,
+            claim_tab_drag,
+            cancel_tab_drag,
+            is_tab_drag_active,
+            start_tab_native_drag,
+            quit_application,
             merge_pdfs,
             encrypt_pdf,
             compress_pdf,
             repair_pdf,
+            compact_pdf,
             remove_annotations,
             remove_blank_pages,
             deskew_pdf,
@@ -1209,6 +2829,14 @@ fn main() {
             extract_pages,
             reorder_pages,
             document_properties,
+            set_pdf_metadata,
+            convert_pdf_colors_fogra39,
+            fogra39_profile_status,
+            list_printers,
+            list_paper_sizes,
+            list_printer_options,
+            fit_label_to_media,
+            print_pdf_with_options,
             read_pdf_path,
             set_default_pdf_handler,
             is_default_pdf_handler,
@@ -1219,6 +2847,7 @@ fn main() {
             set_native_language,
             watermark_pdf,
             add_page_numbers,
+            add_page_text,
             images_to_pdf,
             remove_password,
             crop_pdf,
@@ -1226,6 +2855,8 @@ fn main() {
             extract_images,
             list_form_fields,
             fill_form_fields,
+            set_form_button_image,
+            normalize_form_appearances,
             extract_images_to_folder,
             pick_images,
             auto_redact,
@@ -1234,13 +2865,28 @@ fn main() {
             set_bookmarks,
             llm::llm_get_config,
             llm::llm_set_config,
+            llm::llm_set_key,
+            llm::llm_list_models,
+            llm::llm_detect_local,
+            llm::llm_openrouter_connect,
+            llm::llm_openrouter_cancel,
             llm::llm_chat,
+            llm::llm_cancel,
+            acp::acp_agents,
+            acp::acp_connect,
+            acp::acp_prompt,
+            acp::acp_reply,
+            acp::acp_cancel,
+            acp::acp_disconnect,
             updater::check_for_update,
             updater::install_update
         ])
         .build(tauri::generate_context!())
         .expect("error while building Alto desktop")
         .run(|_app, _event| {
+            if let tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } = &_event {
+                _app.state::<ViewCache>().forget_window(label);
+            }
             // RunEvent::Opened n'existe que sur macOS/iOS (ouverture via Finder /
             // association de fichiers). Sur Windows/Linux, l'ouverture passe par les
             // arguments CLI, gérés ailleurs.
@@ -1249,7 +2895,10 @@ fn main() {
                 // Une fois NSApp lancé, ré-arme les handlers d'impression : à ce
                 // stade le delegate existe et notre handler Apple Event n'est plus
                 // écrasé par finishLaunching.
-                tauri::RunEvent::Ready => mac_print::rearm(),
+                tauri::RunEvent::Ready => {
+                    mac_print::rearm();
+                    mac_open::rearm();
+                }
                 tauri::RunEvent::Opened { urls } => {
                     for url in urls {
                         if let Ok(path) = url.to_file_path() {

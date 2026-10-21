@@ -116,6 +116,23 @@ pub fn add_page_numbers(
     font_size: f64,
     margin: f64,
 ) -> Result<Vec<u8>, String> {
+    add_page_text(bytes, "{page}", position, start_at, font_size, margin)
+}
+
+/// Même texte sur chaque page (en-tête, pied de page, numérotation). Dans
+/// `template`, `{page}` devient le numéro (à partir de `start_at`) et `{total}`
+/// le nombre de pages.
+pub fn add_page_text(
+    bytes: &[u8],
+    template: &str,
+    position: &str,
+    start_at: i64,
+    font_size: f64,
+    margin: f64,
+) -> Result<Vec<u8>, String> {
+    if template.trim().is_empty() {
+        return Err("empty_text".to_string());
+    }
     let guard = pdfium_guard()?;
     let mut document = guard
         .load_pdf_from_byte_slice(bytes, None)
@@ -123,9 +140,12 @@ pub fn add_page_numbers(
     let font = font_token(&mut document, false);
     let fill = PdfColor::new(60, 60, 60, 255);
     let page_count = document.pages().len();
+    let total = (start_at + page_count as i64 - 1).to_string();
 
     for index in 0..page_count {
-        let label = format!("{}", start_at + index as i64);
+        let label = template
+            .replace("{page}", &(start_at + index as i64).to_string())
+            .replace("{total}", &total);
         let mut page = document.pages().get(index).map_err(|e| e.to_string())?;
         let pw = page.width().value as f64;
         let ph = page.height().value as f64;
@@ -394,9 +414,9 @@ pub fn auto_redact(
 // ---------------------------------------------------------------------------
 
 pub fn sanitize(bytes: &[u8]) -> Result<Vec<u8>, String> {
-    use lopdf::{Document, Object};
+    use lopdf::Object;
 
-    let mut document = Document::load_mem(bytes).map_err(|e| format!("PDF illisible : {e}"))?;
+    let mut document = crate::load_document(bytes).map_err(|e| format!("PDF illisible : {e}"))?;
 
     // 1) Retirer les actions automatiques et le JavaScript du catalogue.
     let root_id = match document.trailer.get(b"Root") {
@@ -485,9 +505,9 @@ fn collect_bookmarks(
 
 /// Remplace l'arborescence de marque-pages par une liste plate (titre + page).
 pub fn set_bookmarks(bytes: &[u8], items: &[BookmarkItem]) -> Result<Vec<u8>, String> {
-    use lopdf::{Bookmark, Document, Object};
+    use lopdf::{Bookmark, Object};
 
-    let mut document = Document::load_mem(bytes).map_err(|e| format!("PDF illisible : {e}"))?;
+    let mut document = crate::load_document(bytes).map_err(|e| format!("PDF illisible : {e}"))?;
     let pages: Vec<(u32, lopdf::ObjectId)> = document.get_pages().into_iter().collect();
     if pages.is_empty() {
         return Err("Document sans page.".into());

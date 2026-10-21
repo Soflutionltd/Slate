@@ -1,0 +1,19 @@
+{
+  "category": "kinetic-type",
+  "duration_s": 8,
+  "fps": 30,
+  "canvas": { "width": 1920, "height": 1080 },
+  "style": "Slate app chrome: warm off-white, ink text, one red accent, layered soft shadows",
+  "palette": ["#f6f6f4", "#ffffff", "#171717", "#6f7177", "#d2261c", "#fdecea", "#ecebe8"],
+  "font": "Inter",
+  "export": "mp4+webm",
+  "asset_needs": [],
+  "brief": "Language-neutral 8 s sting for the Slate 0.3.154 What's new window. Hook: the Slate logo lands and the AI providers it now speaks to snap in as pills. Pattern interrupt at 2.4 s: hard cut to a document page beside a chat panel; each assistant tool call visibly lands on the page (highlight, form check, comment pin, page number) while the chat logs it, then a keychain lock seals the panel. Resolve: logo lockup with a +16 count-up over a grid of sixteen tool tiles, version under it, held to the end. Dominant motif: things snapping into place on the page.",
+  "content": {
+    "scenes": [
+      { "id": "s1", "start": 0, "end": 2.4, "text": "Slate × Claude ChatGPT Gemini Mistral Grok OpenRouter Ollama LM Studio", "emphasis_words": ["Slate"], "emotion": "confident", "motion": "scale_punch logo, slide_left wordmark, staggered pill pop", "beats": [0.15, 0.85] },
+      { "id": "s2", "start": 2.4, "end": 5.6, "text": "page + chat, four tool calls land, lock", "emphasis_words": [], "emotion": "precise", "motion": "hard cut in, underline_sweep, check pop, pin drop, lock back.out", "beats": [3.4, 3.8, 4.2, 4.6, 5.0] },
+      { "id": "s3", "start": 5.6, "end": 8, "text": "Slate +16 0.3.154", "emphasis_words": ["+16"], "emotion": "resolved", "motion": "scale_grow logo, count-up, grid stagger, hold_breath", "beats": [5.8, 6.3] }
+    ]
+  }
+}

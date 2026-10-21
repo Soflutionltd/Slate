@@ -94,6 +94,359 @@ fn remove_page_object(
     Ok(())
 }
 
+/// Matrice affine PDF [a b c d e f].
+type Affine = [f64; 6];
+
+fn affine_of(matrix: &PdfMatrix) -> Affine {
+    [
+        matrix.a() as f64,
+        matrix.b() as f64,
+        matrix.c() as f64,
+        matrix.d() as f64,
+        matrix.e() as f64,
+        matrix.f() as f64,
+    ]
+}
+
+/// `inner` puis `outer` : repère enfant → repère parent.
+fn affine_then(inner: Affine, outer: Affine) -> Affine {
+    let [a, b, c, d, e, f] = inner;
+    let [oa, ob, oc, od, oe, of] = outer;
+    [
+        a * oa + b * oc,
+        a * ob + b * od,
+        c * oa + d * oc,
+        c * ob + d * od,
+        e * oa + f * oc + oe,
+        e * ob + f * od + of,
+    ]
+}
+
+/// bbox haut-gauche, en espace page, d'un objet rangé dans un XObject de forme :
+/// PDFium donne ses bornes dans le repère du groupe.
+fn nested_bbox_top_left(
+    object: &PdfPageObject,
+    to_page: Affine,
+    page_height: f64,
+) -> Option<(f64, f64, f64, f64)> {
+    let bounds = object.bounds().ok()?;
+    let (l, b, r, t) = (
+        bounds.left().value as f64,
+        bounds.bottom().value as f64,
+        bounds.right().value as f64,
+        bounds.top().value as f64,
+    );
+    let [ma, mb, mc, md, me, mf] = to_page;
+    let corners = [(l, b), (r, b), (l, t), (r, t)].map(|(x, y)| {
+        (ma * x + mc * y + me, mb * x + md * y + mf)
+    });
+    let x0 = corners.iter().map(|p| p.0).fold(f64::INFINITY, f64::min);
+    let x1 = corners.iter().map(|p| p.0).fold(f64::NEG_INFINITY, f64::max);
+    let y_bottom = corners.iter().map(|p| p.1).fold(f64::INFINITY, f64::min);
+    let y_top = corners.iter().map(|p| p.1).fold(f64::NEG_INFINITY, f64::max);
+    Some((x0, page_height - y_top, x1, page_height - y_bottom))
+}
+
+/// Texte à retirer d'un XObject de forme (catalogues InDesign/Illustrator : les
+/// titres y sont rangés). Les rangs suivent l'ordre du flux : PDFium crée un
+/// objet texte par opérateur d'affichage non vide et un objet groupe par `Do`
+/// d'un XObject de forme. PDFium ne sait pas réécrire un groupe (flux orphelin,
+/// polices renommées) : il ne sert qu'à localiser, lopdf édite le flux.
+#[derive(Default)]
+struct GroupedTextPlan {
+    text_count: usize,
+    form_count: usize,
+    texts: std::collections::BTreeSet<usize>,
+    forms: Vec<(usize, GroupedTextPlan)>,
+}
+
+impl GroupedTextPlan {
+    fn removed(&self) -> usize {
+        self.texts.len() + self.forms.iter().map(|(_, nested)| nested.removed()).sum::<usize>()
+    }
+}
+
+fn plan_grouped_text(
+    form: &PdfPageXObjectFormObject,
+    to_page: Affine,
+    page_height: f64,
+    bbox: (f64, f64, f64, f64),
+    requested_size: &mut f64,
+) -> Result<GroupedTextPlan, String> {
+    let mut plan = GroupedTextPlan::default();
+    for index in 0..form.len() {
+        let child = form.get(index).map_err(|e| e.to_string())?;
+        match child.object_type() {
+            PdfPageObjectType::Text => {
+                let rank = plan.text_count;
+                plan.text_count += 1;
+                let Some(child_bbox) = nested_bbox_top_left(&child, to_page, page_height) else {
+                    continue;
+                };
+                if !rects_intersect(child_bbox, bbox) {
+                    continue;
+                }
+                if *requested_size <= 0.0 {
+                    if let Some(text_object) = child.as_text_object() {
+                        let scale = (to_page[0] * to_page[3] - to_page[1] * to_page[2]).abs().sqrt();
+                        *requested_size = text_object.scaled_font_size().value as f64 * scale;
+                    }
+                }
+                plan.texts.insert(rank);
+            }
+            PdfPageObjectType::XObjectForm => {
+                let rank = plan.form_count;
+                plan.form_count += 1;
+                let Some(nested) = child.as_x_object_form_object() else {
+                    continue;
+                };
+                let matrix = nested.matrix().map_err(|e| e.to_string())?;
+                let nested_plan = plan_grouped_text(
+                    nested,
+                    affine_then(affine_of(&matrix), to_page),
+                    page_height,
+                    bbox,
+                    requested_size,
+                )?;
+                if nested_plan.removed() > 0 {
+                    plan.forms.push((rank, nested_plan));
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(plan)
+}
+
+/// Plan au niveau de la page : seuls les groupes comptent, le texte posé
+/// directement sur la page est traité par `edit_region_placed`.
+fn plan_page_grouped_text(
+    pdfium: &Pdfium,
+    bytes: &[u8],
+    page_number: u32,
+    bbox: (f64, f64, f64, f64),
+    requested_size: &mut f64,
+) -> Result<GroupedTextPlan, String> {
+    let document = pdfium
+        .load_pdf_from_byte_slice(bytes, None)
+        .map_err(|e| e.to_string())?;
+    check_page(page_number, document.pages().len() as u32)?;
+    let page = document
+        .pages()
+        .get((page_number - 1) as i32)
+        .map_err(|e| e.to_string())?;
+    let page_height = page.height().value as f64;
+    let mut plan = GroupedTextPlan::default();
+    for object in page.objects().iter() {
+        let Some(form) = object.as_x_object_form_object() else {
+            continue;
+        };
+        let rank = plan.form_count;
+        plan.form_count += 1;
+        let matrix = form.matrix().map_err(|e| e.to_string())?;
+        let nested = plan_grouped_text(form, affine_of(&matrix), page_height, bbox, requested_size)?;
+        if nested.removed() > 0 {
+            plan.forms.push((rank, nested));
+        }
+    }
+    Ok(plan)
+}
+
+fn is_text_show(operation: &lopdf::content::Operation) -> bool {
+    let non_empty = |object: &lopdf::Object| matches!(object, lopdf::Object::String(s, _) if !s.is_empty());
+    match operation.operator.as_str() {
+        "Tj" | "'" | "\"" => operation.operands.last().is_some_and(non_empty),
+        "TJ" => operation
+            .operands
+            .first()
+            .and_then(|o| o.as_array().ok())
+            .is_some_and(|items| items.iter().any(non_empty)),
+        _ => false,
+    }
+}
+
+/// Ce qu'il reste d'un opérateur d'affichage retiré : `'` et `"` passent aussi
+/// à la ligne suivante (et `"` fixe Tw/Tc), la suite du bloc ne doit pas bouger.
+fn line_moves_of(operation: lopdf::content::Operation) -> Vec<lopdf::content::Operation> {
+    use lopdf::content::Operation;
+    match operation.operator.as_str() {
+        "'" => vec![Operation::new("T*", vec![])],
+        "\"" if operation.operands.len() == 3 => vec![
+            Operation::new("Tw", vec![operation.operands[0].clone()]),
+            Operation::new("Tc", vec![operation.operands[1].clone()]),
+            Operation::new("T*", vec![]),
+        ],
+        _ => Vec::new(),
+    }
+}
+
+fn resolved_dict(doc: &lopdf::Document, object: &lopdf::Object) -> Result<lopdf::Dictionary, String> {
+    let (_, target) = doc.dereference(object).map_err(|e| format!("lopdf: {e}"))?;
+    target.as_dict().cloned().map_err(|e| format!("lopdf: {e}"))
+}
+
+/// Ressources effectives de la page (héritées de l'arbre des pages au besoin).
+fn page_resources(doc: &lopdf::Document, page_id: lopdf::ObjectId) -> Result<lopdf::Dictionary, String> {
+    let mut node_id = page_id;
+    let mut seen = std::collections::HashSet::new();
+    loop {
+        let node = doc.get_dictionary(node_id).map_err(|e| format!("lopdf: {e}"))?;
+        if let Ok(resources) = node.get(b"Resources") {
+            return resolved_dict(doc, resources);
+        }
+        let Ok(parent) = node.get(b"Parent").and_then(lopdf::Object::as_reference) else {
+            return Ok(lopdf::Dictionary::new());
+        };
+        if !seen.insert(parent) {
+            return Err("page_tree_cycle".to_string());
+        }
+        node_id = parent;
+    }
+}
+
+/// Noms des XObjects de forme appelés par `Do`, dans l'ordre du flux.
+fn form_invocations(
+    doc: &lopdf::Document,
+    operations: &[lopdf::content::Operation],
+    xobjects: &lopdf::Dictionary,
+) -> Vec<Vec<u8>> {
+    operations
+        .iter()
+        .filter(|op| op.operator == "Do")
+        .filter_map(|op| op.operands.first()?.as_name().ok())
+        .filter(|name| {
+            xobjects
+                .get(name)
+                .ok()
+                .and_then(|entry| doc.dereference(entry).ok())
+                .and_then(|(_, target)| target.as_stream().ok())
+                .is_some_and(|stream| stream.dict.get(b"Subtype").and_then(lopdf::Object::as_name).ok() == Some(b"Form"))
+        })
+        .map(<[u8]>::to_vec)
+        .collect()
+}
+
+/// Fait pointer, dans `resources`, chaque groupe visé vers une copie expurgée.
+/// L'original reste intact : il peut servir sur d'autres pages.
+fn redirect_grouped_forms(
+    doc: &mut lopdf::Document,
+    operations: &[lopdf::content::Operation],
+    resources: &mut lopdf::Dictionary,
+    plan: &GroupedTextPlan,
+) -> Result<(), String> {
+    let mut xobjects = match resources.get(b"XObject") {
+        Ok(entry) => resolved_dict(doc, entry)?,
+        Err(_) => return Err("group_resources_missing".to_string()),
+    };
+    let names = form_invocations(doc, operations, &xobjects);
+    if names.len() != plan.form_count {
+        return Err(format!("group_layout_mismatch ({} Do / {} groupes)", names.len(), plan.form_count));
+    }
+    for (rank, nested) in &plan.forms {
+        let name = &names[*rank];
+        if names.iter().filter(|other| *other == name).count() > 1 {
+            return Err("group_drawn_twice".to_string());
+        }
+        let form_id = xobjects
+            .get(name)
+            .and_then(lopdf::Object::as_reference)
+            .map_err(|e| format!("lopdf: {e}"))?;
+        let copy_id = expurgate_form(doc, form_id, resources, nested)?;
+        xobjects.set(name.clone(), lopdf::Object::Reference(copy_id));
+    }
+    resources.set("XObject", lopdf::Object::Dictionary(xobjects));
+    Ok(())
+}
+
+/// Copie du groupe `form_id` sans les opérateurs d'affichage visés ; le reste du
+/// flux (fond, découpes, couleurs, autres textes) est conservé tel quel.
+fn expurgate_form(
+    doc: &mut lopdf::Document,
+    form_id: lopdf::ObjectId,
+    parent_resources: &lopdf::Dictionary,
+    plan: &GroupedTextPlan,
+) -> Result<lopdf::ObjectId, String> {
+    let mut stream = doc
+        .get_object(form_id)
+        .and_then(lopdf::Object::as_stream)
+        .map_err(|e| format!("lopdf: {e}"))?
+        .clone();
+    let raw = stream
+        .get_plain_content_with_limit(crate::MAX_DECOMPRESSED_STREAM_BYTES)
+        .map_err(|e| format!("lopdf: {e}"))?;
+    // lopdf ré-encode mal les images inline (BI…EI), et jette celles qu'il ne
+    // sait pas lire : détection sur les octets bruts.
+    let is_space = |b: u8| matches!(b, b' ' | b'\n' | b'\r' | b'\t');
+    let has_inline_image = raw.windows(3).enumerate().any(|(i, w)| {
+        w[0] == b'B' && w[1] == b'I' && (is_space(w[2]) || w[2] == b'/') && (i == 0 || is_space(raw[i - 1]))
+    });
+    let content = lopdf::content::Content::decode(&raw).map_err(|e| format!("lopdf decode: {e}"))?;
+    if has_inline_image
+        || content
+            .operations
+            .iter()
+            .any(|op| op.operands.iter().any(|o| matches!(o, lopdf::Object::Stream(_))))
+    {
+        return Err("inline_image_unsupported".to_string());
+    }
+
+    let mut rank = 0usize;
+    let mut operations = Vec::with_capacity(content.operations.len());
+    for operation in content.operations {
+        if is_text_show(&operation) {
+            let this = rank;
+            rank += 1;
+            if plan.texts.contains(&this) {
+                operations.extend(line_moves_of(operation));
+                continue;
+            }
+        }
+        operations.push(operation);
+    }
+    if rank != plan.text_count {
+        return Err(format!("group_layout_mismatch ({rank} Tj / {} textes)", plan.text_count));
+    }
+
+    if !plan.forms.is_empty() {
+        let mut resources = match stream.dict.get(b"Resources") {
+            Ok(entry) => resolved_dict(doc, entry)?,
+            Err(_) => parent_resources.clone(),
+        };
+        redirect_grouped_forms(doc, &operations, &mut resources, plan)?;
+        stream.dict.set("Resources", lopdf::Object::Dictionary(resources));
+    }
+
+    let encoded = lopdf::content::Content { operations }
+        .encode()
+        .map_err(|e| format!("lopdf encode: {e}"))?;
+    stream.set_plain_content(encoded);
+    stream.compress().map_err(|e| format!("lopdf compress: {e}"))?;
+    Ok(doc.add_object(stream))
+}
+
+/// Applique `plan` (groupes de la page `page_number`) : les ressources de la
+/// page deviennent propres à la page, pour ne pas toucher aux pages qui
+/// partageaient le même dictionnaire.
+fn remove_grouped_text(bytes: &[u8], page_number: u32, plan: &GroupedTextPlan) -> Result<Vec<u8>, String> {
+    let mut doc = crate::load_document(bytes).map_err(|e| format!("lopdf: {e}"))?;
+    if doc.is_encrypted() {
+        return Err("encrypted_document".to_string());
+    }
+    let baseline = doc.clone();
+    let page_id = *doc
+        .get_pages()
+        .get(&page_number)
+        .ok_or_else(|| "page_not_found".to_string())?;
+    let content = lopdf::content::Content::decode(&doc.get_page_content(page_id))
+        .map_err(|e| format!("lopdf decode: {e}"))?;
+    let mut resources = page_resources(&doc, page_id)?;
+    redirect_grouped_forms(&mut doc, &content.operations, &mut resources, plan)?;
+    doc.get_dictionary_mut(page_id)
+        .map_err(|e| format!("lopdf: {e}"))?
+        .set("Resources", lopdf::Object::Dictionary(resources));
+    crate::pdf_incremental::save_incremental(bytes, &baseline, &mut doc)
+}
+
 fn check_page(page: u32, page_count: u32) -> Result<(), String> {
     if page == 0 || page > page_count {
         return Err(format!(
@@ -112,6 +465,28 @@ fn load_image_file(path: &str) -> Result<image::DynamicImage, String> {
         return Err(format!("Image file not found: {path}"));
     }
     image::open(absolute).map_err(|e| format!("Unable to decode image {path}: {e} (PNG and JPEG are supported)"))
+}
+
+/// Charge la police pour l'écriture vectorielle. Si des octets de police sont
+/// fournis (police réelle résolue côté application via font_kit), on les embarque
+/// dans le PDF : le texte réécrit reste net, sélectionnable ET dans la police
+/// voulue (police d'origine ou choix du sélecteur). En cas d'échec de chargement
+/// (format non supporté, CFF/OTF récalcitrant…), repli silencieux sur les 14
+/// polices standard pour ne jamais bloquer l'export.
+pub(crate) fn resolve_font_token(
+    document: &mut PdfDocument,
+    font_name: Option<&str>,
+    font_bytes: Option<&[u8]>,
+) -> Result<PdfFontToken, String> {
+    if let Some(bytes) = font_bytes {
+        if bytes.len() > 4 {
+            // is_cid_font = true : couverture Unicode complète (accents FR, etc.).
+            if let Ok(token) = document.fonts_mut().load_true_type_from_bytes(bytes, true) {
+                return Ok(token);
+            }
+        }
+    }
+    font_token_for(document, font_name)
 }
 
 fn font_token_for(
@@ -216,17 +591,19 @@ fn wrap_text_lines(
 /// Pose `text` dans la bbox (repère haut-gauche), avec retour à la ligne et
 /// réduction automatique de la taille jusqu'à ce que tout tienne.
 /// Retourne la taille effectivement utilisée.
+#[allow(clippy::too_many_arguments)]
 fn insert_textbox(
     document: &mut PdfDocument,
     page_index: u32,
     bbox: (f64, f64, f64, f64),
     text: &str,
     font_name: Option<&str>,
+    font_bytes: Option<&[u8]>,
     requested_size: f64,
     color: PdfColor,
     align: &str,
 ) -> Result<f64, String> {
-    let font = font_token_for(document, font_name)?;
+    let font = resolve_font_token(document, font_name, font_bytes)?;
     let page_height = {
         let page = document
             .pages()
@@ -554,15 +931,61 @@ pub fn edit_region(
     color: PdfColor,
     align: &str,
 ) -> Result<EditRegionOutcome, String> {
+    edit_region_placed(
+        bytes, page_number, bbox, None, new_text, font, None, size, color, align, false,
+    )
+}
+
+/// Variante de `edit_region` pour l'export vectoriel. Deux différences :
+/// - `target_bbox` : on EFFACE le texte d'origine à `bbox` mais on RÉÉCRIT le
+///   nouveau texte à `target_bbox` (bloc déplacé ou redimensionné). Si `None`,
+///   réécriture au même endroit (comportement historique).
+/// - `font_bytes` : embarque la police réelle (résolue côté app) au lieu d'une
+///   police standard, pour préserver la police d'origine / le choix utilisateur.
+/// - `insert_only` : ajoute le texte sans supprimer les objets déjà présents
+///   dans `bbox` (outil « Ajouter du texte »).
+#[allow(clippy::too_many_arguments)]
+pub fn edit_region_placed(
+    bytes: &[u8],
+    page_number: u32,
+    bbox: (f64, f64, f64, f64),
+    target_bbox: Option<(f64, f64, f64, f64)>,
+    new_text: &str,
+    font: Option<&str>,
+    font_bytes: Option<&[u8]>,
+    size: Option<f64>,
+    color: PdfColor,
+    align: &str,
+    insert_only: bool,
+) -> Result<EditRegionOutcome, String> {
     let guard = pdfium_guard()?;
     let pdfium = &*guard;
+    let mut requested_size = size.unwrap_or(0.0);
+    let mut warnings = Vec::new();
+
+    // Texte rangé dans des groupes : retiré d'abord, par édition du flux.
+    let mut grouped_removed = 0;
+    let mut expurgated: Option<Vec<u8>> = None;
+    if !insert_only {
+        let plan = plan_page_grouped_text(pdfium, bytes, page_number, bbox, &mut requested_size)?;
+        if plan.removed() > 0 {
+            match remove_grouped_text(bytes, page_number, &plan) {
+                Ok(edited) => {
+                    grouped_removed = plan.removed();
+                    expurgated = Some(edited);
+                }
+                Err(reason) => warnings.push(format!("grouped_text_kept: {reason}")),
+            }
+        }
+    }
+    let source = expurgated.as_deref().unwrap_or(bytes);
+
     let mut document = pdfium
-        .load_pdf_from_byte_slice(bytes, None)
+        .load_pdf_from_byte_slice(source, None)
         .map_err(|e| e.to_string())?;
     let page_count = document.pages().len() as u32;
     check_page(page_number, page_count)?;
 
-    let mut requested_size = size.unwrap_or(0.0);
     let removed;
     {
         let mut page = document
@@ -572,28 +995,32 @@ pub fn edit_region(
         let page_height = page.height().value as f64;
 
         // Indices des runs de texte à supprimer (en intersection avec la zone).
+        // Une insertion pure doit préserver intégralement le contenu sous-jacent.
         let mut to_remove: Vec<usize> = Vec::new();
-        for (index, object) in page.objects().iter().enumerate() {
-            if object.object_type() != PdfPageObjectType::Text {
-                continue;
-            }
-            let Some(object_bbox) = object_bbox_top_left(&object, page_height) else {
-                continue;
-            };
-            if rects_intersect(object_bbox, bbox) {
-                if requested_size <= 0.0 {
-                    if let Some(text_object) = object.as_text_object() {
-                        requested_size = text_object.scaled_font_size().value as f64;
-                    }
+        if !insert_only {
+            for (index, object) in page.objects().iter().enumerate() {
+                if object.object_type() != PdfPageObjectType::Text {
+                    continue;
                 }
-                to_remove.push(index);
+                let Some(object_bbox) = object_bbox_top_left(&object, page_height) else {
+                    continue;
+                };
+                if rects_intersect(object_bbox, bbox) {
+                    if requested_size <= 0.0 {
+                        if let Some(text_object) = object.as_text_object() {
+                            requested_size = text_object.scaled_font_size().value as f64;
+                        }
+                    }
+                    to_remove.push(index);
+                }
             }
         }
-        removed = to_remove.len();
+        let top_level_removed = to_remove.len();
         for index in to_remove.into_iter().rev() {
             remove_page_object(&mut page, index)?;
         }
-        if removed > 0 {
+        removed = top_level_removed + grouped_removed;
+        if top_level_removed > 0 {
             page.regenerate_content().map_err(|e| e.to_string())?;
         }
     }
@@ -602,15 +1029,15 @@ pub fn edit_region(
         requested_size = 11.0;
     }
 
-    let mut warnings = Vec::new();
     let mut final_size = requested_size;
     if !new_text.trim().is_empty() {
         final_size = insert_textbox(
             &mut document,
             page_number - 1,
-            bbox,
+            target_bbox.unwrap_or(bbox),
             new_text,
             font,
+            font_bytes,
             requested_size,
             color,
             align,
@@ -630,6 +1057,35 @@ pub fn edit_region(
         final_size,
         warnings,
     })
+}
+
+/// Rendu PNG d'une page sans le texte des zones `regions` (blocs supprimés à
+/// l'écran) : même retrait que l'export vectoriel, le fond reste intact. Les
+/// octets du document ne sont pas modifiés.
+pub fn render_page_without_text(
+    bytes: &[u8],
+    page_number: u32,
+    scale: f64,
+    regions: &[(f64, f64, f64, f64)],
+) -> Result<(Vec<u8>, u32, u32), String> {
+    let mut current = std::borrow::Cow::Borrowed(bytes);
+    for region in regions {
+        let outcome = edit_region_placed(
+            &current,
+            page_number,
+            *region,
+            None,
+            "",
+            None,
+            None,
+            None,
+            PdfColor::new(0, 0, 0, 255),
+            "left",
+            false,
+        )?;
+        current = std::borrow::Cow::Owned(outcome.bytes);
+    }
+    crate::pdf_engine::render_pdf_page_png_bytes(&current, page_number, scale)
 }
 
 /// Résout la bbox d'un block_id "p{page}-t{index}" émis par `pdf_layout`.
@@ -680,18 +1136,20 @@ pub fn replace_image(bytes: &[u8], image_id: &str, new_image_path: &str) -> Resu
         .pages()
         .get((page_number - 1) as i32)
         .map_err(|e| e.to_string())?;
-    let mut object = page
-        .objects()
-        .get(object_index)
-        .map_err(|_| format!("No object at index {object_index} on page {page_number}. Re-run pdf_layout."))?;
-    let Some(image_object) = object.as_image_object_mut() else {
-        return Err(format!(
-            "Object {image_id} is not an image. Re-run pdf_layout to get fresh ids."
-        ));
-    };
-    image_object
-        .set_image(&new_image)
-        .map_err(|e| format!("Unable to replace image: {e}"))?;
+    {
+        let mut object = page
+            .objects()
+            .get(object_index)
+            .map_err(|_| format!("No object at index {object_index} on page {page_number}. Re-run pdf_layout."))?;
+        let Some(image_object) = object.as_image_object_mut() else {
+            return Err(format!(
+                "Object {image_id} is not an image. Re-run pdf_layout to get fresh ids."
+            ));
+        };
+        image_object
+            .set_image(&new_image)
+            .map_err(|e| format!("Unable to replace image: {e}"))?;
+    }
     page.regenerate_content().map_err(|e| e.to_string())?;
     document.save_to_bytes().map_err(|e| e.to_string())
 }
@@ -900,14 +1358,14 @@ pub fn set_metadata(
     subject: Option<&str>,
     keywords: Option<&str>,
 ) -> Result<Vec<u8>, String> {
-    use lopdf::{Dictionary, Document, Object};
+    use lopdf::{Dictionary, Object};
 
     if title.is_none() && author.is_none() && subject.is_none() && keywords.is_none() {
         return Err("Provide at least one of: title, author, subject, keywords.".to_string());
     }
 
     let mut document =
-        Document::load_mem(bytes).map_err(|e| format!("Unable to parse PDF: {e}"))?;
+        crate::load_document(bytes).map_err(|e| format!("Unable to parse PDF: {e}"))?;
 
     let info_id = match document.trailer.get(b"Info") {
         Ok(Object::Reference(id)) => *id,
@@ -1017,4 +1475,74 @@ pub fn stamp(
     }
 
     document.save_to_bytes().map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn rects_intersect_overlap_and_touch() {
+        // Chevauchement franc.
+        assert!(rects_intersect((0.0, 0.0, 10.0, 10.0), (5.0, 5.0, 15.0, 15.0)));
+        // Contact arête-à-arête : pas un chevauchement (comparaisons strictes).
+        assert!(!rects_intersect((0.0, 0.0, 10.0, 10.0), (10.0, 0.0, 20.0, 10.0)));
+        // Totalement disjoints.
+        assert!(!rects_intersect((0.0, 0.0, 5.0, 5.0), (6.0, 6.0, 9.0, 9.0)));
+        // Inclusion.
+        assert!(rects_intersect((0.0, 0.0, 100.0, 100.0), (10.0, 10.0, 20.0, 20.0)));
+    }
+
+    #[test]
+    fn parse_bbox_valid() {
+        let bbox = parse_bbox(&json!([10.0, 20.0, 110.0, 60.0])).unwrap();
+        assert_eq!(bbox, (10.0, 20.0, 110.0, 60.0));
+    }
+
+    #[test]
+    fn parse_bbox_rejects_bad_input() {
+        // Mauvaise longueur.
+        assert!(parse_bbox(&json!([1.0, 2.0, 3.0])).is_err());
+        // Valeur non numérique.
+        assert!(parse_bbox(&json!([1.0, 2.0, "x", 4.0])).is_err());
+        // x1 <= x0.
+        assert!(parse_bbox(&json!([10.0, 0.0, 10.0, 5.0])).is_err());
+        // y1 <= y0.
+        assert!(parse_bbox(&json!([0.0, 10.0, 5.0, 10.0])).is_err());
+    }
+
+    #[test]
+    fn parse_object_id_text_and_image() {
+        assert_eq!(parse_object_id("p1-t0", 't').unwrap(), (1, 0));
+        assert_eq!(parse_object_id("p12-i7", 'i').unwrap(), (12, 7));
+    }
+
+    #[test]
+    fn parse_object_id_rejects_bad_input() {
+        // Mauvais préfixe.
+        assert!(parse_object_id("x1-t0", 't').is_err());
+        // Mauvais type d'objet.
+        assert!(parse_object_id("p1-i0", 't').is_err());
+        // Page 0 interdite (1-based).
+        assert!(parse_object_id("p0-t0", 't').is_err());
+        // Index non numérique.
+        assert!(parse_object_id("p1-tx", 't').is_err());
+    }
+
+    #[test]
+    fn parse_color_default_is_black_opaque() {
+        let c = parse_color(None).unwrap();
+        assert_eq!((c.red(), c.green(), c.blue(), c.alpha()), (0, 0, 0, 255));
+    }
+
+    #[test]
+    fn parse_color_rgb_and_bounds() {
+        let c = parse_color(Some(&json!([255, 128, 0]))).unwrap();
+        assert_eq!((c.red(), c.green(), c.blue(), c.alpha()), (255, 128, 0, 255));
+        // Hors plage.
+        assert!(parse_color(Some(&json!([256, 0, 0]))).is_err());
+        // Mauvaise longueur.
+        assert!(parse_color(Some(&json!([0, 0]))).is_err());
+    }
 }

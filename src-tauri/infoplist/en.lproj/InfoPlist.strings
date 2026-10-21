@@ -1,0 +1,3 @@
+/* English — declares en localization so AppKit can pick system dialog language. */
+CFBundleDisplayName = "Slate";
+CFBundleName = "Slate";

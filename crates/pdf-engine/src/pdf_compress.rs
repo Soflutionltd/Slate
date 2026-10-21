@@ -145,7 +145,7 @@ fn process_candidate(candidate: &Candidate, params: &Level) -> Option<Replacemen
 /// une compression structurelle. `level` ∈ {"low","medium","high"}.
 pub fn compress_pdf_images(bytes: Vec<u8>, level: &str) -> Result<Vec<u8>, String> {
     let params = level_params(level);
-    let mut doc = Document::load_mem(&bytes).map_err(|e| e.to_string())?;
+    let mut doc = crate::load_document(&bytes).map_err(|e| e.to_string())?;
 
     // 1) Collecte série (lecture lopdf + décompression sans perte). On ne fait
     //    ici que le travail qui exige `&doc` ; le décodage/ré-encodage suit.

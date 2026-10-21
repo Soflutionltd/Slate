@@ -1,9 +1,10 @@
 [package]
 name = "sofdocs-desktop"
-version = "0.3.4"
+version = "0.3.155"
 edition = "2021"
 description = "Alto desktop application — native file access and offline editing"
 license = "AGPL-3.0-or-later"
+default-run = "sofdocs-desktop"
 
 [lib]
 name = "sofdocs_desktop"
@@ -33,21 +34,40 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Moteur PDF partagé (extrait de src-tauri) : même code natif ici et WASM côté web.
 alto-pdf-engine = { path = "../crates/pdf-engine" }
-pdfium-render = "0.9.1"
+pdfium-render = { git = "https://github.com/ajrcarey/pdfium-render", rev = "0d7f99ad660317d5fd2e9df732db77764873a6d7" }
 dirs = "6.0.0"
-lopdf = "0.40"
+lopdf = { version = "0.44", default-features = false, features = ["rayon"] }
 rand = "0.9"
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg"] }
 underskrift = "0.1"
 rayon = "1"
+# Clés API du chat IA : Trousseau macOS, Gestionnaire d'identification Windows,
+# Secret Service Linux (zbus, sans libdbus).
+keyring = "4.2"
+# OAuth PKCE (OpenRouter) : défi S256 encodé en base64url.
+sha2 = "0.10"
+base64 = "0.22"
 # Énumération des polices installées (cross-OS : CoreText macOS / DirectWrite
 # Windows / fontconfig Linux). Sert à peupler le sélecteur de police de l'éditeur.
 font-kit = "0.14"
 
+# Drag natif d'un onglet hors de la fenêtre (le PDF devient un vrai fichier
+# glissé : Finder, Mail, navigateur…). L'API Linux (gtk::ApplicationWindow)
+# diffère : on ne l'active que sur macOS/Windows.
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+drag = "2.1.1"
+
+# Enregistrement atomique : les attributs étendus (étiquettes Finder…) de
+# l'original sont recopiés sur le fichier qui le remplace.
+[target.'cfg(unix)'.dependencies]
+xattr = "1.6"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"
+# Enregistrement atomique : fsync simple quand un volume refuse F_FULLFSYNC.
+libc = "0.2"
 # underskrift (signature PAdES) tire openssl. Sans vendored, macOS lie la dylib
 # Homebrew (/opt/homebrew/.../libssl.3.dylib), que le hardened runtime refuse de
 # charger (Team ID différent) → crash au lancement. On lie OpenSSL en statique.
@@ -57,6 +77,16 @@ openssl = { version = "0.10", features = ["vendored"] }
 # On force la compilation vendored (le runner Windows a Perl + NASM).
 [target.'cfg(windows)'.dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
+windows = { version = "0.58", features = [
+	"Foundation",
+	"Foundation_Collections",
+	"Globalization",
+	"Graphics_Imaging",
+	"Media_Ocr",
+	"Storage",
+	"Storage_Streams",
+	"Win32_System_WinRT",
+] }
 
 [features]
 default = ["custom-protocol"]
@@ -65,6 +95,10 @@ custom-protocol = ["tauri/custom-protocol"]
 # Build release optimisé taille + vitesse. On NE met PAS panic = "abort" : PDFium
 # et le décodage d'images traitent des fichiers non fiables et s'appuient sur le
 # déroulement de pile pour remonter des erreurs proprement (robustesse > ~5% de taille).
+[patch.crates-io]
+# lopdf 0.44.0 avec decode_frame protégé contre un /Columns piégé (non corrigé en amont).
+lopdf = { path = "../vendor/lopdf" }
+
 [profile.release]
 lto = true
 codegen-units = 1

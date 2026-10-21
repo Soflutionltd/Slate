@@ -31,6 +31,8 @@ jobs:
             sidecar_ext: ""
 
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -68,8 +70,20 @@ jobs:
         run: |
           set -euo pipefail
           cd src-tauri
-          curl -L --fail -o pdfium.tgz \
-            "https://github.com/bblanchon/pdfium-binaries/releases/download/${PDFIUM_TAG}/${{ matrix.pdfium_asset }}"
+          # GitHub release-assets renvoie parfois 504 : retries + backoff.
+          URL="https://github.com/bblanchon/pdfium-binaries/releases/download/${PDFIUM_TAG}/${{ matrix.pdfium_asset }}"
+          for attempt in 1 2 3 4 5; do
+            if curl -L --fail --retry 3 --retry-delay 2 --retry-all-errors \
+              --connect-timeout 30 --max-time 300 \
+              -o pdfium.tgz "$URL"; then
+              break
+            fi
+            if [[ "$attempt" -eq 5 ]]; then
+              echo "ERREUR : téléchargement PDFium échoué après 5 essais ($URL)" >&2
+              exit 1
+            fi
+            sleep $((attempt * 5))
+          done
           mkdir -p pdfium-extract
           tar -xzf pdfium.tgz -C pdfium-extract
           cp "pdfium-extract/${{ matrix.pdfium_src }}" "${{ matrix.pdfium_file }}"
@@ -98,11 +112,10 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           OPENSSL_SRC_PERL: C:\Strawberry\perl\bin\perl.exe
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: "."
-          # Pas de canal d'auto-update Windows/Linux : on désactive la création des
-          # artefacts updater (sinon `tauri build` exige TAURI_SIGNING_PRIVATE_KEY et
-          # le build échoue). Le canal macOS est signé/publié localement via release.sh.
           args: --config src-tauri/tauri.ci.conf.json
 
       - name: Upload bundles
@@ -112,3 +125,60 @@ jobs:
           path: |
             src-tauri/target/release/bundle/**/*
           if-no-files-found: error
+
+      # Noms stables pour /releases/latest/download/… — GitHub sert le .exe
+      # aux visiteurs Windows (plus le .app.tar.gz macOS).
+      - name: Publish installer to GitHub Release
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            TAG="$(gh release view --repo "${{ github.repository }}" --json tagName --jq .tagName)"
+          fi
+          if [[ -z "${TAG}" ]]; then
+            echo "Aucune release GitHub — skip publish." >&2
+            exit 0
+          fi
+          mkdir -p dist-upload
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            src="$(find src-tauri/target/release/bundle -type f -name '*-setup.exe' | head -n 1)"
+            dest="dist-upload/Slate-windows-x64-setup.exe"
+            platform="windows-x86_64"
+            if [[ -z "${src}" ]]; then
+              src="$(find src-tauri/target/release/bundle -type f -name '*.msi' ! -name '*.sig' | head -n 1)"
+              dest="dist-upload/Slate-windows-x64.msi"
+            fi
+          else
+            src="$(find src-tauri/target/release/bundle -type f -name '*.AppImage' | head -n 1)"
+            dest="dist-upload/Slate-linux-x64.AppImage"
+            platform="linux-x86_64"
+            if [[ -z "${src}" ]]; then
+              src="$(find src-tauri/target/release/bundle -type f -name '*.deb' | head -n 1)"
+              dest="dist-upload/Slate-linux-x64.deb"
+            fi
+          fi
+          if [[ -z "${src}" ]]; then
+            echo "Installeur introuvable dans bundle/" >&2
+            find src-tauri/target/release/bundle -type f | head
+            exit 1
+          fi
+          cp "${src}" "${dest}"
+          upload_files=("${dest}")
+          if [[ -f "${src}.sig" ]]; then
+            cp "${src}.sig" "${dest}.sig"
+            upload_files+=("${dest}.sig")
+          fi
+          ls -la "${upload_files[@]}"
+          gh release upload "${TAG}" "${upload_files[@]}" --repo "${{ github.repository }}" --clobber
+          if [[ -f "${dest}.sig" ]]; then
+            asset="$(basename "${dest}")"
+            url="https://github.com/${{ github.repository }}/releases/download/${TAG}/${asset}"
+            bash scripts/merge-updater-manifest.sh "${TAG}" "${platform}" "${dest}.sig" "${url}"
+          else
+            echo "⚠ ${src}.sig absent — latest.json non mis à jour pour ${platform}." >&2
+          fi
