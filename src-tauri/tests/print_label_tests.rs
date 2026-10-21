@@ -117,7 +117,7 @@ fn page_media_box(pdf: &[u8]) -> (f64, f64) {
 fn content_matrices(pdf: &[u8]) -> Vec<[f64; 6]> {
     let doc = Document::load_mem(pdf).expect("relecture");
     let page_id = *doc.get_pages().values().next().expect("une page");
-    let stream = doc.get_page_content(page_id).expect("flux de page");
+    let stream = doc.get_page_content(page_id);
     let text = String::from_utf8_lossy(&stream).to_string();
     let mut matrices = Vec::new();
     for line in text.lines() {
