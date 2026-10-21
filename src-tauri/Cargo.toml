@@ -52,6 +52,17 @@ base64 = "0.22"
 # Énumération des polices installées (cross-OS : CoreText macOS / DirectWrite
 # Windows / fontconfig Linux). Sert à peupler le sélecteur de police de l'éditeur.
 font-kit = "0.14"
+# MCP local (Cursor, Claude Code… sur ce Mac) : SDK officiel, Streamable HTTP sur
+# 127.0.0.1 servi par hyper, jeton comparé à temps constant.
+rmcp = { version = "3.6.0", default-features = false, features = ["server", "transport-streamable-http-server"] }
+tokio = { version = "1", features = ["net", "time", "sync"] }
+tokio-util = "0.7"
+tower-service = "0.3"
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio", "service"] }
+http-body-util = "0.1"
+bytes = "1"
+subtle = "2.6"
 
 # Drag natif d'un onglet hors de la fenêtre (le PDF devient un vrai fichier
 # glissé : Finder, Mail, navigateur…). L'API Linux (gtk::ApplicationWindow)
@@ -66,6 +77,13 @@ xattr = "1.6"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"
+# Capture de la fenêtre pour le MCP local (instantané WKWebView, sans permission
+# d'enregistrement de l'écran).
+objc2 = "0.6"
+block2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSData", "NSDictionary", "NSError"] }
+objc2-app-kit = { version = "0.3", features = ["NSImage", "NSImageRep", "NSBitmapImageRep", "NSGraphics"] }
+objc2-web-kit = { version = "0.3", features = ["WKWebView", "WKSnapshotConfiguration", "block2", "objc2-app-kit"] }
 # Enregistrement atomique : fsync simple quand un volume refuse F_FULLFSYNC.
 libc = "0.2"
 # underskrift (signature PAdES) tire openssl. Sans vendored, macOS lie la dylib

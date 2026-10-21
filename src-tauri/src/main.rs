@@ -31,6 +31,7 @@ mod mac_open;
 
 mod atomic_write;
 mod ipc_bytes;
+mod mcp_local;
 mod pdf_color;
 mod print_cups;
 use sofdocs_desktop::print_layout;
@@ -2424,9 +2425,12 @@ fn main() {
         .manage(DocCache::default())
         .manage(ViewCache::default())
         .manage(DocBaselines::default())
+        .manage(mcp_local::McpLocalState::default())
         .setup(|app| {
             #[cfg(target_os = "macos")]
             mac_print::apply_persisted_apple_languages();
+
+            mcp_local::start_if_enabled(app.handle());
 
             // Pré-chauffe PDFium en arrière-plan : charge/initialise la lib native
             // dès le démarrage pour supprimer la latence du premier appel PDF.
@@ -2878,6 +2882,11 @@ fn main() {
             acp::acp_reply,
             acp::acp_cancel,
             acp::acp_disconnect,
+            mcp_local::mcp_local_status,
+            mcp_local::mcp_local_set_enabled,
+            mcp_local::mcp_local_ready,
+            mcp_local::mcp_local_reply,
+            mcp_local::mcp_local_install_skill,
             updater::check_for_update,
             updater::install_update
         ])
@@ -2886,6 +2895,7 @@ fn main() {
         .run(|_app, _event| {
             if let tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } = &_event {
                 _app.state::<ViewCache>().forget_window(label);
+                mcp_local::forget_window(label);
             }
             // RunEvent::Opened n'existe que sur macOS/iOS (ouverture via Finder /
             // association de fichiers). Sur Windows/Linux, l'ouverture passe par les
