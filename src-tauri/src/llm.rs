@@ -820,7 +820,8 @@ mod tests {
         let roles: Vec<&str> = out.iter().map(|m| m["role"].as_str().unwrap()).collect();
         assert_eq!(roles, ["system", "user", "assistant", "tool", "tool", "user"]);
         assert_eq!(out[2]["content"], Value::Null);
-        assert_eq!(out[2]["tool_calls"][1]["function"]["arguments"], r#"{"degrees":90,"pages":[2]}"#);
+        let arguments: Value = serde_json::from_str(out[2]["tool_calls"][1]["function"]["arguments"].as_str().unwrap()).unwrap();
+        assert_eq!(arguments, json!({ "degrees": 90, "pages": [2] }));
         assert_eq!(out[5]["content"][1]["image_url"]["url"], "data:image/jpeg;base64,AAAA");
     }
 
