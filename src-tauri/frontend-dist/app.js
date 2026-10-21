@@ -704,6 +704,7 @@ const translations = {
 		aiConnectUrlCopied: 'Connector address copied.',
 		aiConnectNewClient: (name) => `${name} is now connected to Slate.`,
 		aiConnectUnavailable: 'The AI relay cannot be reached. Check your connection.',
+		histAiTurn: 'Changes by an AI',
 		aiConfirmTitle: (client) => `${client} asks for your permission`,
 		aiConfirmAllow: 'Allow',
 		copyMcpPath: 'Copy path',
@@ -1116,6 +1117,7 @@ const translations = {
 		aiConnectUrlCopied: 'Adresse du connecteur copiée.',
 		aiConnectNewClient: (name) => `${name} est maintenant connecté à Slate.`,
 		aiConnectUnavailable: 'Le relais IA est injoignable. Vérifie ta connexion.',
+		histAiTurn: 'Modifications d’une IA',
 		aiConfirmTitle: (client) => `${client} demande ton accord`,
 		aiConfirmAllow: 'Autoriser',
 		copyMcpPath: 'Copier le chemin',
@@ -24957,6 +24959,38 @@ const aiToolHandlers = {
 		if (!count) throw new Error('Nothing to undo in this document.');
 		await historyJumpBack(count);
 		return { document_id: tab.id, undone: count, remaining: tab.undoStack?.length || 0 };
+	},
+
+	// Chaque entrée de l'historique garde l'état d'AVANT sa modification : fusionner un
+	// tour revient à ne garder que la première entrée ajoutée depuis `begin`.
+	async edit_session({ document_id: documentId, action }) {
+		const tab = await aiFocusDocument(documentId);
+		if (!Array.isArray(tab.undoStack)) tab.undoStack = [];
+		if (action === 'begin') {
+			tab._aiEditSession = { top: tab.undoStack.at(-1) ?? null };
+			return { document_id: tab.id, session: 'open' };
+		}
+		if (action !== 'end') throw new Error('action must be "begin" or "end".');
+		const session = tab._aiEditSession;
+		if (!session) throw new Error('No edit session is open in this document. Call edit_session with action "begin" first.');
+		delete tab._aiEditSession;
+		const start = session.top ? tab.undoStack.indexOf(session.top) + 1 : 0;
+		if (session.top && start === 0) {
+			return {
+				document_id: tab.id,
+				merged: 0,
+				note: 'The undo history was cleared or trimmed during the session (page tools clear it): nothing to merge.'
+			};
+		}
+		const steps = tab.undoStack.length - start;
+		if (steps > 1) {
+			tab.undoStack.splice(start + 1);
+			tab.undoStack[start].label = 'histAiTurn';
+			updateUndoRedoButtons();
+			refreshHistoryPanelIfVisible();
+			schedulePersistedEditHistory();
+		}
+		return { document_id: tab.id, merged: steps };
 	},
 
 	async save_document({ document_id: documentId }) {
