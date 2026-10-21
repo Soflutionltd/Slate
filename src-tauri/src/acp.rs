@@ -311,7 +311,8 @@ fn serve_mcp(mut stream: TcpStream) {
         return write_http(&mut stream, "403 Forbidden", "", b"");
     }
     let expected = format!("Bearer {}", server.token);
-    if request.headers.get("authorization") != Some(&expected) {
+    let given = request.headers.get("authorization").map(String::as_bytes).unwrap_or_default();
+    if given.len() != expected.len() || !bool::from(subtle::ConstantTimeEq::ct_eq(given, expected.as_bytes())) {
         return write_http(&mut stream, "401 Unauthorized", "", b"");
     }
     if request.method != "POST" {
