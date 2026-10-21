@@ -1475,6 +1475,63 @@
 						</div>
 					</div>
 
+					<label class="setting-row">
+						<span>
+							<strong id="mcp-local-label">Connecter un agent sur ce Mac</strong>
+							<small id="mcp-local-desc">Cursor, Claude Code, Claude Desktop… modifient le document ouvert dans Slate, sans passer par Internet.</small>
+						</span>
+						<input id="mcp-local-enabled" type="checkbox" class="setting-switch" />
+					</label>
+
+					<div id="mcp-local-panel" class="ai-connect-panel hidden">
+						<p class="ai-connect-status">
+							<span id="mcp-local-dot" class="ai-connect-dot" data-status="off"></span>
+							<span id="mcp-local-status-text"></span>
+						</p>
+						<div class="ai-connect-step">
+							<span id="mcp-local-step-url" class="ai-connect-step-label">Adresse</span>
+							<div class="ai-connect-field">
+								<code id="mcp-local-url"></code>
+								<button class="setting-action-button" type="button" data-mcp-copy="url">Copier</button>
+							</div>
+						</div>
+						<div class="ai-connect-step">
+							<span id="mcp-local-step-token" class="ai-connect-step-label">Jeton</span>
+							<div class="ai-connect-field">
+								<code id="mcp-local-token"></code>
+								<button class="setting-action-button" type="button" data-mcp-copy="token">Copier</button>
+							</div>
+						</div>
+						<div class="ai-connect-step">
+							<span id="mcp-local-step-cursor" class="ai-connect-step-label">Cursor : dans ~/.cursor/mcp.json</span>
+							<div class="ai-connect-field">
+								<code id="mcp-local-cursor"></code>
+								<button class="setting-action-button" type="button" data-mcp-copy="cursor">Copier</button>
+							</div>
+						</div>
+						<div class="ai-connect-step">
+							<span id="mcp-local-step-claude-code" class="ai-connect-step-label">Claude Code : dans le Terminal</span>
+							<div class="ai-connect-field">
+								<code id="mcp-local-claude-code"></code>
+								<button class="setting-action-button" type="button" data-mcp-copy="claudeCode">Copier</button>
+							</div>
+						</div>
+						<div class="ai-connect-step">
+							<span id="mcp-local-step-claude-desktop" class="ai-connect-step-label">Claude Desktop : dans claude_desktop_config.json</span>
+							<div class="ai-connect-field">
+								<code id="mcp-local-claude-desktop"></code>
+								<button class="setting-action-button" type="button" data-mcp-copy="claudeDesktop">Copier</button>
+							</div>
+						</div>
+						<div class="ai-connect-step">
+							<span id="mcp-local-step-skill" class="ai-connect-step-label">Skill « travailler avec Slate »</span>
+							<div class="ai-connect-field">
+								<small id="mcp-local-skill-hint" class="ai-connect-hint"></small>
+								<button id="mcp-local-skill" class="setting-action-button" type="button">Installer</button>
+							</div>
+						</div>
+					</div>
+
 					<div class="setting-row">
 						<span>
 							<strong id="setting-claude-label">Claude Desktop</strong>

@@ -300,6 +300,19 @@ const elements = {
 	aiConnectCodeHint: document.getElementById('ai-connect-code-hint'),
 	aiConnectClientsTitle: document.getElementById('ai-connect-clients-title'),
 	aiConnectClients: document.getElementById('ai-connect-clients'),
+	mcpLocalLabel: document.getElementById('mcp-local-label'),
+	mcpLocalDesc: document.getElementById('mcp-local-desc'),
+	mcpLocalEnabled: document.getElementById('mcp-local-enabled'),
+	mcpLocalPanel: document.getElementById('mcp-local-panel'),
+	mcpLocalDot: document.getElementById('mcp-local-dot'),
+	mcpLocalStatusText: document.getElementById('mcp-local-status-text'),
+	mcpLocalUrl: document.getElementById('mcp-local-url'),
+	mcpLocalToken: document.getElementById('mcp-local-token'),
+	mcpLocalCursor: document.getElementById('mcp-local-cursor'),
+	mcpLocalClaudeCode: document.getElementById('mcp-local-claude-code'),
+	mcpLocalClaudeDesktop: document.getElementById('mcp-local-claude-desktop'),
+	mcpLocalSkill: document.getElementById('mcp-local-skill'),
+	mcpLocalSkillHint: document.getElementById('mcp-local-skill-hint'),
 	settingsTabGeneral: document.getElementById('settings-tab-general'),
 	settingsTabDisplay: document.getElementById('settings-tab-display'),
 	settingsTabIdentity: document.getElementById('settings-tab-identity'),
@@ -704,6 +717,34 @@ const translations = {
 		aiConnectUrlCopied: 'Connector address copied.',
 		aiConnectNewClient: (name) => `${name} is now connected to Slate.`,
 		aiConnectUnavailable: 'The AI relay cannot be reached. Check your connection.',
+		mcpLocalLabel: 'Connect an agent on this Mac',
+		mcpLocalDesc: 'Cursor, Claude Code, Claude Desktop… edit the document open in Slate, without going through the internet.',
+		mcpLocalStepUrl: 'Address',
+		mcpLocalStepToken: 'Token',
+		mcpLocalStepCursor: 'Cursor: in ~/.cursor/mcp.json',
+		mcpLocalStepClaudeCode: 'Claude Code: in the Terminal',
+		mcpLocalStepClaudeDesktop: 'Claude Desktop: in claude_desktop_config.json',
+		mcpLocalStepSkill: 'Skill “working with Slate”',
+		mcpLocalStatus: {
+			off: 'Off',
+			running: 'Ready: agents on this Mac can reach Slate',
+			port_in_use: (port) => `Port ${port} is already used by another app. Quit it, then turn this option off and on again.`,
+			failed: 'The local server could not start. Turn this option off and on again.'
+		},
+		mcpLocalCopied: {
+			url: 'Address copied.',
+			token: 'Token copied.',
+			cursor: 'Cursor configuration copied.',
+			claudeCode: 'Claude Code command copied.',
+			claudeDesktop: 'Claude Desktop configuration copied.'
+		},
+		mcpLocalSkillInstall: 'Install',
+		mcpLocalSkillUpdate: 'Update',
+		mcpLocalSkillHint: 'For Cursor and Claude Code: the look, edit, check loop and the pitfalls.',
+		mcpLocalSkillInstalled: 'Installed in ~/.cursor/skills and ~/.claude/skills.',
+		mcpLocalSkillOutdated: 'A newer version comes with this Slate.',
+		mcpLocalSkillDone: 'Skill installed for Cursor and Claude Code.',
+		mcpLocalPortInUse: (port) => `Agents on this Mac cannot reach Slate: port ${port} is already in use.`,
 		histAiTurn: 'Changes by an AI',
 		aiConfirmTitle: (client) => `${client} asks for your permission`,
 		aiConfirmAllow: 'Allow',
@@ -1117,6 +1158,34 @@ const translations = {
 		aiConnectUrlCopied: 'Adresse du connecteur copiée.',
 		aiConnectNewClient: (name) => `${name} est maintenant connecté à Slate.`,
 		aiConnectUnavailable: 'Le relais IA est injoignable. Vérifie ta connexion.',
+		mcpLocalLabel: 'Connecter un agent sur ce Mac',
+		mcpLocalDesc: 'Cursor, Claude Code, Claude Desktop… modifient le document ouvert dans Slate, sans passer par Internet.',
+		mcpLocalStepUrl: 'Adresse',
+		mcpLocalStepToken: 'Jeton',
+		mcpLocalStepCursor: 'Cursor : dans ~/.cursor/mcp.json',
+		mcpLocalStepClaudeCode: 'Claude Code : dans le Terminal',
+		mcpLocalStepClaudeDesktop: 'Claude Desktop : dans claude_desktop_config.json',
+		mcpLocalStepSkill: 'Skill « travailler avec Slate »',
+		mcpLocalStatus: {
+			off: 'Désactivé',
+			running: 'Prêt : les agents de ce Mac peuvent joindre Slate',
+			port_in_use: (port) => `Le port ${port} est déjà pris par une autre app. Quitte-la, puis désactive et réactive cette option.`,
+			failed: 'Le serveur local n’a pas pu démarrer. Désactive et réactive cette option.'
+		},
+		mcpLocalCopied: {
+			url: 'Adresse copiée.',
+			token: 'Jeton copié.',
+			cursor: 'Configuration Cursor copiée.',
+			claudeCode: 'Commande Claude Code copiée.',
+			claudeDesktop: 'Configuration Claude Desktop copiée.'
+		},
+		mcpLocalSkillInstall: 'Installer',
+		mcpLocalSkillUpdate: 'Mettre à jour',
+		mcpLocalSkillHint: 'Pour Cursor et Claude Code : la boucle regarder, éditer, vérifier et les pièges.',
+		mcpLocalSkillInstalled: 'Installé dans ~/.cursor/skills et ~/.claude/skills.',
+		mcpLocalSkillOutdated: 'Une version plus récente est livrée avec ce Slate.',
+		mcpLocalSkillDone: 'Skill installé pour Cursor et Claude Code.',
+		mcpLocalPortInUse: (port) => `Les agents de ce Mac ne peuvent pas joindre Slate : le port ${port} est déjà pris.`,
 		histAiTurn: 'Modifications d’une IA',
 		aiConfirmTitle: (client) => `${client} demande ton accord`,
 		aiConfirmAllow: 'Autoriser',
@@ -1891,6 +1960,16 @@ function localizeUi() {
 	setText(elements.aiConnectCopy, 'aiConnectCopy');
 	setText(elements.aiConnectClientsTitle, 'aiConnectClientsTitle');
 	renderAiConnectPanel();
+	setText(elements.mcpLocalLabel, 'mcpLocalLabel');
+	setText(elements.mcpLocalDesc, 'mcpLocalDesc');
+	setText('#mcp-local-step-url', 'mcpLocalStepUrl');
+	setText('#mcp-local-step-token', 'mcpLocalStepToken');
+	setText('#mcp-local-step-cursor', 'mcpLocalStepCursor');
+	setText('#mcp-local-step-claude-code', 'mcpLocalStepClaudeCode');
+	setText('#mcp-local-step-claude-desktop', 'mcpLocalStepClaudeDesktop');
+	setText('#mcp-local-step-skill', 'mcpLocalStepSkill');
+	for (const button of document.querySelectorAll('[data-mcp-copy]')) button.textContent = t('aiConnectCopy');
+	renderMcpLocalPanel();
 	setText(elements.settingsDone, 'done');
 	setText('#save-changes-title', 'saveChangesTitle');
 	setText(elements.saveChangesMessage, 'saveChangesMessage');
@@ -25016,6 +25095,15 @@ async function executeAiTool(tool, args, client) {
 	return handler(args, { client });
 }
 
+// Un appel d'outil à la fois, relais et MCP local confondus : deux modifications
+// concurrentes du même document se marcheraient dessus (historique, file native).
+let _aiToolQueue = Promise.resolve();
+function executeAiToolInTurn(tool, args, client) {
+	const run = _aiToolQueue.then(() => executeAiTool(tool, args, client));
+	_aiToolQueue = run.catch(() => {});
+	return run;
+}
+
 const aiConnect = {
 	code: null,
 	codeExpiresAt: 0,
@@ -25025,7 +25113,7 @@ const aiConnect = {
 };
 
 const aiRelay = createAiRelay({
-	execute: executeAiTool,
+	execute: executeAiToolInTurn,
 	getCatalog: loadAiCatalog,
 	onStatusChange: () => {
 		renderAiConnectPanel();
@@ -25156,6 +25244,138 @@ elements.aiConnectCodeButton?.addEventListener('click', async () => {
 });
 
 if (isAiRelayEnabled()) aiRelay.start();
+
+// MCP local (Cursor, Claude Code… sur ce Mac) : le serveur vit dans Slate (Rust),
+// chaque appel d'outil arrive ici et passe par le même executeAiTool que le relais.
+const mcpLocal = { report: null, busy: false };
+
+function mcpLocalSnippets(report) {
+	const auth = `Bearer ${report.token}`;
+	return {
+		url: report.url,
+		token: report.token,
+		cursor: JSON.stringify({ mcpServers: { slate: { url: report.url, headers: { Authorization: auth } } } }),
+		claudeCode: `claude mcp add --transport http slate ${report.url} --header "Authorization: ${auth}"`,
+		claudeDesktop: JSON.stringify({
+			mcpServers: {
+				slate: {
+					command: 'npx',
+					args: ['-y', 'mcp-remote@0.15.2', report.url, '--header', 'Authorization:${SLATE_AUTH}'],
+					env: { SLATE_AUTH: auth }
+				}
+			}
+		})
+	};
+}
+
+function renderMcpLocalPanel() {
+	if (!elements.mcpLocalPanel) return;
+	const report = mcpLocal.report;
+	const enabled = Boolean(report?.enabled);
+	if (!mcpLocal.busy) elements.mcpLocalEnabled.checked = enabled;
+	elements.mcpLocalEnabled.disabled = mcpLocal.busy;
+	elements.mcpLocalPanel.classList.toggle('hidden', !enabled);
+	if (!enabled) return;
+	const status = report.token ? report.status : 'failed';
+	const labels = t('mcpLocalStatus');
+	const label = labels[status] ?? labels.failed;
+	elements.mcpLocalDot.dataset.status = status === 'running' ? 'online' : status === 'off' ? 'off' : 'offline';
+	elements.mcpLocalStatusText.textContent = typeof label === 'function' ? label(report.port) : label;
+	for (const step of elements.mcpLocalPanel.querySelectorAll('.ai-connect-step')) step.hidden = !report.token;
+	if (!report.token) return;
+	// Le jeton reste masqué à l'écran (partage d'écran, captures) ; Copier donne la vraie valeur.
+	const hidden = `${report.token.slice(0, 4)}${'•'.repeat(12)}`;
+	const masked = (text) => text.split(report.token).join(hidden);
+	const snippets = mcpLocalSnippets(report);
+	elements.mcpLocalUrl.textContent = snippets.url;
+	elements.mcpLocalToken.textContent = hidden;
+	elements.mcpLocalCursor.textContent = masked(snippets.cursor);
+	elements.mcpLocalClaudeCode.textContent = masked(snippets.claudeCode);
+	elements.mcpLocalClaudeDesktop.textContent = masked(snippets.claudeDesktop);
+	const skill = report.skill || {};
+	elements.mcpLocalSkill.textContent = t(skill.outdated ? 'mcpLocalSkillUpdate' : 'mcpLocalSkillInstall');
+	elements.mcpLocalSkill.disabled = mcpLocal.busy || Boolean(skill.installed);
+	elements.mcpLocalSkillHint.textContent = t(
+		skill.installed ? 'mcpLocalSkillInstalled' : skill.outdated ? 'mcpLocalSkillOutdated' : 'mcpLocalSkillHint'
+	);
+}
+
+async function refreshMcpLocal() {
+	mcpLocal.report = await invokeCommand('mcp_local_status');
+	renderMcpLocalPanel();
+}
+
+async function startMcpLocalBridge() {
+	const current = window.__TAURI__?.webviewWindow?.getCurrentWebviewWindow?.();
+	if (!current) return;
+	await current.listen('mcp-local-call', (event) => {
+		const { id, tool, args, client } = event.payload || {};
+		if (typeof id !== 'string' || typeof tool !== 'string') return;
+		const input = args && typeof args === 'object' && !Array.isArray(args) ? args : {};
+		executeAiToolInTurn(tool, input, typeof client === 'string' && client ? client : 'Agent')
+			.then(
+				(result) => ({ ok: true, result: result ?? null }),
+				(error) => ({ ok: false, error: error instanceof Error ? error.message : String(error) })
+			)
+			.then((reply) => invokeCommand('mcp_local_reply', { id, reply }))
+			.catch((error) => console.warn('Réponse au MCP local perdue.', error));
+	});
+	await invokeCommand('mcp_local_ready');
+	await refreshMcpLocal();
+	if (mcpLocal.report?.enabled && mcpLocal.report.status === 'port_in_use') {
+		setStatus(t('mcpLocalPortInUse', mcpLocal.report.port), 'error');
+	}
+}
+
+elements.mcpLocalEnabled?.addEventListener('change', async () => {
+	if (mcpLocal.busy) return;
+	const enabled = elements.mcpLocalEnabled.checked;
+	mcpLocal.busy = true;
+	renderMcpLocalPanel();
+	try {
+		mcpLocal.report = await invokeCommand('mcp_local_set_enabled', { enabled });
+	} catch (error) {
+		console.error(error);
+		setStatus(error instanceof Error ? error.message : String(error), 'error');
+	} finally {
+		mcpLocal.busy = false;
+		renderMcpLocalPanel();
+	}
+});
+
+elements.mcpLocalPanel?.addEventListener('click', async (event) => {
+	const button = event.target instanceof Element ? event.target.closest('[data-mcp-copy]') : null;
+	if (!button || !mcpLocal.report?.token) return;
+	const key = button.dataset.mcpCopy;
+	try {
+		await navigator.clipboard.writeText(mcpLocalSnippets(mcpLocal.report)[key]);
+		setStatus(t('mcpLocalCopied')[key]);
+	} catch (error) {
+		console.error(error);
+		setStatus(error instanceof Error ? error.message : String(error), 'error');
+	}
+});
+
+elements.mcpLocalSkill?.addEventListener('click', async () => {
+	if (mcpLocal.busy || !mcpLocal.report) return;
+	mcpLocal.busy = true;
+	renderMcpLocalPanel();
+	try {
+		mcpLocal.report = { ...mcpLocal.report, skill: await invokeCommand('mcp_local_install_skill') };
+		setStatus(t('mcpLocalSkillDone'));
+	} catch (error) {
+		console.error(error);
+		setStatus(error instanceof Error ? error.message : String(error), 'error');
+	} finally {
+		mcpLocal.busy = false;
+		renderMcpLocalPanel();
+	}
+});
+
+if (getInvoke()) {
+	startMcpLocalBridge().catch((error) => console.warn('MCP local indisponible.', error));
+}
+
 document.querySelectorAll('[data-settings-tab]').forEach((tab) => {
 	tab.addEventListener('click', () => {
 		const target = tab.dataset.settingsTab;

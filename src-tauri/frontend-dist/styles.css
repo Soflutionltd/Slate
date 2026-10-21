@@ -6480,6 +6480,15 @@ input.setting-switch:checked::after {
 	user-select: all;
 }
 
+.ai-connect-field .ai-connect-hint {
+	flex: 1 1 220px;
+	min-width: 0;
+}
+
+.ai-connect-step[hidden] {
+	display: none;
+}
+
 .ai-connect-code {
 	flex: 1 1 160px;
 	font: 600 26px/1.2 ui-monospace, "SF Mono", Menlo, monospace;
