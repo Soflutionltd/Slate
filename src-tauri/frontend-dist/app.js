@@ -13020,7 +13020,11 @@ function fitEditTextWidth(element, block) {
 	element.style.letterSpacing = '0px';
 	element.style.whiteSpace = 'pre';
 	element.style.width = 'auto';
-	const naturalWidth = Math.ceil(element.getBoundingClientRect().width);
+	// Largeur du TEXTE seul : la boîte d'édition porte un padding qui
+	// fausserait l'écart et comprimerait les lettres.
+	const textRange = document.createRange();
+	textRange.selectNodeContents(element);
+	const naturalWidth = textRange.getBoundingClientRect().width;
 	element.style.letterSpacing = prevSpacing;
 	element.style.whiteSpace = prevWhiteSpace;
 	element.style.width = prevWidth;
