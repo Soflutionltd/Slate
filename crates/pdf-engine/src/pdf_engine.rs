@@ -3950,17 +3950,17 @@ mod tests {
     }
 
     #[test]
-    fn native_edit_refuses_shift_merging_identical_neighbor_glyph() {
+    fn native_edit_shifts_neighbor_instead_of_merging_identical_glyph() {
         if !pdfium_available() {
             return;
         }
         // Ligne scindée en DEUX objets : « AB11 » puis « 1CD » positionné par
         // un Td explicite (cas réel : numéro de facture Google scindé
         // « GCFRD001 » + « 1047732 »). Insérer après « B » décale le suffixe
-        // « 11 » dont le dernier « 1 » vient se superposer au « 1 » de l'objet
-        // suivant, immobile : les deux glyphes fusionnent dans la page texte
-        // et un chiffre du numéro DISPARAÎT à l'extraction. L'édition doit
-        // être refusée (insert_collision), pas commise silencieusement.
+        // « 11 » dont le dernier « 1 » viendrait se superposer au « 1 » de
+        // l'objet suivant : les deux glyphes fusionneraient dans la page texte
+        // et un chiffre du numéro DISPARAÎTRAIT à l'extraction. L'objet suivant
+        // doit être décalé d'autant (aucun chiffre perdu, aucun chevauchement).
         // Largeurs Helvetica 12pt : A/B = 8.004, 1 = 6.672, X = 8.004.
         // « AB11 » à x=20 finit à 49.352 ; après insertion du X le dernier
         // « 1 » démarre à 50.684 — le voisin est posé là.
@@ -3975,11 +3975,25 @@ mod tests {
             .find(|c| c.text == "B")
             .expect("B présent")
             .page_char_index;
-        let err = match native_edit(&pdf, &[], b_index, "X") {
-            Ok(_) => panic!("l'insertion qui fusionne un glyphe voisin doit être refusée"),
-            Err(e) => e,
-        };
-        assert_eq!(err, "insert_collision", "erreur inattendue : {err}");
+        let outcome = native_edit(&pdf, &[], b_index, "X").expect("insertion décalant le voisin");
+        let chars: Vec<&PdfCharBox> = outcome
+            .report
+            .analysis
+            .blocks
+            .iter()
+            .flat_map(|b| b.chars.iter())
+            .filter(|c| !c.text.trim().is_empty())
+            .collect();
+        let text: String = chars.iter().map(|c| c.text.as_str()).collect();
+        assert_eq!(text, "ABX111CD", "un chiffre a disparu ou s'est dédoublé");
+        for pair in chars.windows(2) {
+            assert!(
+                pair[0].x + pair[0].width <= pair[1].x + 0.05,
+                "« {} » chevauche « {} »",
+                pair[0].text,
+                pair[1].text
+            );
+        }
     }
 
     #[test]
