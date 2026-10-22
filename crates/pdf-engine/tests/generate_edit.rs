@@ -5,14 +5,6 @@
 use alto_pdf_engine::pdf_engine::{analyze_pdf_page, edit_pdf_text, pdfium_guard, PdfEditBlock};
 use alto_pdf_engine::pdf_generate::generate_pdf;
 
-fn pdfium_available() -> bool {
-    if pdfium_guard().is_err() {
-        eprintln!("PDFium indisponible : test ignoré.");
-        return false;
-    }
-    true
-}
-
 const QUOTE: &str = r#"#set page(paper: "a4", margin: 2cm)
 #set text(size: 11pt, lang: "fr")
 = Devis 2026-014
