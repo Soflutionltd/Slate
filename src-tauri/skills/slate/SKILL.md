@@ -1,6 +1,6 @@
 ---
 name: slate
-description: Work on PDF documents open in Slate (the user's PDF editor on this Mac) through its local MCP server "slate": read, edit text, fill forms, comment, rotate or reorder pages, undo and save. Use when the user asks to change, check or fill a PDF that is open in Slate.
+description: Work on PDF documents in Slate (the user's PDF editor on this Mac) through its local MCP server "slate": create a new PDF (quote, invoice, letter, report), read, edit text, fill forms, comment, rotate or reorder pages, undo and save. Use when the user asks to write, change, check or fill a PDF in Slate.
 ---
 
 # Working with Slate
@@ -21,6 +21,14 @@ Slate is a PDF editor running on the user's Mac. The `slate` MCP tools act live 
    - `render_page` on the pages you touched, or `screenshot`: the text fits its box, no overlap, the font looks like the original.
    - `read_text` confirms the new wording.
 4. **Save only when asked.** `save_document` overwrites the file and asks the user first.
+
+## Creating a new document
+
+- `create_document` writes a PDF from a Typst source and opens it in Slate as a new, unsaved tab. Its description is the Typst cheat sheet: headings, tables, page numbers, images.
+- Images are passed in `images` (absolute `path` or base64 `data`) and used by their `name` in the source; no other file can be read.
+- An error points to the line and column of your source: fix that line and call again.
+- Check the result with `render_page`, then refine it with the editing tools above or by calling `create_document` again with a corrected source (it opens another tab).
+- Without Slate open, the `alto-mcp` server offers `pdf_create`: same source, written to a new file at `output_path` (never overwrites).
 
 ## Pitfalls
 

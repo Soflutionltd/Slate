@@ -1,6 +1,7 @@
 // Bibliothèque partagée entre le binaire principal (app Tauri) et le serveur
 // MCP stdio `alto-mcp` : moteurs PDF (PDFium), opérations, OCR et client LLM.
 pub mod acp;
+pub mod generate;
 pub mod llm;
 pub mod ocr;
 pub mod pdf_sign;

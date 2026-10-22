@@ -24209,6 +24209,7 @@ elements.copyMcpPath?.addEventListener('click', async () => {
 const AI_TOOL_ACTIVITY = {
 	fr: {
 		open_document: 'ouvre un document',
+		create_document: 'crée un document',
 		read_text: 'lit le document',
 		get_page_layout: 'analyse la page',
 		replace_text: 'remplace du texte',
@@ -24237,6 +24238,7 @@ const AI_TOOL_ACTIVITY = {
 	},
 	en: {
 		open_document: 'is opening a document',
+		create_document: 'is creating a document',
 		read_text: 'is reading the document',
 		get_page_layout: 'is analyzing the page',
 		replace_text: 'is replacing text',
@@ -24568,6 +24570,24 @@ const aiToolHandlers = {
 		const tab = currentTab();
 		if (!tab) throw new Error(`Slate could not open ${name}.`);
 		return aiDocumentSummary(tab);
+	},
+
+	async create_document({ source, name, images }) {
+		if (!window.__TAURI__) throw new Error('Creating documents is only available in the Slate desktop app.');
+		await commitPendingEditsForPersist();
+		const generated = await invokeCommand('generate_pdf', { source, images: images || [] });
+		const bytes = await resolveBytes(generated.bytes);
+		const fileName = sanitizeFilename(name, 'Document.pdf');
+		const before = currentTab();
+		await openPdfFromBytes(bytes, fileName);
+		// openPdfFromBytes n'échoue pas : il affiche l'erreur et laisse l'onglet
+		// courant. Même contenu déjà ouvert : il active cet onglet-là.
+		const tab = currentTab();
+		const opened = tab && (tab !== before || tab.fileName === fileName) && tab.pdf?.numPages === generated.pages;
+		if (!opened) throw new Error(`Slate could not open the generated ${fileName}. Slate shows the reason to the user.`);
+		// Jamais enregistré : la fermeture doit proposer de l'enregistrer.
+		markDirty();
+		return { ...aiDocumentSummary(tab), warnings: generated.warnings };
 	},
 
 	async read_text({ document_id: documentId, page, max_chars: maxChars }) {

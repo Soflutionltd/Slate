@@ -2101,6 +2101,29 @@ async fn create_blank_pdf() -> Result<tauri::ipc::Response, String> {
     Ok(tauri::ipc::Response::new(out))
 }
 
+#[derive(Serialize)]
+struct GeneratedDocument {
+    bytes: DocBytes,
+    pages: usize,
+    warnings: Vec<String>,
+}
+
+/// Document écrit par une IA (source Typst) → PDF. Hors du runtime async :
+/// la mise en page d'un long document prend plusieurs centaines de ms.
+#[tauri::command]
+async fn generate_pdf(
+    source: String,
+    images: Option<Vec<sofdocs_desktop::generate::ImageArg>>,
+) -> Result<GeneratedDocument, String> {
+    let generated = tauri::async_runtime::spawn_blocking(move || {
+        let images = sofdocs_desktop::generate::load_images(images.unwrap_or_default())?;
+        sofdocs_desktop::generate::generate_pdf(&source, images)
+    })
+    .await
+    .map_err(|e| format!("generate_pdf: {e}"))??;
+    Ok(GeneratedDocument { bytes: generated.bytes.into(), pages: generated.pages, warnings: generated.warnings })
+}
+
 #[tauri::command]
 async fn open_file(app: tauri::AppHandle) -> Result<Option<FileResult>, String> {
     use tauri_plugin_dialog::DialogExt;
@@ -2792,6 +2815,7 @@ fn main() {
             export_edited_pdf_vector,
             list_system_fonts,
             create_blank_pdf,
+            generate_pdf,
             open_file,
             save_file,
             save_file_dialog,
