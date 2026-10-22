@@ -9344,9 +9344,12 @@ const _localFontStack =
 function metricCompatibleFamily(fontName) {
 	const n = String(fontName || '').toLowerCase();
 	if (!n) return '';
+	// « LiberationSans », « Liberation Serif » (LibreOffice, documents générés) :
+	// mêmes métriques qu'Arial et Times.
+	const compact = n.replace(/[\s_-]/g, '');
 	if (n.includes('courier') || n.includes('mono')) return 'Cousine';
-	if (n.includes('times')) return 'Tinos';
-	if (n.includes('helvetica') || n.includes('arial')) return 'Liberation Sans';
+	if (n.includes('times') || compact.includes('liberationserif')) return 'Tinos';
+	if (n.includes('helvetica') || n.includes('arial') || compact.includes('liberationsans')) return 'Liberation Sans';
 	return '';
 }
 
