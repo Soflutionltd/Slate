@@ -2,8 +2,16 @@
 //! polices sont des sous-ensembles, une lettre absente passe par la police
 //! de secours Liberation.
 
-use alto_pdf_engine::pdf_engine::{analyze_pdf_page, edit_pdf_text, PdfEditBlock};
+use alto_pdf_engine::pdf_engine::{analyze_pdf_page, edit_pdf_text, pdfium_guard, PdfEditBlock};
 use alto_pdf_engine::pdf_generate::generate_pdf;
+
+fn pdfium_available() -> bool {
+    if pdfium_guard().is_err() {
+        eprintln!("PDFium indisponible : test ignoré.");
+        return false;
+    }
+    true
+}
 
 const QUOTE: &str = r#"#set page(paper: "a4", margin: 2cm)
 #set text(size: 11pt, lang: "fr")
@@ -16,6 +24,14 @@ Client : SASU Exemple
 
 Total HT : 3 480 €
 "#;
+
+fn pdfium_available() -> bool {
+    if pdfium_guard().is_err() {
+        eprintln!("PDFium indisponible : test ignoré.");
+        return false;
+    }
+    true
+}
 
 fn block<'a>(blocks: &'a [PdfEditBlock], text: &str) -> &'a PdfEditBlock {
     blocks.iter().find(|b| b.text == text).unwrap_or_else(|| {
@@ -44,6 +60,9 @@ fn append(bytes: &[u8], target: &PdfEditBlock, inserted: &str) -> Result<Vec<Str
 
 #[test]
 fn letter_missing_from_the_subset_can_be_typed_in_a_table_cell() {
+    if !pdfium_available() {
+        return;
+    }
     let bytes = generate_pdf(QUOTE, Vec::new()).expect("quote compiles").bytes;
     let analysis = analyze_pdf_page(&bytes, 1).expect("analysis");
     let cell = block(&analysis.blocks, "Maintenance mensuelle");
@@ -53,6 +72,9 @@ fn letter_missing_from_the_subset_can_be_typed_in_a_table_cell() {
 
 #[test]
 fn letter_missing_from_the_subset_can_be_typed_in_a_paragraph() {
+    if !pdfium_available() {
+        return;
+    }
     let bytes = generate_pdf(QUOTE, Vec::new()).expect("quote compiles").bytes;
     let analysis = analyze_pdf_page(&bytes, 1).expect("analysis");
     let line = block(&analysis.blocks, "Client : SASU Exemple");
