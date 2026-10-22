@@ -239,5 +239,69 @@
 		}
 	};
 
+	const QUOTE = [
+		'#set page(paper: "a4", margin: 2cm)',
+		'#set text(size: 11pt, lang: "fr")',
+		'= Devis 2026-014',
+		'Client : SASU Exemple',
+		'',
+		'#table(columns: (1fr, auto, auto), align: (left, right, right), stroke: 0.5pt + gray, inset: 6pt,',
+		'  table.header([*Prestation*], [*Qté*], [*Prix HT*]),',
+		'  [Site vitrine], [1], [2 400 €], [Maintenance mensuelle], [12], [90 €])',
+		'',
+		'Total HT : 3 480 €'
+	].join('\n');
+
+	// Document créé par l'outil IA (même canal que le MCP local), puis modifié
+	// par l'IA (edit_text_block) et à la main (frappe native PDFium).
+	scenarios.createThenEdit = async () => {
+		const call = window.__harnessCallTool;
+		await until(() => document.querySelector('#modify-tab'));
+		await wait(1500);
+		// Source unique par passage : Slate restaure les modifications non
+		// enregistrées d'un document identique déjà ouvert.
+		const source = `${QUOTE}\n// passage ${Date.now()}`;
+		const created = await call('create_document', { source, name: 'Devis test' });
+		await wait(1500);
+		const layout = await call('get_page_layout', { page: 1 });
+		const total = layout.blocks.find((candidate) => (candidate.text || '').startsWith('Total HT'));
+		const edited = total ? await call('edit_text_block', { block_id: total.id, text: 'Total HT : 3 600 €' }) : null;
+		await wait(1500);
+		const afterAi = await call('read_text', { page: 1 });
+		const pageText = JSON.stringify(afterAi);
+		if (!button('modify-tab').classList.contains('active')) button('modify-tab').click();
+		const label = 'Maintenance';
+		await until(() => block(label));
+		const calls = window.__harnessNativeCalls;
+		const editsBefore = calls.edit_pdf_text_cached || 0;
+		const editing = await doubleClick(label);
+		const spacingRatio = letterSpacing(editing);
+		const typed = await typeAtEnd(editing, 'Z');
+		const checks = {
+			created: created.name === 'Devis test.pdf' && created.pages === 1 && created.unsaved_changes === true,
+			noWarnings: Array.isArray(created.warnings) && created.warnings.length === 0,
+			layoutFindsGeneratedText: Boolean(total) && layout.blocks.some((candidate) => (candidate.text || '').includes('Site vitrine')),
+			aiEditApplied: Boolean(edited) && pageText.includes('3 600') && !pageText.includes('3 480'),
+			nativeEditOnGenerated: (calls.edit_pdf_text_cached || 0) > editsBefore && typed.text.includes('Z'),
+			noLetterGaps: Math.abs(spacingRatio) < 0.05 && Math.abs(typed.spacing) < 0.05,
+			frameHugsText: typed.frameRatio < 1.15,
+			noErrors: errors.length === 0
+		};
+		return {
+			ok: Object.values(checks).every(Boolean),
+			checks,
+			measures: {
+				created,
+				blocks: layout.blocks.map((candidate) => candidate.text),
+				edited,
+				spacingRatio,
+				typed,
+				nativeCalls: { ...calls },
+				errors: [...errors]
+			},
+			unknownCommands: [...(window.__harnessUnknownCommands || [])]
+		};
+	};
+
 	window.__harness = { scenarios, openFixture, block, button, relative, wait };
 })();

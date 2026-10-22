@@ -74,6 +74,14 @@ impl Bridge {
             serde_json::from_slice(&body).map_err(|e| format!("invalid_json: {e}"))?
         };
         match command {
+            "generate_pdf" => {
+                if args["images"].as_array().is_some_and(|images| !images.is_empty()) {
+                    return Err("bridge: images are not supported, test them in cargo tests".to_string());
+                }
+                let generated = alto_pdf_engine::pdf_generate::generate_pdf(&text(&args, "source")?, Vec::new())?;
+                let token = self.stage(generated.bytes);
+                Ok(Reply::Json(json!({ "bytes": token, "pages": generated.pages, "warnings": generated.warnings })))
+            }
             "take_staged_bytes" => {
                 let token = text(&args, "token")?;
                 let bytes = self.doc_bytes(&json!(token))?;

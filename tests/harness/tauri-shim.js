@@ -8,6 +8,7 @@
 	const NATIVE = new Set([
 		'stage_bytes',
 		'repair_pdf_bytes',
+		'generate_pdf',
 		'take_staged_bytes',
 		'cache_document',
 		'cache_view_document',
@@ -38,15 +39,39 @@
 		check_for_update: null,
 		write_open_session: null,
 		set_native_language: null,
-		mcp_local_ready: null,
-		alto_debug: null
+		mcp_local_ready: null
 	};
 	const unknown = new Set();
 	const nativeCalls = {};
 	window.__harnessUnknownCommands = unknown;
 	window.__harnessNativeCalls = nativeCalls;
+	const debugLines = [];
+	window.__harnessDebugLines = debugLines;
+
+	// Appel d'outil IA par le même canal que le MCP local : événement
+	// `mcp-local-call` vers la page, réponse par `mcp_local_reply`.
+	const listeners = {};
+	const replies = new Map();
+	let nextCall = 1;
+	window.__harnessCallTool = (tool, args = {}) =>
+		new Promise((resolve, reject) => {
+			const handlers = listeners['mcp-local-call'] || [];
+			if (!handlers.length) return reject(new Error('mcp-local-call: no listener yet'));
+			const id = `harness-${nextCall++}`;
+			replies.set(id, (reply) => (reply.ok ? resolve(reply.result) : reject(new Error(reply.error))));
+			for (const handler of handlers) handler({ payload: { id, tool, args, client: 'Harness' } });
+		});
 
 	async function invoke(command, args) {
+		if (command === 'alto_debug') {
+			debugLines.push(String(args?.line ?? ''));
+			return null;
+		}
+		if (command === 'mcp_local_reply') {
+			replies.get(args.id)?.(args.reply);
+			replies.delete(args.id);
+			return null;
+		}
 		if (NATIVE.has(command)) {
 			nativeCalls[command] = (nativeCalls[command] || 0) + 1;
 			const raw = args instanceof Uint8Array || args instanceof ArrayBuffer;
@@ -72,6 +97,12 @@
 				get(target, key) {
 					if (key in target) return target[key];
 					if (key === 'then') return undefined;
+					if (key === 'listen') {
+						return (event, handler) => {
+							(listeners[event] ||= []).push(handler);
+							return Promise.resolve(() => {});
+						};
+					}
 					return (...rest) =>
 						Promise.resolve(/^(on|listen)/.test(String(key)) ? () => {} : null);
 				}
