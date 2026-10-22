@@ -9,11 +9,14 @@ use serde_json::{json, Value};
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 
-use sofdocs_desktop::{ocr, pdf_edit, pdf_engine, pdf_ops};
+use sofdocs_desktop::{generate, ocr, pdf_edit, pdf_engine, pdf_ops};
 
 const SERVER_NAME: &str = "alto-pdf";
 const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 const PROTOCOL_VERSION: &str = "2024-11-05";
+/// Catalogue des outils de Slate : `pdf_create` reprend le mémo Typst et le
+/// schéma des images de `create_document`, pour que les deux ne divergent pas.
+const CATALOG_JSON: &str = include_str!("../../frontend-dist/ai-tools.json");
 
 fn main() {
     // Voir main.rs : le moteur PDF étant dans le crate `alto-pdf-engine`, on expose
@@ -418,12 +421,58 @@ fn tool_descriptors() -> Value {
                 },
                 "required": ["path", "page"]
             }
-        }
+        },
+        pdf_create_descriptor()
     ])
+}
+
+/// `pdf_create` : la description et le schéma des images viennent de
+/// `create_document` ; seule la première ligne (propre à Slate) change.
+fn pdf_create_descriptor() -> Value {
+    let catalog: Value = serde_json::from_str(CATALOG_JSON).expect("ai-tools.json embarqué invalide");
+    let create = catalog["tools"]
+        .as_array()
+        .and_then(|tools| tools.iter().find(|tool| tool["name"] == "create_document"))
+        .expect("create_document absent de ai-tools.json");
+    let guide = create["description"]
+        .as_str()
+        .and_then(|text| text.split_once('\n'))
+        .map(|(_, guide)| guide)
+        .expect("description de create_document sans mémo Typst");
+    json!({
+        "name": "pdf_create",
+        "description": format!(
+            "Write a new PDF file (quote, invoice, letter, report...) from a Typst source. Returns its path, page count and layout warnings. Errors come back with line and column: fix the source and retry.\n{guide}"
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "source": create["input_schema"]["properties"]["source"],
+                "output_path": { "type": "string", "description": "Absolute path of the new PDF file. It must not exist yet." },
+                "images": create["input_schema"]["properties"]["images"]
+            },
+            "required": ["source", "output_path"]
+        }
+    })
 }
 
 fn run_tool(name: &str, args: &Value) -> Result<String, String> {
     match name {
+        "pdf_create" => {
+            let source = args.get("source").and_then(Value::as_str).ok_or("Missing 'source'")?;
+            let output = new_file_path(args)?;
+            let images: Vec<generate::ImageArg> = match args.get("images") {
+                None | Some(Value::Null) => Vec::new(),
+                Some(images) => serde_json::from_value(images.clone()).map_err(|e| format!("Invalid 'images': {e}"))?,
+            };
+            let generated = generate::generate_pdf(source, generate::load_images(images)?)?;
+            write_output(&output, &generated.bytes)?;
+            json_result(json!({
+                "path": output.display().to_string(),
+                "pages": generated.pages,
+                "warnings": generated.warnings
+            }))
+        }
         "pdf_info" => {
             let path = required_path(args)?;
             let bytes = read_pdf(&path)?;
@@ -970,6 +1019,30 @@ fn output_path(args: &Value, source: &Path, suffix: &str) -> Result<PathBuf, Str
     Ok(candidate)
 }
 
+/// Chemin d'un fichier à créer : absolu, en .pdf, dans un dossier existant,
+/// jamais un fichier déjà présent.
+fn new_file_path(args: &Value) -> Result<PathBuf, String> {
+    let output = args
+        .get("output_path")
+        .and_then(Value::as_str)
+        .filter(|p| !p.is_empty())
+        .map(PathBuf::from)
+        .ok_or("Missing 'output_path'")?;
+    if !output.is_absolute() {
+        return Err(format!("Path must be absolute: {}", output.display()));
+    }
+    if !output.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("pdf")) {
+        return Err(format!("Output must end in .pdf: {}", output.display()));
+    }
+    if output.exists() {
+        return Err(format!("{} already exists; choose another output path.", output.display()));
+    }
+    if !output.parent().is_some_and(Path::is_dir) {
+        return Err(format!("Folder not found for {}", output.display()));
+    }
+    Ok(output)
+}
+
 fn write_output(path: &Path, bytes: &[u8]) -> Result<(), String> {
     std::fs::write(path, bytes).map_err(|e| format!("Unable to write {}: {e}", path.display()))
 }
@@ -1016,4 +1089,35 @@ fn read_pdf_text(bytes: &[u8], page: Option<u32>) -> Result<String, String> {
         out.push_str("\n[... truncated ...]");
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pdf_create_reuses_the_create_document_guide() {
+        let descriptor = pdf_create_descriptor();
+        let description = descriptor["description"].as_str().expect("description");
+        assert!(description.starts_with("Write a new PDF file"));
+        assert!(description.contains("#table("));
+        assert!(!description.contains("open it in Slate"));
+        assert_eq!(descriptor["inputSchema"]["properties"]["images"]["type"], "array");
+    }
+
+    #[test]
+    fn pdf_create_writes_a_new_file_and_never_overwrites() {
+        let dir = std::env::temp_dir().join(format!("alto-mcp-create-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let output = dir.join("devis.pdf");
+        let args = json!({ "source": "= Devis\nTotal : 100 €", "output_path": output.display().to_string() });
+        let report: Value = serde_json::from_str(&run_tool("pdf_create", &args).expect("creates")).expect("json");
+        assert_eq!(report["pages"], 1);
+        assert!(std::fs::read(&output).expect("written").starts_with(b"%PDF-"));
+        let error = run_tool("pdf_create", &args).expect_err("must refuse to overwrite");
+        assert!(error.contains("already exists"), "{error}");
+        assert!(run_tool("pdf_create", &json!({ "source": "x", "output_path": "relative.pdf" })).is_err());
+        assert!(run_tool("pdf_create", &json!({ "source": "x", "output_path": dir.join("x.txt").display().to_string() })).is_err());
+        std::fs::remove_dir_all(&dir).expect("cleanup");
+    }
 }
