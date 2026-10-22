@@ -364,11 +364,14 @@ fn merge_segment_texts_and_chars(group: &[TextSegment]) -> (String, Vec<PdfCharB
             // Écart mesuré sur les CARACTÈRES, pas sur les boîtes de segments
             // (souvent plus larges que leurs glyphes) : « Sof »+« lution »
             // scindé en deux show-ops jointifs ne doit pas gagner d'espace.
+            // Bord droit de TOUS les caractères déjà fusionnés : un fragment
+            // inclus dans la ligne (voir cluster_segments_into_lines) finit
+            // bien avant elle.
             let prev_right = chars
                 .iter()
-                .rev()
-                .find(|c| !c.text.chars().all(char::is_whitespace))
+                .filter(|c| !c.text.chars().all(char::is_whitespace))
                 .map(|c| c.x + c.width)
+                .reduce(f64::max)
                 .unwrap_or(prev.x + prev.width);
             let cur_left = segment
                 .chars
@@ -754,7 +757,15 @@ fn cluster_segments_into_lines(
         for segment in line {
             if let Some(group) = groups.last_mut() {
                 let last = group.last().unwrap();
-                let gap = segment.x - (last.x + last.width);
+                // Bord droit du GROUPE, pas du dernier segment : PDFium renvoie
+                // parfois un fragment (« li ») inclus dans le segment de la
+                // ligne, trié après lui ; mesuré depuis ce fragment, l'écart
+                // jusqu'au segment suivant valait toute la ligne.
+                let group_right = group
+                    .iter()
+                    .map(|s| s.x + s.width)
+                    .fold(f64::NEG_INFINITY, f64::max);
+                let gap = segment.x - group_right;
                 let height_ref = last.height.max(segment.height);
                 // Un trait vertical (bordure de cellule) entre les deux segments
                 // signale deux cellules de tableau distinctes : jamais fusionnées.
@@ -762,7 +773,7 @@ fn cluster_segments_into_lines(
                 let seg_bottom = (last.y + last.height).max(segment.y + segment.height);
                 let separated_by_rule = v_rules.iter().any(|&(rx, ry, rw, rh)| {
                     let rule_x = rx + rw / 2.0;
-                    rule_x > last.x + last.width - 1.0
+                    rule_x > group_right - 1.0
                         && rule_x < segment.x + 1.0
                         && ry < seg_bottom
                         && ry + rh > seg_top
