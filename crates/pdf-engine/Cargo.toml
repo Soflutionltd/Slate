@@ -28,6 +28,13 @@ fontcull = { version = "2", default-features = false }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rayon = "1"
 mupdf = { version = "0.8.0", default-features = false, features = ["base14-fonts"] }
+# Génération de documents (outil MCP create_document) : natif uniquement, le
+# module WASM n'en a pas l'usage et grossirait de plusieurs Mo.
+typst = "0.15.1"
+typst-pdf = "0.15.1"
+typst-layout = "0.15.1"
+typst-kit = { version = "0.15.1", default-features = false, features = ["scan-fonts"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 # Pris en compte seulement quand le moteur est testé seul ; l'app et le module
 # WASM déclarent le même renvoi dans leur propre Cargo.toml.

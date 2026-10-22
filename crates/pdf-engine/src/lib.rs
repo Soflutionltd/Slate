@@ -14,6 +14,8 @@ pub mod pdf_engine;
 pub mod pdf_fallback_font;
 pub mod pdf_font_subset;
 pub mod pdf_forms;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod pdf_generate;
 pub mod pdf_incremental;
 pub mod pdf_label;
 pub mod pdf_mupdf;

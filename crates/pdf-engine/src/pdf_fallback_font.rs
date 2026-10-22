@@ -20,6 +20,21 @@ pub enum FallbackStyle {
     Mono,
 }
 
+/// Fichiers Liberation embarqués, servis aussi aux documents générés.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn embedded_font_files() -> impl Iterator<Item = &'static [u8]> {
+    [
+        FallbackStyle::Sans,
+        FallbackStyle::SansBold,
+        FallbackStyle::SansItalic,
+        FallbackStyle::Serif,
+        FallbackStyle::SerifBold,
+        FallbackStyle::Mono,
+    ]
+    .into_iter()
+    .map(FallbackStyle::font_bytes)
+}
+
 impl FallbackStyle {
     fn font_bytes(self) -> &'static [u8] {
         match self {
