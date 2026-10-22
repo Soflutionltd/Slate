@@ -174,7 +174,7 @@ test('touched map : baseline figée, lastWritten avance (redo post-restore)', ()
 	assert.deepEqual(fromLegacy, { lastWritten: 'new', baseline: 'base' });
 });
 
-test('zoom : glyphes partagés avec les snapshots undo re-scalés une seule fois', () => {
+test('zoom : bloc vivant et snapshots undo re-scalés chacun une fois', () => {
 	const live = {
 		id: 'b1',
 		page: 1,
@@ -197,7 +197,7 @@ test('zoom : glyphes partagés avec les snapshots undo re-scalés une seule fois
 	assert.equal(live.pdfChars[0].x, 25);
 	assert.equal(live.pdfChars[0].y, 300);
 	assert.equal(live.pdfChars[0].maskY, 300);
-	assert.equal(snapshots[0].pdfChars, live.pdfChars);
+	assert.equal(snapshots[0].pdfChars[0].y, 300);
 	assert.equal(snapshots[1].originalY, 300);
 });
 
@@ -222,4 +222,25 @@ test('zoom : taille choisie et taille OCR suivent le zoom une seule fois', () =>
 	assert.equal(live.fontSizeOverride, 25);
 	assert.equal(snapshot.fontSizeOverride, 25);
 	assert.equal(live.fontMatch.fontSize, 15);
+});
+
+test('snapshot undo : aucun objet modifiable partagé avec le bloc vivant', () => {
+	const live = {
+		id: 'b1',
+		text: 'SG CALVI',
+		pdfChars: lineChars('SG', 240, 0),
+		hiddenCharIndexes: [1],
+		fontMatch: { family: 'Arimo', fontSize: 12 },
+		_mounted: true
+	};
+	const snap = stripTransientBlockFields(live);
+	live.pdfChars[0].x = 999;
+	live.pdfChars[0].pageCharIndex = 42;
+	live.hiddenCharIndexes.push(0);
+	live.fontMatch.fontSize = 30;
+	assert.equal(snap.pdfChars[0].x, 20);
+	assert.equal(snap.pdfChars[0].pageCharIndex, 0);
+	assert.deepEqual(snap.hiddenCharIndexes, [1]);
+	assert.equal(snap.fontMatch.fontSize, 12);
+	assert.equal(snap._mounted, undefined);
 });

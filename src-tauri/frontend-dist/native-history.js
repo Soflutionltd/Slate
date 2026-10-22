@@ -5,10 +5,26 @@
 /** Méta structurelles à conserver dans les snapshots undo/redo. */
 export const PERSISTED_BLOCK_META = new Set(['_lineLocked', '_splitFrom']);
 
+// Copie profonde des tableaux et objets simples (glyphes, fontMatch…) : un
+// snapshot ne doit partager aucun objet modifiable avec le bloc vivant, sinon
+// toute mutation en place (zoom, réindexation) altère l'historique en silence.
+function clonePlainData(value) {
+	if (Array.isArray(value)) return value.map(clonePlainData);
+	if (value && typeof value === 'object') {
+		const proto = Object.getPrototypeOf(value);
+		if (proto !== Object.prototype && proto !== null) return value;
+		const copy = {};
+		for (const key of Object.keys(value)) copy[key] = clonePlainData(value[key]);
+		return copy;
+	}
+	return value;
+}
+
 export function stripTransientBlockFields(block) {
-	const copy = { ...block };
-	for (const key of Object.keys(copy)) {
-		if (key.startsWith('_') && !PERSISTED_BLOCK_META.has(key)) delete copy[key];
+	const copy = {};
+	for (const key of Object.keys(block)) {
+		if (key.startsWith('_') && !PERSISTED_BLOCK_META.has(key)) continue;
+		copy[key] = clonePlainData(block[key]);
 	}
 	return copy;
 }
