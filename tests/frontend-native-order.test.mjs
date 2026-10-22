@@ -8,7 +8,8 @@ import {
 	selectionOffsetsFromGlyphDrag,
 	wordBoundsAtTextOffset,
 	isHorizontalWhitespace,
-	lineIndexAtTextOffset
+	lineIndexAtTextOffset,
+	rescaleBlockToViewport
 } from '../src-tauri/frontend-dist/block-state.js';
 import {
 	stripTransientBlockFields,
@@ -171,4 +172,31 @@ test('touched map : baseline figée, lastWritten avance (redo post-restore)', ()
 	assert.deepEqual(legacy, { lastWritten: 'old', baseline: null });
 	const fromLegacy = mergeNativeTouchedEntry('old', 'new', 'base');
 	assert.deepEqual(fromLegacy, { lastWritten: 'new', baseline: 'base' });
+});
+
+test('zoom : glyphes partagés avec les snapshots undo re-scalés une seule fois', () => {
+	const live = {
+		id: 'b1',
+		page: 1,
+		x: 120,
+		y: 80,
+		width: 112,
+		height: 12,
+		originalX: 20,
+		originalY: 240,
+		pageWidth: 600,
+		pageHeight: 800,
+		pdfChars: lineChars('SG CALVI', 240, 0)
+	};
+	const snapshots = [stripTransientBlockFields(live), stripTransientBlockFields(live)];
+	const zoomed = { viewportWidth: 750, viewportHeight: 1000 };
+	const scaled = new WeakSet();
+	for (const block of [live, ...snapshots]) rescaleBlockToViewport(block, zoomed, scaled);
+	assert.equal(live.x, 150);
+	assert.equal(live.y, 100);
+	assert.equal(live.pdfChars[0].x, 25);
+	assert.equal(live.pdfChars[0].y, 300);
+	assert.equal(live.pdfChars[0].maskY, 300);
+	assert.equal(snapshots[0].pdfChars, live.pdfChars);
+	assert.equal(snapshots[1].originalY, 300);
 });

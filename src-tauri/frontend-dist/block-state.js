@@ -418,3 +418,70 @@ export function lineIndexAtTextOffset(text, offset) {
 	}
 	return line;
 }
+
+// Les blocs d'édition sont stockés en px viewport AU ZOOM où ils ont été détectés
+// (avec pageWidth/pageHeight du viewport mémorisés). Quand le zoom change, on
+// re-scale leurs coordonnées proportionnellement, sinon ils se retrouvent
+// désalignés du texte affiché → impossibles à cliquer/modifier.
+// `scaled` : les snapshots undo/redo partagent les objets glyphes du bloc vivant
+// (copie superficielle) ; chacun ne doit être re-scalé qu'une fois par zoom.
+export function rescaleBlockToViewport(block, data, scaled) {
+	if (!data || !block.pageWidth || !block.pageHeight) return;
+	const rx = data.viewportWidth / block.pageWidth;
+	const ry = data.viewportHeight / block.pageHeight;
+	if (Math.abs(rx - 1) < 1e-4 && Math.abs(ry - 1) < 1e-4) return;
+
+	block.x *= rx;
+	block.width *= rx;
+	if (typeof block.originalX === 'number') block.originalX *= rx;
+	if (typeof block.originalWidth === 'number') block.originalWidth *= rx;
+	block.y *= ry;
+	block.height *= ry;
+	if (typeof block.originalY === 'number') block.originalY *= ry;
+	if (typeof block.originalHeight === 'number') block.originalHeight *= ry;
+	if (block.pdfFontSize) block.pdfFontSize *= ry;
+	if (block.baseFontSize) block.baseFontSize *= ry;
+	// Espacement inter-lettres capturé en px à l'échelle précédente.
+	if (Number.isFinite(block.editLetterSpacing)) block.editLetterSpacing *= rx;
+
+	const glyphs = [
+		...(Array.isArray(block.pdfChars) ? block.pdfChars : []),
+		...(Array.isArray(block._nativePristine?.chars) ? block._nativePristine.chars : [])
+	];
+	for (const ch of glyphs) {
+		if (scaled.has(ch)) continue;
+		scaled.add(ch);
+		ch.x *= rx;
+		ch.width *= rx;
+		if (typeof ch.maskX === 'number') ch.maskX *= rx;
+		if (typeof ch.maskWidth === 'number') ch.maskWidth *= rx;
+		ch.y *= ry;
+		ch.height *= ry;
+		if (typeof ch.maskY === 'number') ch.maskY *= ry;
+		if (typeof ch.maskHeight === 'number') ch.maskHeight *= ry;
+	}
+
+	// Le snapshot bitmap a été capturé à l'ancienne échelle : on l'invalide.
+	block.snapshotDataUrl = null;
+	block.inkSnapshotDataUrl = null;
+	block.pageWidth = data.viewportWidth;
+	block.pageHeight = data.viewportHeight;
+
+	// Origines de montage/drag et caches d'encre périmés à la nouvelle échelle :
+	// on force un remontage propre du node (left/top/font-size recalculés au
+	// prochain rendu), au lieu de compter sur le changement de signature via
+	// baseFontSize — qui n'est pas toujours renseigné.
+	delete block._mounted;
+	delete block._mountX;
+	delete block._mountY;
+	delete block._mountLeft;
+	delete block._mountTop;
+	delete block._mountSig;
+	delete block._dragOriginX;
+	delete block._dragOriginY;
+	delete block._dragVisualLeft;
+	delete block._dragVisualTop;
+	delete block._inkRatio;
+	delete block._dragForceHtml;
+	delete block._compSuffixSnap;
+}
