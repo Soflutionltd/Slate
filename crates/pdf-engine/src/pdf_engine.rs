@@ -2460,25 +2460,35 @@ pub fn render_page_rgba_for_view(
             annotation.set_is_hidden(true).map_err(|e| e.to_string())?;
         }
     }
+    let config = PdfRenderConfig::new()
+        .scale_page_by_factor(scale as f32)
+        .render_form_data(true)
+        .render_annotations(true)
+        .set_reverse_byte_order(true);
     // PDFium peint directement dans le tampon renvoyé, en le découpant à sa
     // taille : un bitmap PDFium intermédiaire puis une copie laissaient à
     // chaque rendu de gros blocs que l'allocateur de macOS ne rend pas au
     // système (1 Go de plus après une présentation de 45 pages).
-    let mut rgba = vec![255u8; width as usize * height as usize * 4];
+    #[cfg(not(target_arch = "wasm32"))]
     {
-        let mut bitmap = PdfBitmap::from_bytes(width as Pixels, height as Pixels, PdfBitmapFormat::BGRA, &mut rgba)
-            .map_err(|e| e.to_string())?;
-        page.render_into_bitmap_with_config(
-            &mut bitmap,
-            &PdfRenderConfig::new()
-                .scale_page_by_factor(scale as f32)
-                .render_form_data(true)
-                .render_annotations(true)
-                .set_reverse_byte_order(true),
-        )
-        .map_err(|e| e.to_string())?;
+        let mut rgba = vec![255u8; width as usize * height as usize * 4];
+        {
+            let mut bitmap = PdfBitmap::from_bytes(width as Pixels, height as Pixels, PdfBitmapFormat::BGRA, &mut rgba)
+                .map_err(|e| e.to_string())?;
+            page.render_into_bitmap_with_config(&mut bitmap, &config)
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(rgba)
     }
-    Ok(rgba)
+    // En WASM, PDFium vit dans son propre tas : pas de tampon emprunté possible.
+    #[cfg(target_arch = "wasm32")]
+    {
+        let mut bitmap = PdfBitmap::empty(width as Pixels, height as Pixels, PdfBitmapFormat::BGRA)
+            .map_err(|e| e.to_string())?;
+        page.render_into_bitmap_with_config(&mut bitmap, &config)
+            .map_err(|e| e.to_string())?;
+        Ok(bitmap.as_rgba_bytes())
+    }
 }
 
 /// Miniature JPEG d'une page, `width_px` de large : pour le tiroir des pages,
