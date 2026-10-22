@@ -31,6 +31,10 @@ import { createAiRelay, isAiRelayEnabled } from './ai-relay.js';
 // (déclaration hoistée, disponible dès l'évaluation du module).
 configureBlockState({ isLogoBlock });
 
+if (String(navigator.userAgentData?.platform || navigator.platform || '').toLowerCase().includes('mac')) {
+	document.documentElement.dataset.platform = 'mac';
+}
+
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.mjs', import.meta.url).toString();
 
 const STANDARD_FONT_DATA_URL = new URL('./vendor/standard_fonts/', import.meta.url).toString();

@@ -54,6 +54,24 @@
 		"calt" 1;
 	-webkit-font-smoothing: antialiased;
 	text-rendering: geometricPrecision;
+	--cursor-resize-nwse: nwse-resize;
+	--cursor-resize-nesw: nesw-resize;
+}
+
+/* WKWebView dessine les curseurs diagonaux avec son ancien visuel : sur Mac, on
+   les remplace par le dessin de macOS (22 pt, point chaud au centre). Ailleurs,
+   le curseur système reste celui de l'OS. */
+:root[data-platform="mac"] {
+	--cursor-resize-nwse: -webkit-image-set(
+			url("./cursors/resize-nwse.png") 1x,
+			url("./cursors/resize-nwse@2x.png") 2x
+		)
+		11 11, nwse-resize;
+	--cursor-resize-nesw: -webkit-image-set(
+			url("./cursors/resize-nesw.png") 1x,
+			url("./cursors/resize-nesw@2x.png") 2x
+		)
+		11 11, nesw-resize;
 }
 
 * {
@@ -2795,45 +2813,25 @@ body.sign-arming .sign-layer {
 .sign-placement .sign-resize.handle-nw {
 	left: -5px;
 	top: -5px;
-	cursor: url("./cursors/resize-nwse.png") 16 16, default;
-	cursor: -webkit-image-set(
-			url("./cursors/resize-nwse.png") 1x,
-			url("./cursors/resize-nwse@2x.png") 2x
-		)
-		16 16, default;
+	cursor: var(--cursor-resize-nwse);
 }
 
 .sign-placement .sign-resize.handle-se {
 	right: -5px;
 	bottom: -5px;
-	cursor: url("./cursors/resize-nwse.png") 16 16, default;
-	cursor: -webkit-image-set(
-			url("./cursors/resize-nwse.png") 1x,
-			url("./cursors/resize-nwse@2x.png") 2x
-		)
-		16 16, default;
+	cursor: var(--cursor-resize-nwse);
 }
 
 .sign-placement .sign-resize.handle-ne {
 	right: -5px;
 	top: -5px;
-	cursor: url("./cursors/resize-nesw.png") 16 16, default;
-	cursor: -webkit-image-set(
-			url("./cursors/resize-nesw.png") 1x,
-			url("./cursors/resize-nesw@2x.png") 2x
-		)
-		16 16, default;
+	cursor: var(--cursor-resize-nesw);
 }
 
 .sign-placement .sign-resize.handle-sw {
 	left: -5px;
 	bottom: -5px;
-	cursor: url("./cursors/resize-nesw.png") 16 16, default;
-	cursor: -webkit-image-set(
-			url("./cursors/resize-nesw.png") 1x,
-			url("./cursors/resize-nesw@2x.png") 2x
-		)
-		16 16, default;
+	cursor: var(--cursor-resize-nesw);
 }
 
 .drawer-sign {
@@ -3478,22 +3476,12 @@ body.sign-arming .sign-layer {
 
 .block-resize-handle.handle-nw,
 .block-resize-handle.handle-se {
-	cursor: url("./cursors/resize-nwse.png") 16 16, default;
-	cursor: -webkit-image-set(
-			url("./cursors/resize-nwse.png") 1x,
-			url("./cursors/resize-nwse@2x.png") 2x
-		)
-		16 16, default;
+	cursor: var(--cursor-resize-nwse);
 }
 
 .block-resize-handle.handle-ne,
 .block-resize-handle.handle-sw {
-	cursor: url("./cursors/resize-nesw.png") 16 16, default;
-	cursor: -webkit-image-set(
-			url("./cursors/resize-nesw.png") 1x,
-			url("./cursors/resize-nesw@2x.png") 2x
-		)
-		16 16, default;
+	cursor: var(--cursor-resize-nesw);
 }
 
 .block-resize-handle.handle-n,
@@ -3565,23 +3553,13 @@ body.sign-arming .sign-layer {
 
 .text-resize-zone.zone-nw,
 .text-resize-zone.zone-se {
-	cursor: url("./cursors/resize-nwse.png") 16 16, default;
-	cursor: -webkit-image-set(
-			url("./cursors/resize-nwse.png") 1x,
-			url("./cursors/resize-nwse@2x.png") 2x
-		)
-		16 16, default;
+	cursor: var(--cursor-resize-nwse);
 	z-index: 10;
 }
 
 .text-resize-zone.zone-ne,
 .text-resize-zone.zone-sw {
-	cursor: url("./cursors/resize-nesw.png") 16 16, default;
-	cursor: -webkit-image-set(
-			url("./cursors/resize-nesw.png") 1x,
-			url("./cursors/resize-nesw@2x.png") 2x
-		)
-		16 16, default;
+	cursor: var(--cursor-resize-nesw);
 	z-index: 10;
 }
 
