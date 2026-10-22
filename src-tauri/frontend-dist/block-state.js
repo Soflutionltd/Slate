@@ -441,6 +441,11 @@ export function rescaleBlockToViewport(block, data, scaled) {
 	if (typeof block.originalHeight === 'number') block.originalHeight *= ry;
 	if (block.pdfFontSize) block.pdfFontSize *= ry;
 	if (block.baseFontSize) block.baseFontSize *= ry;
+	if (block.fontSizeOverride) block.fontSizeOverride *= ry;
+	if (block.fontMatch?.fontSize && !scaled.has(block.fontMatch)) {
+		scaled.add(block.fontMatch);
+		block.fontMatch.fontSize *= ry;
+	}
 	// Espacement inter-lettres capturé en px à l'échelle précédente.
 	if (Number.isFinite(block.editLetterSpacing)) block.editLetterSpacing *= rx;
 

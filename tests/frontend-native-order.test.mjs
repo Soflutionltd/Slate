@@ -200,3 +200,26 @@ test('zoom : glyphes partagés avec les snapshots undo re-scalés une seule fois
 	assert.equal(snapshots[0].pdfChars, live.pdfChars);
 	assert.equal(snapshots[1].originalY, 300);
 });
+
+test('zoom : taille choisie et taille OCR suivent le zoom une seule fois', () => {
+	const live = {
+		id: 'ocr1',
+		page: 1,
+		x: 40,
+		y: 40,
+		width: 100,
+		height: 16,
+		pageWidth: 600,
+		pageHeight: 800,
+		fontSizeOverride: 20,
+		fontMatch: { family: 'Arimo', weight: 400, fontSize: 12 }
+	};
+	const snapshot = stripTransientBlockFields(live);
+	const scaled = new WeakSet();
+	for (const block of [live, snapshot]) {
+		rescaleBlockToViewport(block, { viewportWidth: 750, viewportHeight: 1000 }, scaled);
+	}
+	assert.equal(live.fontSizeOverride, 25);
+	assert.equal(snapshot.fontSizeOverride, 25);
+	assert.equal(live.fontMatch.fontSize, 15);
+});
