@@ -859,6 +859,10 @@
 							<span>Copies</span>
 							<input type="number" id="print-copies" min="1" max="999" value="1" />
 						</label>
+						<label class="print-check print-check-inline print-check-collate">
+							<input type="checkbox" id="print-collate" checked />
+							<span>Assembler</span>
+						</label>
 						<label class="print-check print-check-inline">
 							<input type="checkbox" id="print-grayscale" />
 							<span>Imprimer en nuances de gris</span>
@@ -880,21 +884,105 @@
 								<input type="checkbox" id="print-reverse" />
 								<span>Inverser</span>
 							</label>
+							<label class="print-field print-layout-field">
+								<span>Sous-ensemble</span>
+								<select id="print-page-subset">
+									<option value="all">Toutes les pages de l’étendue</option>
+									<option value="odd">Pages impaires uniquement</option>
+									<option value="even">Pages paires uniquement</option>
+								</select>
+							</label>
 						</fieldset>
 						<fieldset class="print-fieldset">
 							<legend>Dimensionnement et gestion des pages</legend>
-							<div class="print-size-tabs" aria-hidden="true">
-								<span class="print-size-tab is-active">Taille</span>
+							<div class="print-size-tabs" role="tablist" aria-label="Mise en page">
+								<button type="button" class="print-size-tab is-active" role="tab" aria-selected="true" data-print-layout="size">Taille</button>
+								<button type="button" class="print-size-tab" role="tab" aria-selected="false" data-print-layout="poster">Affiche</button>
+								<button type="button" class="print-size-tab" role="tab" aria-selected="false" data-print-layout="multiple">Multiple</button>
+								<button type="button" class="print-size-tab" role="tab" aria-selected="false" data-print-layout="booklet">Livret</button>
 							</div>
-							<label class="print-radio"><input type="radio" name="print-scaling" value="fit" /> Ajuster</label>
-							<label class="print-radio"><input type="radio" name="print-scaling" value="fill" /> Remplir la page</label>
-							<label class="print-radio"><input type="radio" name="print-scaling" value="actual" checked /> Taille réelle</label>
-							<label class="print-radio"><input type="radio" name="print-scaling" value="shrink" /> Réduire les pages hors format</label>
-							<label class="print-radio print-radio-custom">
-								<input type="radio" name="print-scaling" value="custom" />
-								Échelle personnalisée
-								<input type="number" id="print-custom-scale" min="1" max="400" value="100" disabled /> %
-							</label>
+							<div class="print-layout-panel" role="tabpanel" data-print-layout-panel="size">
+								<label class="print-radio"><input type="radio" name="print-scaling" value="fit" /> Ajuster</label>
+								<label class="print-radio"><input type="radio" name="print-scaling" value="fill" /> Remplir la page</label>
+								<label class="print-radio"><input type="radio" name="print-scaling" value="actual" checked /> Taille réelle</label>
+								<label class="print-radio"><input type="radio" name="print-scaling" value="shrink" /> Réduire les pages hors format</label>
+								<label class="print-radio print-radio-custom">
+									<input type="radio" name="print-scaling" value="custom" />
+									Échelle personnalisée
+									<input type="number" id="print-custom-scale" min="1" max="400" value="100" disabled /> %
+								</label>
+							</div>
+							<div class="print-layout-panel hidden" role="tabpanel" data-print-layout-panel="poster">
+								<label class="print-field print-layout-field">
+									<span>Échelle de la mosaïque</span>
+									<span class="print-input-unit"><input type="number" id="print-poster-scale" min="1" max="1000" value="100" /> %</span>
+								</label>
+								<label class="print-field print-layout-field">
+									<span>Chevauchement</span>
+									<span class="print-input-unit"><input type="number" id="print-poster-overlap" min="0" max="50" step="1" value="10" /> mm</span>
+								</label>
+								<label class="print-check">
+									<input type="checkbox" id="print-poster-cut-marks" checked />
+									<span>Repères de coupe</span>
+								</label>
+								<label class="print-check">
+									<input type="checkbox" id="print-poster-labels" checked />
+									<span>Étiquettes (page et position de chaque feuille)</span>
+								</label>
+							</div>
+							<div class="print-layout-panel hidden" role="tabpanel" data-print-layout-panel="multiple">
+								<label class="print-field print-layout-field">
+									<span>Pages par feuille</span>
+									<select id="print-nup-count">
+										<option value="2">2</option>
+										<option value="4">4</option>
+										<option value="6">6</option>
+										<option value="9">9</option>
+										<option value="16">16</option>
+										<option value="custom">Personnalisé</option>
+									</select>
+								</label>
+								<div class="print-nup-custom" id="print-nup-custom-row" hidden>
+									<label class="print-input-unit"><input type="number" id="print-nup-columns" min="1" max="10" value="2" /> colonnes</label>
+									<span aria-hidden="true">×</span>
+									<label class="print-input-unit"><input type="number" id="print-nup-rows" min="1" max="10" value="2" /> rangées</label>
+								</div>
+								<label class="print-field print-layout-field">
+									<span>Ordre des pages</span>
+									<select id="print-nup-order">
+										<option value="horizontal">Horizontal</option>
+										<option value="horizontal-reversed">Horizontal inversé</option>
+										<option value="vertical">Vertical</option>
+										<option value="vertical-reversed">Vertical inversé</option>
+									</select>
+								</label>
+								<label class="print-check">
+									<input type="checkbox" id="print-nup-borders" />
+									<span>Imprimer la bordure des pages</span>
+								</label>
+								<label class="print-check">
+									<input type="checkbox" id="print-nup-auto-rotate" checked />
+									<span>Rotation automatique des pages</span>
+								</label>
+							</div>
+							<div class="print-layout-panel hidden" role="tabpanel" data-print-layout-panel="booklet">
+								<label class="print-field print-layout-field">
+									<span>Sous-ensemble du livret</span>
+									<select id="print-booklet-subset">
+										<option value="both">Recto verso</option>
+										<option value="front">Recto uniquement</option>
+										<option value="back">Verso uniquement</option>
+									</select>
+								</label>
+								<label class="print-field print-layout-field">
+									<span>Reliure</span>
+									<select id="print-booklet-binding">
+										<option value="left">Gauche</option>
+										<option value="right">Droite</option>
+									</select>
+								</label>
+								<p class="print-hint print-hint-flush">Recto verso avec retournement sur le bord court : pliez la pile en deux pour obtenir le livret.</p>
+							</div>
 							<label class="print-field">
 								<span>Format de papier</span>
 								<select id="print-paper"></select>
@@ -907,15 +995,17 @@
 								<input type="checkbox" id="print-auto-paper" />
 								<span>Choisir la source de papier selon le format de la page PDF</span>
 							</label>
-							<label class="print-check print-check-label-fit">
-								<input type="checkbox" id="print-fit-label" />
-								<span>Adapter à l’étiquette (recadrage automatique)</span>
-							</label>
-							<p class="print-hint" id="print-fit-label-hint">Supprime les marges blanches et resserre les espaces vides pour imprimer l’étiquette au plus grand, sans rien couper.</p>
-							<label class="print-check print-check-nested" id="print-fit-compact-row">
-								<input type="checkbox" id="print-fit-compact" checked />
-								<span>Resserrer les espaces vides entre les blocs</span>
-							</label>
+							<div id="print-label-fit-group">
+								<label class="print-check print-check-label-fit">
+									<input type="checkbox" id="print-fit-label" />
+									<span>Adapter à l’étiquette (recadrage automatique)</span>
+								</label>
+								<p class="print-hint" id="print-fit-label-hint">Supprime les marges blanches et resserre les espaces vides pour imprimer l’étiquette au plus grand, sans rien couper.</p>
+								<label class="print-check print-check-nested" id="print-fit-compact-row">
+									<input type="checkbox" id="print-fit-compact" checked />
+									<span>Resserrer les espaces vides entre les blocs</span>
+								</label>
+							</div>
 						</fieldset>
 						<fieldset class="print-fieldset">
 							<label class="print-check">

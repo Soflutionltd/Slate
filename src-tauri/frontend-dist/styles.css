@@ -5314,17 +5314,82 @@ body.is-thumb-dragging {
 
 .print-size-tab {
 	padding: 5px 10px;
+	border: 0;
 	border-radius: 7px;
+	font: inherit;
 	font-size: 11.5px;
 	font-weight: 600;
 	color: #666;
 	background: rgba(0, 0, 0, 0.04);
+	cursor: pointer;
+}
+
+.print-size-tab:hover:not(.is-active) {
+	color: #333;
+	background: rgba(0, 0, 0, 0.07);
+}
+
+.print-size-tab:focus-visible {
+	outline: 2px solid #1a73e8;
+	outline-offset: 1px;
 }
 
 .print-size-tab.is-active {
 	color: #111;
 	background: #fff;
 	box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+.print-layout-panel.hidden {
+	display: none;
+}
+
+.print-layout-field {
+	margin: 8px 0 6px;
+}
+
+.print-input-unit {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 12.5px;
+	font-weight: 500;
+	color: #222;
+}
+
+.print-field .print-input-unit input[type='number'],
+.print-nup-custom input[type='number'] {
+	width: 76px;
+	padding: 5px 7px;
+}
+
+.print-nup-custom input[type='number'] {
+	appearance: none;
+	border: 1px solid rgba(0, 0, 0, 0.18);
+	border-radius: 8px;
+	background: #fff;
+	font: inherit;
+	font-weight: 500;
+}
+
+.print-nup-custom {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 6px;
+}
+
+.print-nup-custom[hidden] {
+	display: none;
+}
+
+.print-hint-flush {
+	margin-left: 0;
+}
+
+.print-check-collate {
+	flex: 0 0 auto;
 }
 
 .print-radio {

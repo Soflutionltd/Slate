@@ -397,6 +397,22 @@ const elements = {
 	printGrayscale: document.getElementById('print-grayscale'),
 	printDuplex: document.getElementById('print-duplex'),
 	printReverse: document.getElementById('print-reverse'),
+	printCollate: document.getElementById('print-collate'),
+	printPageSubset: document.getElementById('print-page-subset'),
+	printLabelFitGroup: document.getElementById('print-label-fit-group'),
+	printPosterScale: document.getElementById('print-poster-scale'),
+	printPosterOverlap: document.getElementById('print-poster-overlap'),
+	printPosterCutMarks: document.getElementById('print-poster-cut-marks'),
+	printPosterLabels: document.getElementById('print-poster-labels'),
+	printNupCount: document.getElementById('print-nup-count'),
+	printNupCustomRow: document.getElementById('print-nup-custom-row'),
+	printNupColumns: document.getElementById('print-nup-columns'),
+	printNupRows: document.getElementById('print-nup-rows'),
+	printNupOrder: document.getElementById('print-nup-order'),
+	printNupBorders: document.getElementById('print-nup-borders'),
+	printNupAutoRotate: document.getElementById('print-nup-auto-rotate'),
+	printBookletSubset: document.getElementById('print-booklet-subset'),
+	printBookletBinding: document.getElementById('print-booklet-binding'),
 	printAutoPaper: document.getElementById('print-auto-paper'),
 	printFitLabel: document.getElementById('print-fit-label'),
 	printFitCompact: document.getElementById('print-fit-compact'),
@@ -1655,6 +1671,39 @@ const STATIC_UI_TEXT = [
 	['Reliure', 'Binding'],
 	['Bord long', 'Long edge'],
 	['Bord court', 'Short edge'],
+	['Assembler', 'Collate'],
+	['Sous-ensemble', 'Subset'],
+	['Toutes les pages de l’étendue', 'All pages in range'],
+	['Pages impaires uniquement', 'Odd pages only'],
+	['Pages paires uniquement', 'Even pages only'],
+	['Affiche', 'Poster'],
+	['Multiple', 'Multiple'],
+	['Livret', 'Booklet'],
+	['Échelle de la mosaïque', 'Tile scale'],
+	['Chevauchement', 'Overlap'],
+	['Repères de coupe', 'Cut marks'],
+	['Étiquettes (page et position de chaque feuille)', 'Labels (page and position of each sheet)'],
+	['Pages par feuille', 'Pages per sheet'],
+	['Personnalisé', 'Custom'],
+	['colonnes', 'columns'],
+	['rangées', 'rows'],
+	['Ordre des pages', 'Page order'],
+	['Horizontal', 'Horizontal'],
+	['Horizontal inversé', 'Horizontal reversed'],
+	['Vertical', 'Vertical'],
+	['Vertical inversé', 'Vertical reversed'],
+	['Imprimer la bordure des pages', 'Print page border'],
+	['Rotation automatique des pages', 'Auto-rotate pages'],
+	['Sous-ensemble du livret', 'Booklet subset'],
+	['Recto verso', 'Both sides'],
+	['Recto uniquement', 'Front side only'],
+	['Verso uniquement', 'Back side only'],
+	['Gauche', 'Left'],
+	['Droite', 'Right'],
+	[
+		'Recto verso avec retournement sur le bord court : pliez la pile en deux pour obtenir le livret.',
+		'Two-sided, flipped on the short edge: fold the stack in half to make the booklet.'
+	],
 	['Auto.', 'Auto'],
 	['Paysage', 'Landscape'],
 	['Échelle : 100 %', 'Scale: 100%'],
@@ -1733,6 +1782,7 @@ const STATIC_UI_TEXT = [
 // Infobulles et libellés d'accessibilité (placeholder, title, aria-label) :
 // table séparée, « Annuler » y désigne l'annulation d'une action et non un bouton.
 const STATIC_UI_ATTRS = [
+	['Mise en page', 'Page layout'],
 	['Documents ouverts', 'Open documents'],
 	['Accueil', 'Home'],
 	['Faire défiler les onglets vers la gauche', 'Scroll tabs left'],
@@ -18831,10 +18881,17 @@ function collectPrintFormSettings() {
 		pagesMode,
 		pageRange: elements.printPageRange?.value?.trim() || '',
 		grayscale: Boolean(elements.printGrayscale?.checked),
-		duplex: Boolean(elements.printDuplex?.checked),
-		duplexEdge:
-			document.querySelector('input[name="print-duplex-edge"]:checked')?.value || 'long',
+		// En livret, la case est forcée : on mémorise le choix de l’utilisateur.
+		duplex: _printDuplexBeforeBooklet
+			? _printDuplexBeforeBooklet.checked
+			: Boolean(elements.printDuplex?.checked),
+		duplexEdge: _printDuplexBeforeBooklet
+			? _printDuplexBeforeBooklet.edge
+			: document.querySelector('input[name="print-duplex-edge"]:checked')?.value || 'long',
 		reverse: Boolean(elements.printReverse?.checked),
+		collate: elements.printCollate ? Boolean(elements.printCollate.checked) : true,
+		pageSubset: elements.printPageSubset?.value || 'all',
+		layout: collectPrintLayoutOptions(),
 		autoPaper: Boolean(elements.printAutoPaper?.checked),
 		fitLabel: Boolean(elements.printFitLabel?.checked),
 		fitCompact: elements.printFitCompact ? Boolean(elements.printFitCompact.checked) : true,
@@ -18872,13 +18929,20 @@ function applyPrintFormSettings(settings) {
 		elements.printPageRange.disabled = pagesMode !== 'range';
 	}
 	if (elements.printGrayscale) elements.printGrayscale.checked = Boolean(settings.grayscale);
+	_printDuplexBeforeBooklet = null;
 	if (elements.printDuplex) elements.printDuplex.checked = Boolean(settings.duplex);
 	const edgeRadio = document.querySelector(
 		`input[name="print-duplex-edge"][value="${settings.duplexEdge === 'short' ? 'short' : 'long'}"]`
 	);
 	if (edgeRadio) edgeRadio.checked = true;
-	syncPrintDuplexInputs();
 	if (elements.printReverse) elements.printReverse.checked = Boolean(settings.reverse);
+	if (elements.printCollate) elements.printCollate.checked = settings.collate !== false;
+	if (elements.printPageSubset) {
+		elements.printPageSubset.value = ['odd', 'even'].includes(settings.pageSubset)
+			? settings.pageSubset
+			: 'all';
+	}
+	applyPrintLayoutOptions(settings.layout);
 	if (elements.printAutoPaper) elements.printAutoPaper.checked = Boolean(settings.autoPaper);
 	// `fitLabel` absent = réglages d’avant cette option : on laisse l’auto-détection
 	// décider plutôt que d’imposer « décoché ».
@@ -19227,11 +19291,236 @@ function syncPrintScaleInputs() {
 }
 
 function syncPrintDuplexInputs() {
-	const active = Boolean(elements.printDuplex?.checked);
+	const forced = _printLayout === 'booklet';
+	const active = Boolean(elements.printDuplex?.checked) && !forced;
+	if (elements.printDuplex) {
+		elements.printDuplex.disabled = forced;
+		elements.printDuplex.closest('.print-check')?.classList.toggle('is-disabled', forced);
+	}
 	for (const radio of document.querySelectorAll('input[name="print-duplex-edge"]')) {
 		radio.disabled = !active;
 		radio.closest('.print-radio')?.classList.toggle('is-disabled', !active);
 	}
+}
+
+const PRINT_LAYOUTS = ['size', 'poster', 'multiple', 'booklet'];
+/** Onglet de « Dimensionnement et gestion des pages ». */
+let _printLayout = 'size';
+/** Recto verso choisi par l’utilisateur, mis de côté le temps du livret. */
+let _printDuplexBeforeBooklet = null;
+/** Dernières feuilles composées par le backend pour l’aperçu. */
+let _printComposedPreview = null;
+/** L’erreur affichée vient de l’aperçu composé : à effacer dès qu’il réussit. */
+let _printPreviewErrorShown = false;
+
+function collectPrintLayoutOptions() {
+	const count = elements.printNupCount?.value || '2';
+	return {
+		kind: _printLayout,
+		pagesPerSheet: count === 'custom' ? 0 : Number(count),
+		columns: Number(elements.printNupColumns?.value) || 2,
+		rows: Number(elements.printNupRows?.value) || 2,
+		pageOrder: elements.printNupOrder?.value || 'horizontal',
+		borders: Boolean(elements.printNupBorders?.checked),
+		autoRotate: elements.printNupAutoRotate ? Boolean(elements.printNupAutoRotate.checked) : true,
+		tileScale: Number(elements.printPosterScale?.value) || 100,
+		overlapMm: Math.max(0, Number(elements.printPosterOverlap?.value) || 0),
+		cutMarks: Boolean(elements.printPosterCutMarks?.checked),
+		labels: Boolean(elements.printPosterLabels?.checked),
+		bookletSubset: elements.printBookletSubset?.value || 'both',
+		bookletBinding: elements.printBookletBinding?.value || 'left'
+	};
+}
+
+function applyPrintLayoutOptions(layout) {
+	const options = layout && typeof layout === 'object' ? layout : {};
+	const setValue = (element, value) => {
+		if (!element || value === undefined || value === null) return;
+		if ([...(element.options || [])].length) {
+			if ([...element.options].some((option) => option.value === String(value))) {
+				element.value = String(value);
+			}
+		} else {
+			element.value = String(value);
+		}
+	};
+	setValue(elements.printNupCount, options.pagesPerSheet === 0 ? 'custom' : options.pagesPerSheet);
+	setValue(elements.printNupColumns, options.columns);
+	setValue(elements.printNupRows, options.rows);
+	setValue(elements.printNupOrder, options.pageOrder);
+	setValue(elements.printPosterScale, options.tileScale);
+	setValue(elements.printPosterOverlap, options.overlapMm);
+	setValue(elements.printBookletSubset, options.bookletSubset);
+	setValue(elements.printBookletBinding, options.bookletBinding);
+	if (elements.printNupBorders) elements.printNupBorders.checked = Boolean(options.borders);
+	if (elements.printNupAutoRotate) elements.printNupAutoRotate.checked = options.autoRotate !== false;
+	if (elements.printPosterCutMarks) elements.printPosterCutMarks.checked = options.cutMarks !== false;
+	if (elements.printPosterLabels) elements.printPosterLabels.checked = options.labels !== false;
+	_printLayout = PRINT_LAYOUTS.includes(options.kind) ? options.kind : 'size';
+	if (_printLayout !== 'size') _printPreviewPage = 1;
+	syncPrintLayoutUi();
+}
+
+/**
+ * Montre le panneau de l’onglet actif et ajuste ce qui en dépend.
+ *
+ * Le livret impose le recto verso sur le bord court (ou un passage simple face
+ * pour recto seul / verso seul) : la case et la reliure sont alors forcées, et
+ * le choix de l’utilisateur revient tel quel quand il quitte l’onglet.
+ */
+function syncPrintLayoutUi() {
+	for (const tab of document.querySelectorAll('[data-print-layout]')) {
+		const active = tab.dataset.printLayout === _printLayout;
+		tab.classList.toggle('is-active', active);
+		tab.setAttribute('aria-selected', String(active));
+		tab.tabIndex = active ? 0 : -1;
+	}
+	for (const panel of document.querySelectorAll('[data-print-layout-panel]')) {
+		panel.classList.toggle('hidden', panel.dataset.printLayoutPanel !== _printLayout);
+	}
+	elements.printLabelFitGroup?.classList.toggle('hidden', _printLayout !== 'size');
+	if (elements.printNupCustomRow) {
+		elements.printNupCustomRow.hidden = elements.printNupCount?.value !== 'custom';
+	}
+	const booklet = _printLayout === 'booklet';
+	for (const radio of document.querySelectorAll('input[name="print-orientation"]')) {
+		radio.disabled = booklet;
+		radio.closest('.print-radio')?.classList.toggle('is-disabled', booklet);
+	}
+	if (booklet) {
+		if (!_printDuplexBeforeBooklet) {
+			_printDuplexBeforeBooklet = {
+				checked: Boolean(elements.printDuplex?.checked),
+				edge: document.querySelector('input[name="print-duplex-edge"]:checked')?.value || 'long'
+			};
+		}
+		const bothSides = (elements.printBookletSubset?.value || 'both') === 'both';
+		if (elements.printDuplex) elements.printDuplex.checked = bothSides;
+		const shortEdge = document.querySelector('input[name="print-duplex-edge"][value="short"]');
+		if (shortEdge) shortEdge.checked = true;
+	} else if (_printDuplexBeforeBooklet) {
+		const saved = _printDuplexBeforeBooklet;
+		_printDuplexBeforeBooklet = null;
+		if (elements.printDuplex) elements.printDuplex.checked = saved.checked;
+		const edge = document.querySelector(`input[name="print-duplex-edge"][value="${saved.edge}"]`);
+		if (edge) edge.checked = true;
+	}
+	syncPrintDuplexInputs();
+}
+
+function selectPrintLayout(kind) {
+	if (!PRINT_LAYOUTS.includes(kind) || kind === _printLayout) return;
+	_printLayout = kind;
+	_printPreviewPage = kind === 'size' ? state.page || 1 : 1;
+	syncPrintLayoutUi();
+	void renderPrintPreview();
+}
+
+/** Plage envoyée au backend : page active, plage saisie, ou tout. */
+function printPageRangeFor(form) {
+	if (form.pagesMode === 'active') return String(state.page || 1);
+	if (form.pagesMode === 'range') return form.pageRange || null;
+	return null;
+}
+
+/**
+ * Feuilles composées par le backend (affiche, multiple, livret), en cache.
+ *
+ * Comme pour l’étiquette, l’aperçu affiche le PDF que l’imprimante recevra :
+ * il n’y a pas de seconde implémentation de la mise en page côté JS.
+ */
+async function getComposedPrintPreview() {
+	const paper = selectedPrintPaper();
+	if (!state.fileBytes || !paper?.widthPts || !paper?.heightPts) return null;
+	const form = collectPrintFormSettings();
+	const request = {
+		sheetWidthPts: paper.widthPts,
+		sheetHeightPts: paper.heightPts,
+		pageRange: printPageRangeFor(form),
+		pageSubset: form.pageSubset,
+		scaling: form.scaling,
+		customScale: form.scaling === 'custom' ? form.customScale : null,
+		orientation: form.orientation || 'auto',
+		layout: form.layout
+	};
+	const key = JSON.stringify(request);
+	if (_printComposedPreview?.key === key && _printComposedPreview.source === state.fileBytes) {
+		return _printComposedPreview;
+	}
+	const source = state.fileBytes;
+	const result = await invokeCommand('compose_print_preview', {
+		bytes: await stageBytes(source),
+		request
+	});
+	const data = await resolveBytes(result.bytes);
+	const doc = await pdfjsLib.getDocument(pdfDocumentOptions({ data: data.slice() })).promise;
+	_printComposedPreview?.doc?.destroy?.();
+	_printComposedPreview = {
+		key,
+		source,
+		doc,
+		sheets: result.sheets || doc.numPages || 1,
+		posterColumns: result.posterColumns || 0,
+		posterRows: result.posterRows || 0,
+		turned: Array.isArray(result.turned) ? result.turned : [],
+		paperWidthPt: paper.widthPts,
+		paperHeightPt: paper.heightPts
+	};
+	return _printComposedPreview;
+}
+
+function invalidateComposedPrintPreview() {
+	_printComposedPreview?.doc?.destroy?.();
+	_printComposedPreview = null;
+}
+
+/** « Affiche : 3 × 2 feuilles par page · 6 feuilles », « 4 faces ». */
+function renderComposedPrintSummary(composed) {
+	const summary = elements.printFitSummary;
+	if (!summary) return;
+	const fr = currentLocale() === 'fr';
+	const sheets = composed.sheets;
+	const sides = fr
+		? `${sheets} face${sheets > 1 ? 's' : ''} imprimée${sheets > 1 ? 's' : ''}`
+		: `${sheets} printed side${sheets > 1 ? 's' : ''}`;
+	let text = sides;
+	if (_printLayout === 'poster' && composed.posterColumns && composed.posterRows) {
+		const grid = `${composed.posterColumns} × ${composed.posterRows}`;
+		text = fr ? `Affiche : ${grid} feuilles par page · ${sides}` : `Poster: ${grid} sheets per page · ${sides}`;
+	} else if (_printLayout === 'booklet') {
+		const paperSheets = Math.ceil(sheets / 2);
+		text = fr
+			? `Livret : ${paperSheets} feuille${paperSheets > 1 ? 's' : ''} à plier · ${sides}`
+			: `Booklet: ${paperSheets} sheet${paperSheets > 1 ? 's' : ''} to fold · ${sides}`;
+	}
+	summary.textContent = text;
+	summary.classList.remove('hidden');
+}
+
+async function drawComposedPrintPreview(canvas, composed, token) {
+	const total = composed.doc.numPages || 1;
+	_printPreviewPage = Math.max(1, Math.min(total, _printPreviewPage || 1));
+	if (elements.printPreviewPage) {
+		elements.printPreviewPage.textContent =
+			currentLocale() === 'fr'
+				? `Face ${_printPreviewPage} sur ${total}`
+				: `Side ${_printPreviewPage} of ${total}`;
+	}
+	if (elements.printPreviewPrev) elements.printPreviewPrev.disabled = _printPreviewPage <= 1;
+	if (elements.printPreviewNext) elements.printPreviewNext.disabled = _printPreviewPage >= total;
+	// Une feuille couchée a son haut à droite du papier : un quart de tour
+	// à gauche la remet dans le sens de lecture.
+	const turned = Boolean(composed.turned[_printPreviewPage - 1]);
+	await drawPrintSheet(canvas, composed.doc, _printPreviewPage, token, turned ? 270 : 0);
+	if (token !== _printPreviewRenderToken) return;
+	if (elements.printDimsLabel) {
+		const [width, height] = turned
+			? [composed.paperHeightPt, composed.paperWidthPt]
+			: [composed.paperWidthPt, composed.paperHeightPt];
+		elements.printDimsLabel.textContent = `${formatPrintMm(width)} × ${formatPrintMm(height)} mm`;
+	}
+	if (elements.printScaleLabel) elements.printScaleLabel.textContent = '';
+	renderComposedPrintSummary(composed);
 }
 
 function syncPrintPageInputs() {
@@ -19239,7 +19528,11 @@ function syncPrintPageInputs() {
 	if (elements.printPageRange) {
 		elements.printPageRange.disabled = mode !== 'range';
 	}
-	if (mode === 'active' && state.page) {
+	if (_printLayout !== 'size') {
+		// Les feuilles composées dépendent des pages choisies.
+		_printPreviewPage = 1;
+		void renderPrintPreview();
+	} else if (mode === 'active' && state.page) {
 		_printPreviewPage = state.page;
 		void renderPrintPreview();
 	}
@@ -19372,6 +19665,28 @@ async function renderPrintPreview() {
 	const canvas = elements.printPreviewCanvas;
 	if (!canvas || !state.pdf) return;
 	const token = ++_printPreviewRenderToken;
+
+	if (_printLayout !== 'size') {
+		renderFitLabelSummary(null);
+		try {
+			const composed = await getComposedPrintPreview();
+			if (token !== _printPreviewRenderToken) return;
+			if (composed) {
+				if (_printPreviewErrorShown) {
+					_printPreviewErrorShown = false;
+					setPrintError('');
+				}
+				await drawComposedPrintPreview(canvas, composed, token);
+				return;
+			}
+		} catch (error) {
+			if (token !== _printPreviewRenderToken) return;
+			console.warn('print composed preview', error);
+			_printPreviewErrorShown = true;
+			setPrintError(error instanceof Error ? error.message : String(error));
+			return;
+		}
+	}
 	const total = state.pdf.numPages || 1;
 	_printPreviewPage = Math.max(1, Math.min(total, _printPreviewPage || 1));
 	if (elements.printPreviewPage) {
@@ -19383,7 +19698,7 @@ async function renderPrintPreview() {
 
 	// Recadrage actif : on affiche le PDF réellement produit par le backend,
 	// donc l’aperçu ne peut pas diverger de la sortie imprimante.
-	if (elements.printFitLabel?.checked) {
+	if (_printLayout === 'size' && elements.printFitLabel?.checked) {
 		try {
 			const fit = await getLabelFitPreview();
 			if (token !== _printPreviewRenderToken) return;
@@ -19474,15 +19789,33 @@ async function renderPrintPreview() {
 async function drawFittedLabelPreview(canvas, fit, token) {
 	const total = fit.doc.numPages || 1;
 	const pageNumber = Math.max(1, Math.min(total, _printPreviewPage || 1));
-	const page = await fit.doc.getPage(pageNumber);
-	if (token !== _printPreviewRenderToken) return;
+	const base = await drawPrintSheet(canvas, fit.doc, pageNumber, token);
+	if (!base || token !== _printPreviewRenderToken) return;
 
-	const base = page.getViewport({ scale: 1 });
+	if (elements.printDimsLabel) {
+		elements.printDimsLabel.textContent = `${formatPrintMm(base.width)} × ${formatPrintMm(base.height)} mm`;
+	}
+	if (elements.printScaleLabel) {
+		elements.printScaleLabel.textContent = printScaleText(fit.scale);
+	}
+	renderFitLabelSummary(fit);
+}
+
+/**
+ * Dessine une page d’un PDF déjà à la taille du papier ; renvoie sa taille.
+ * `turn` (degrés, sens horaire) redresse une feuille dont le contenu est couché.
+ */
+async function drawPrintSheet(canvas, doc, pageNumber, token, turn = 0) {
+	const page = await doc.getPage(pageNumber);
+	if (token !== _printPreviewRenderToken) return null;
+
+	const rotation = (page.rotate + turn) % 360;
+	const base = page.getViewport({ scale: 1, rotation });
 	const maxWidth = 360;
 	const maxHeight = 420;
 	const zoom = Math.min(maxWidth / base.width, maxHeight / base.height);
 	const ratio = pageRenderRatio();
-	const viewport = page.getViewport({ scale: zoom * ratio });
+	const viewport = page.getViewport({ scale: zoom * ratio, rotation });
 
 	canvas.width = Math.max(1, Math.round(viewport.width));
 	canvas.height = Math.max(1, Math.round(viewport.height));
@@ -19494,15 +19827,7 @@ async function drawFittedLabelPreview(canvas, fit, token) {
 	ctx.fillStyle = '#ffffff';
 	ctx.fillRect(0, 0, canvas.width, canvas.height);
 	await page.render({ canvasContext: ctx, viewport }).promise;
-	if (token !== _printPreviewRenderToken) return;
-
-	if (elements.printDimsLabel) {
-		elements.printDimsLabel.textContent = `${formatPrintMm(base.width)} × ${formatPrintMm(base.height)} mm`;
-	}
-	if (elements.printScaleLabel) {
-		elements.printScaleLabel.textContent = printScaleText(fit.scale);
-	}
-	renderFitLabelSummary(fit);
+	return base;
 }
 
 async function populatePrintPapers(printerName, preferredPaper) {
@@ -19645,6 +19970,7 @@ function closePrintModal() {
 	if (elements.printSubmit) elements.printSubmit.disabled = false;
 	_printPreviewRenderToken += 1;
 	invalidateLabelFitPreview();
+	invalidateComposedPrintPreview();
 	renderFitLabelSummary(null);
 }
 
@@ -19671,12 +19997,7 @@ async function submitPrintJob() {
 		setStatus(t('printSending'));
 		// Formulaire saisi sur la page : cuit dans les octets avant impression.
 		const bytes = await stagedDocumentBytes();
-		let pageRange = null;
-		if (form.pagesMode === 'active') {
-			pageRange = String(state.page || 1);
-		} else if (form.pagesMode === 'range') {
-			pageRange = form.pageRange || null;
-		}
+		const pageRange = printPageRangeFor(form);
 		// Les dimensions du media conditionnent l’imposition côté Rust : sans
 		// elles, le backend retombe sur les options CUPS, que macOS ignore.
 		const paper = selectedPrintPaper();
@@ -19696,6 +20017,9 @@ async function submitPrintJob() {
 				duplex: form.duplex,
 				duplexEdge: form.duplexEdge,
 				reverse: form.reverse,
+				collate: form.collate,
+				pageSubset: form.pageSubset,
+				layout: form.layout,
 				fitToLabel: form.fitLabel,
 				labelGutterPt: form.fitCompact ? LABEL_GUTTER_PT : 0,
 				labelMarginPt: 0,
@@ -25491,6 +25815,52 @@ document.querySelectorAll('input[name="print-pages"]').forEach((input) => {
 	input.addEventListener('change', syncPrintPageInputs);
 });
 elements.printDuplex?.addEventListener('change', syncPrintDuplexInputs);
+for (const tab of document.querySelectorAll('[data-print-layout]')) {
+	tab.addEventListener('click', () => selectPrintLayout(tab.dataset.printLayout));
+	tab.addEventListener('keydown', (event) => {
+		if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+		event.preventDefault();
+		const step = event.key === 'ArrowRight' ? 1 : -1;
+		const index = PRINT_LAYOUTS.indexOf(_printLayout);
+		const next = PRINT_LAYOUTS[(index + step + PRINT_LAYOUTS.length) % PRINT_LAYOUTS.length];
+		selectPrintLayout(next);
+		document.querySelector(`[data-print-layout="${next}"]`)?.focus();
+	});
+}
+{
+	let layoutInputTimer = 0;
+	const refreshLayout = () => {
+		syncPrintLayoutUi();
+		void renderPrintPreview();
+	};
+	for (const control of [
+		elements.printPageSubset,
+		elements.printNupCount,
+		elements.printNupOrder,
+		elements.printNupBorders,
+		elements.printNupAutoRotate,
+		elements.printPosterCutMarks,
+		elements.printPosterLabels,
+		elements.printBookletSubset,
+		elements.printBookletBinding
+	]) {
+		control?.addEventListener('change', refreshLayout);
+	}
+	// Les champs numériques recomposent à chaque frappe : on attend une pause
+	// plutôt que de relancer le backend pour « 1 », « 12 » puis « 120 ».
+	for (const input of [
+		elements.printPosterScale,
+		elements.printPosterOverlap,
+		elements.printNupColumns,
+		elements.printNupRows,
+		elements.printPageRange
+	]) {
+		input?.addEventListener('input', () => {
+			clearTimeout(layoutInputTimer);
+			layoutInputTimer = setTimeout(refreshLayout, 250);
+		});
+	}
+}
 document.querySelectorAll('input[name="print-orientation"]').forEach((input) => {
 	input.addEventListener('change', () => void renderPrintPreview());
 });

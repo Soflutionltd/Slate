@@ -169,6 +169,7 @@
 		'list_paper_sizes',
 		'list_printer_options',
 		'fit_label_to_media',
+		'compose_print_preview',
 		'print_pdf_with_options',
 		'set_default_pdf_handler',
 		'is_default_pdf_handler',
