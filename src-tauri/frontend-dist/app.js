@@ -1638,6 +1638,7 @@ const STATIC_UI_TEXT = [
 	['Dimensionnement et gestion des pages', 'Page sizing & handling'],
 	['Taille', 'Size'],
 	['Ajuster', 'Fit'],
+	['Remplir la page', 'Fill page'],
 	['Taille réelle', 'Actual size'],
 	['Réduire les pages hors format', 'Shrink oversized pages'],
 	['Échelle personnalisée', 'Custom scale'],
