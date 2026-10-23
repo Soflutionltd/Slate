@@ -7,9 +7,10 @@
 //! veut. C’est la cause des étiquettes 4×6 décalées et coupées.
 //!
 //! La seule façon fiable d’imposer une échelle est donc de la faire nous-mêmes :
-//! on réécrit le PDF pour que chaque page fasse EXACTEMENT la taille du papier,
-//! contenu mis à l’échelle et centré. Le driver n’a plus rien à décider, et
-//! l’aperçu du panneau correspond au papier qui sort.
+//! `place_page` calcule où chaque page atterrit sur le papier, et
+//! `print_compose` réécrit le PDF pour que chaque feuille fasse EXACTEMENT la
+//! taille du papier. Le driver n’a plus rien à décider, et l’aperçu du panneau
+//! correspond au papier qui sort.
 //!
 //! Le `/Rotate` de la page et l’orientation demandée sont absorbés dans la
 //! matrice : le MediaBox produit garde toujours l’orientation du media CUPS
@@ -46,16 +47,6 @@ pub enum Orientation {
     Landscape,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct Imposition {
-    /// Largeur du media CUPS, en points PostScript (telle que donnée par le PPD).
-    pub sheet_width_pts: f64,
-    /// Hauteur du media CUPS, en points PostScript.
-    pub sheet_height_pts: f64,
-    pub mode: ScaleMode,
-    pub orientation: Orientation,
-}
-
 /// Matrice PDF `a b c d e f` : x' = a·x + c·y + e, y' = b·x + d·y + f.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Matrix {
@@ -76,7 +67,7 @@ impl Matrix {
         )
     }
 
-    fn to_cm(self) -> String {
+    pub(crate) fn to_cm(self) -> String {
         // 5 décimales : bien en deçà de la précision d’un rasteriseur, et évite
         // les notations exponentielles que certains parseurs digèrent mal.
         format!(
@@ -255,7 +246,7 @@ fn resolve_scale(
 }
 
 /// Remonte la chaîne `/Parent` pour lire un attribut de page héritable.
-fn inherited_attribute(doc: &Document, page_id: ObjectId, key: &[u8]) -> Option<Object> {
+pub(crate) fn inherited_attribute(doc: &Document, page_id: ObjectId, key: &[u8]) -> Option<Object> {
     let mut current = page_id;
     // La spec autorise l’héritage sur toute la chaîne ; on borne pour ne pas
     // boucler sur un arbre de pages corrompu.
@@ -272,7 +263,7 @@ fn inherited_attribute(doc: &Document, page_id: ObjectId, key: &[u8]) -> Option<
     None
 }
 
-fn object_to_f64(object: &Object) -> Option<f64> {
+pub(crate) fn object_to_f64(object: &Object) -> Option<f64> {
     match object {
         Object::Integer(i) => Some(*i as f64),
         Object::Real(r) => Some(*r as f64),
@@ -280,7 +271,7 @@ fn object_to_f64(object: &Object) -> Option<f64> {
     }
 }
 
-fn rect_from_object(doc: &Document, object: &Object) -> Option<Rect> {
+pub(crate) fn rect_from_object(doc: &Document, object: &Object) -> Option<Rect> {
     let array = object.as_array().ok()?;
     if array.len() < 4 {
         return None;
@@ -298,7 +289,7 @@ fn rect_from_object(doc: &Document, object: &Object) -> Option<Rect> {
 }
 
 /// MediaBox effectif de la page (héritage compris), avec repli Letter.
-fn page_media_box(doc: &Document, page_id: ObjectId) -> Rect {
+pub(crate) fn page_media_box(doc: &Document, page_id: ObjectId) -> Rect {
     inherited_attribute(doc, page_id, b"MediaBox")
         .and_then(|object| rect_from_object(doc, &object))
         .unwrap_or(Rect {
@@ -309,161 +300,10 @@ fn page_media_box(doc: &Document, page_id: ObjectId) -> Rect {
         })
 }
 
-fn page_rotation(doc: &Document, page_id: ObjectId) -> i64 {
+pub(crate) fn page_rotation(doc: &Document, page_id: ObjectId) -> i64 {
     inherited_attribute(doc, page_id, b"Rotate")
         .and_then(|object| object.as_i64().ok())
         .unwrap_or(0)
-}
-
-/// Transforme les rectangles d’annotations pour qu’ils suivent le contenu.
-fn transform_annotations(doc: &mut Document, page_id: ObjectId, matrix: Matrix) {
-    let Ok(page_dict) = doc.get_dictionary(page_id) else {
-        return;
-    };
-    let Ok(annots) = page_dict.get(b"Annots") else {
-        return;
-    };
-    let ids: Vec<ObjectId> = match doc.dereference(annots).map(|(_, object)| object) {
-        Ok(Object::Array(items)) => items.iter().filter_map(|i| i.as_reference().ok()).collect(),
-        _ => Vec::new(),
-    };
-
-    for annot_id in ids {
-        let rect = doc
-            .get_dictionary(annot_id)
-            .ok()
-            .and_then(|dict| dict.get(b"Rect").ok().cloned())
-            .and_then(|object| rect_from_object(doc, &object));
-        let quads: Option<Vec<f64>> = doc
-            .get_dictionary(annot_id)
-            .ok()
-            .and_then(|dict| dict.get(b"QuadPoints").ok().cloned())
-            .and_then(|object| object.as_array().ok().cloned())
-            .map(|items| items.iter().filter_map(object_to_f64).collect());
-
-        if let Ok(Object::Dictionary(dict)) = doc.get_object_mut(annot_id) {
-            if let Some(rect) = rect {
-                // Avec une rotation, les coins tournent : on reprend la bbox
-                // englobante des quatre coins transformés.
-                let corners = [
-                    matrix.apply(rect.x0, rect.y0),
-                    matrix.apply(rect.x1, rect.y0),
-                    matrix.apply(rect.x1, rect.y1),
-                    matrix.apply(rect.x0, rect.y1),
-                ];
-                let xs = corners.map(|(x, _)| x);
-                let ys = corners.map(|(_, y)| y);
-                let x0 = xs.iter().cloned().fold(f64::INFINITY, f64::min);
-                let x1 = xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-                let y0 = ys.iter().cloned().fold(f64::INFINITY, f64::min);
-                let y1 = ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-                dict.set(
-                    "Rect",
-                    Object::Array(vec![
-                        Object::Real(x0 as f32),
-                        Object::Real(y0 as f32),
-                        Object::Real(x1 as f32),
-                        Object::Real(y1 as f32),
-                    ]),
-                );
-            }
-            if let Some(quads) = quads {
-                if quads.len() >= 8 && quads.len() % 2 == 0 {
-                    let mut mapped = Vec::with_capacity(quads.len());
-                    for pair in quads.chunks_exact(2) {
-                        let (x, y) = matrix.apply(pair[0], pair[1]);
-                        mapped.push(Object::Real(x as f32));
-                        mapped.push(Object::Real(y as f32));
-                    }
-                    dict.set("QuadPoints", Object::Array(mapped));
-                }
-            }
-        }
-    }
-}
-
-/// Réécrit le PDF pour que chaque page fasse exactement la taille de la feuille.
-///
-/// Renvoie les octets du PDF imposé. Le PDF d’entrée n’est pas modifié.
-pub fn impose(bytes: &[u8], settings: &Imposition) -> Result<Vec<u8>, String> {
-    if settings.sheet_width_pts <= 1.0 || settings.sheet_height_pts <= 1.0 {
-        return Err("Dimensions de papier invalides pour l’imposition.".into());
-    }
-    let mut doc = alto_pdf_engine::load_document(bytes).map_err(|e| format!("lopdf: {e}"))?;
-    let pages = doc.get_pages();
-    if pages.is_empty() {
-        return Err("Le PDF ne contient aucune page.".into());
-    }
-
-    let sheet_w = settings.sheet_width_pts;
-    let sheet_h = settings.sheet_height_pts;
-
-    for page_id in pages.values().copied() {
-        let media = page_media_box(&doc, page_id);
-        let rotate = page_rotation(&doc, page_id);
-        let placement = place_page(
-            media,
-            rotate,
-            sheet_w,
-            sheet_h,
-            settings.mode,
-            settings.orientation,
-        );
-
-        let original = doc.get_page_content(page_id);
-        // `q … Q` isole notre matrice : même si le flux d’origine laisse des
-        // `q` non refermés, l’état graphique revient au nôtre à la fin.
-        let mut content = Vec::with_capacity(original.len() + 64);
-        content.extend_from_slice(b"q\n");
-        content.extend_from_slice(placement.matrix.to_cm().as_bytes());
-        content.extend_from_slice(b"\n");
-        content.extend_from_slice(&original);
-        content.extend_from_slice(b"\nQ\n");
-
-        let has_contents = doc
-            .get_dictionary(page_id)
-            .map(|dict| dict.has(b"Contents"))
-            .unwrap_or(false);
-        if has_contents {
-            doc.change_page_content(page_id, content)
-                .map_err(|e| format!("Écriture du flux de la page impossible : {e}"))?;
-        } else {
-            // Page sans /Contents : on en crée un plutôt que d’échouer.
-            let stream_id = doc.add_object(lopdf::Stream::new(lopdf::Dictionary::new(), content));
-            if let Ok(Object::Dictionary(dict)) = doc.get_object_mut(page_id) {
-                dict.set("Contents", Object::Reference(stream_id));
-            }
-        }
-
-        transform_annotations(&mut doc, page_id, placement.matrix);
-
-        if let Ok(Object::Dictionary(dict)) = doc.get_object_mut(page_id) {
-            dict.set(
-                "MediaBox",
-                Object::Array(vec![
-                    Object::Real(0.0),
-                    Object::Real(0.0),
-                    Object::Real(sheet_w as f32),
-                    Object::Real(sheet_h as f32),
-                ]),
-            );
-            // La rotation est désormais dans la matrice.
-            dict.set("Rotate", Object::Integer(0));
-            // Un CropBox résiduel (ou hérité) rognerait notre nouvelle feuille.
-            for key in ["CropBox", "BleedBox", "TrimBox", "ArtBox"] {
-                dict.remove(key.as_bytes());
-            }
-        }
-    }
-
-    // Les mêmes clés posées sur l’arbre /Pages seraient héritées et écraseraient
-    // le MediaBox par page : on les neutralise.
-    clear_page_tree_attributes(&mut doc);
-
-    let mut out = Vec::new();
-    doc.save_to(&mut std::io::Cursor::new(&mut out))
-        .map_err(|e| format!("Enregistrement du PDF imposé impossible : {e}"))?;
-    Ok(out)
 }
 
 /// Cible du recadrage d’étiquette.
@@ -693,7 +533,7 @@ fn stack_bands_on_page(
 
 /// Neutralise les attributs héritables de l’arbre `/Pages`, qui écraseraient
 /// le MediaBox posé page par page.
-fn clear_page_tree_attributes(doc: &mut Document) {
+pub(crate) fn clear_page_tree_attributes(doc: &mut Document) {
     let page_tree_ids: Vec<ObjectId> = doc
         .objects
         .iter()
@@ -938,109 +778,5 @@ mod tests {
         assert_eq!(normalize_rotation(-90), 270);
         assert_eq!(normalize_rotation(450), 90);
         assert_eq!(normalize_rotation(360), 0);
-    }
-
-    fn minimal_pdf(media_box: &str, rotate: Option<i64>) -> Vec<u8> {
-        let content = b"0 0 1 rg 10 10 100 100 re f";
-        let rotate_entry = rotate.map(|r| format!(" /Rotate {r}")).unwrap_or_default();
-        let objects = vec![
-            "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
-            "<< /Type /Pages /Count 1 /Kids [3 0 R] >>".to_string(),
-            format!(
-                "<< /Type /Page /Parent 2 0 R /MediaBox {media_box}{rotate_entry} /Contents 4 0 R >>"
-            ),
-            format!(
-                "<< /Length {} >>\nstream\n{}\nendstream",
-                content.len(),
-                String::from_utf8_lossy(content)
-            ),
-        ];
-        let mut out = b"%PDF-1.4\n".to_vec();
-        let mut offsets = Vec::new();
-        for (index, object) in objects.iter().enumerate() {
-            offsets.push(out.len());
-            out.extend_from_slice(format!("{} 0 obj\n{}\nendobj\n", index + 1, object).as_bytes());
-        }
-        let xref = out.len();
-        out.extend_from_slice(format!("xref\n0 {}\n", objects.len() + 1).as_bytes());
-        out.extend_from_slice(b"0000000000 65535 f \n");
-        for offset in &offsets {
-            out.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
-        }
-        out.extend_from_slice(
-            format!(
-                "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{}\n%%EOF\n",
-                objects.len() + 1,
-                xref
-            )
-            .as_bytes(),
-        );
-        out
-    }
-
-    #[test]
-    fn impose_rewrites_media_box_to_sheet() {
-        let pdf = minimal_pdf("[0 0 311.8 595.3]", None);
-        let imposed = impose(
-            &pdf,
-            &Imposition {
-                sheet_width_pts: 288.0,
-                sheet_height_pts: 432.0,
-                mode: ScaleMode::Fit,
-                orientation: Orientation::Portrait,
-            },
-        )
-        .expect("imposition");
-
-        let doc = alto_pdf_engine::load_document(&imposed).expect("relecture");
-        let page_id = *doc.get_pages().values().next().expect("une page");
-        let media = page_media_box(&doc, page_id);
-        approx(media.width(), 288.0);
-        approx(media.height(), 432.0);
-        assert_eq!(page_rotation(&doc, page_id), 0);
-
-        // La matrice a bien été injectée devant le contenu d’origine.
-        let content = String::from_utf8_lossy(&doc.get_page_content(page_id)).to_string();
-        assert!(content.starts_with('q'), "flux non encapsulé : {content:.40}");
-        assert!(content.contains(" cm"), "matrice absente");
-        assert!(content.contains("100 100 re"), "contenu d’origine perdu");
-        assert!(content.trim_end().ends_with('Q'), "état graphique non restauré");
-    }
-
-    #[test]
-    fn impose_absorbs_page_rotation() {
-        let pdf = minimal_pdf("[0 0 432 288]", Some(90));
-        let imposed = impose(
-            &pdf,
-            &Imposition {
-                sheet_width_pts: 288.0,
-                sheet_height_pts: 432.0,
-                mode: ScaleMode::Fit,
-                orientation: Orientation::Auto,
-            },
-        )
-        .expect("imposition");
-        let doc = alto_pdf_engine::load_document(&imposed).expect("relecture");
-        let page_id = *doc.get_pages().values().next().expect("une page");
-        // /Rotate remis à zéro puisque la rotation est dans la matrice.
-        assert_eq!(page_rotation(&doc, page_id), 0);
-        let media = page_media_box(&doc, page_id);
-        approx(media.width(), 288.0);
-        approx(media.height(), 432.0);
-    }
-
-    #[test]
-    fn impose_rejects_absurd_sheet() {
-        let pdf = minimal_pdf("[0 0 288 432]", None);
-        assert!(impose(
-            &pdf,
-            &Imposition {
-                sheet_width_pts: 0.0,
-                sheet_height_pts: 432.0,
-                mode: ScaleMode::Fit,
-                orientation: Orientation::Auto,
-            },
-        )
-        .is_err());
     }
 }

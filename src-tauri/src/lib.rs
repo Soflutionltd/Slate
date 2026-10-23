@@ -7,6 +7,7 @@ pub mod ocr;
 pub mod pdf_sign;
 // Imposition et recadrage d'étiquettes : dans la lib pour être couvert par les
 // tests d'intégration de `tests/`, qui ne voient pas les modules du binaire.
+pub mod print_compose;
 pub mod print_layout;
 pub mod system_fonts;
 

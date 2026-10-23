@@ -34,6 +34,7 @@ mod ipc_bytes;
 mod mcp_local;
 mod pdf_color;
 mod print_cups;
+use sofdocs_desktop::print_compose;
 use sofdocs_desktop::print_layout;
 
 use ipc_bytes::DocBytes;
@@ -1533,6 +1534,36 @@ async fn fit_label_to_media(
     })
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PrintPreviewResponse {
+    bytes: DocBytes,
+    sheets: usize,
+    poster_columns: Option<u32>,
+    poster_rows: Option<u32>,
+    turned: Vec<bool>,
+}
+
+/// Feuilles composées (affiche, plusieurs pages, livret) pour l’aperçu : le
+/// panneau affiche ce PDF-là, celui-là même qui partira à l’imprimante.
+#[tauri::command]
+async fn compose_print_preview(
+    bytes: DocBytes,
+    request: print_cups::PreviewRequest,
+) -> Result<PrintPreviewResponse, String> {
+    let composition =
+        tauri::async_runtime::spawn_blocking(move || print_cups::compose_preview(&bytes, &request))
+            .await
+            .map_err(|e| format!("Aperçu d’impression interrompu : {e}"))??;
+    Ok(PrintPreviewResponse {
+        bytes: composition.bytes.into(),
+        sheets: composition.sheets,
+        poster_columns: composition.poster_grid.map(|grid| grid.0),
+        poster_rows: composition.poster_grid.map(|grid| grid.1),
+        turned: composition.turned,
+    })
+}
+
 #[tauri::command]
 async fn list_printer_options(printer: String) -> Result<Vec<print_cups::PrinterOption>, String> {
     tauri::async_runtime::spawn_blocking(move || print_cups::list_printer_options(&printer))
@@ -2864,6 +2895,7 @@ fn main() {
             list_paper_sizes,
             list_printer_options,
             fit_label_to_media,
+            compose_print_preview,
             print_pdf_with_options,
             read_pdf_path,
             set_default_pdf_handler,

@@ -12,9 +12,11 @@ use std::process::Command;
 
 use serde::{Deserialize, Serialize};
 
-use crate::print_layout::{
-    fit_label_to_media, impose, Imposition, LabelTarget, Orientation, ScaleMode,
+use crate::print_compose::{
+    compose, reverse_sheets, select_pages, ComposeRequest, Composition, Grid, Layout,
+    LayoutOptions, PageSelection, Parity,
 };
+use crate::print_layout::{fit_label_to_media, LabelTarget, Orientation, ScaleMode};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -83,6 +85,15 @@ pub struct PrintOptions {
     pub duplex_edge: String,
     #[serde(default)]
     pub reverse: bool,
+    /// `all` | `odd` | `even`, appliqué après la plage de pages.
+    #[serde(default)]
+    pub page_subset: String,
+    /// Assemble les copies (1, 2, 3, 1, 2, 3) plutôt que (1, 1, 2, 2, 3, 3).
+    #[serde(default = "default_collate")]
+    pub collate: bool,
+    /// Onglet du panneau : taille, affiche, multiple ou livret.
+    #[serde(default)]
+    pub layout: LayoutOptions,
     /// Réglages PPD choisis dans « Options avancées » (`keyword` → `choix`).
     #[serde(default)]
     pub extra_options: Vec<(String, String)>,
@@ -97,6 +108,10 @@ pub struct PrintOptions {
     /// Marge blanche conservée autour de l’étiquette recadrée.
     #[serde(default)]
     pub label_margin_pt: f64,
+}
+
+fn default_collate() -> bool {
+    true
 }
 
 fn run_capture(bin: &str, args: &[&str]) -> Result<String, String> {
@@ -515,6 +530,100 @@ fn orientation_from(orientation: &str) -> Result<Orientation, String> {
     }
 }
 
+/// Sélection des pages telle que le panneau la décrit.
+fn page_selection<'a>(range: Option<&'a str>, subset: &str) -> Result<PageSelection<'a>, String> {
+    Ok(PageSelection {
+        range: range.map(str::trim).filter(|s| !s.is_empty()),
+        parity: Parity::parse(subset)?,
+    })
+}
+
+/// Réglages communs à l’impression et à son aperçu.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewRequest {
+    pub sheet_width_pts: f64,
+    pub sheet_height_pts: f64,
+    pub page_range: Option<String>,
+    #[serde(default)]
+    pub page_subset: String,
+    pub scaling: String,
+    pub custom_scale: Option<u32>,
+    pub orientation: String,
+    #[serde(default)]
+    pub layout: LayoutOptions,
+}
+
+/// Feuilles telles qu’elles sortiront, pour l’aperçu du panneau : même
+/// composition que l’impression, sans l’ordre inversé ni la face blanche.
+pub fn compose_preview(bytes: &[u8], request: &PreviewRequest) -> Result<Composition, String> {
+    let mode = scale_mode_from(&request.scaling, request.custom_scale)?;
+    let orientation = orientation_from(&request.orientation)?;
+    compose(
+        bytes,
+        &ComposeRequest {
+            sheet_width_pts: request.sheet_width_pts,
+            sheet_height_pts: request.sheet_height_pts,
+            selection: page_selection(request.page_range.as_deref(), &request.page_subset)?,
+            layout: request.layout.resolve(mode, orientation)?,
+            reverse: false,
+            two_sided: false,
+        },
+    )
+}
+
+/// Options `lp` quand on ne peut pas composer nous-mêmes (format de papier
+/// inconnu) : on s’en remet à CUPS, au mieux de ce qu’il sait faire.
+fn unimposed_layout_args(
+    layout: &Layout,
+    options: &PrintOptions,
+    parity: Parity,
+) -> Result<Vec<String>, String> {
+    let mut args = Vec::new();
+    match layout {
+        Layout::Single { orientation, .. } => {
+            match orientation {
+                Orientation::Portrait => args.push("orientation-requested=3".to_string()),
+                Orientation::Landscape => args.push("orientation-requested=4".to_string()),
+                Orientation::Auto => {}
+            }
+            args.extend(
+                scaling_args(&options.scaling, options.custom_scale)?
+                    .into_iter()
+                    .filter(|arg| arg != "-o"),
+            );
+        }
+        Layout::Multiple { grid, .. } => {
+            let count = match grid {
+                Grid::Preset(count) => *count,
+                Grid::Custom { columns, rows } => columns * rows,
+            };
+            if ![2, 4, 6, 9, 16].contains(&count) {
+                return Err(
+                    "Format de papier inconnu : choisis-en un pour une grille personnalisée."
+                        .into(),
+                );
+            }
+            args.push(format!("number-up={count}"));
+        }
+        Layout::Booklet { .. } | Layout::Poster { .. } => {
+            return Err(
+                "Format de papier inconnu : choisis-en un pour imprimer en livret ou en affiche."
+                    .into(),
+            );
+        }
+    }
+    match parity {
+        Parity::All => {}
+        Parity::Odd => args.push("page-set=odd".into()),
+        Parity::Even => args.push("page-set=even".into()),
+    }
+    if options.reverse {
+        args.push("outputorder=reverse".into());
+    }
+    Ok(args.into_iter().flat_map(|arg| ["-o".to_string(), arg]).collect())
+}
+
 /// Envoie le PDF à CUPS avec les options du panneau Slate.
 pub fn print_pdf_with_options(bytes: &[u8], options: &PrintOptions) -> Result<(), String> {
     if !bytes.starts_with(b"%PDF-") {
@@ -523,23 +632,31 @@ pub fn print_pdf_with_options(bytes: &[u8], options: &PrintOptions) -> Result<()
     if options.printer.trim().is_empty() {
         return Err("Choisis une imprimante.".into());
     }
-    let copies = options.copies.max(1).min(999);
+    let copies = options.copies.clamp(1, 999);
     let mode = scale_mode_from(&options.scaling, options.custom_scale)?;
     let orientation = orientation_from(&options.orientation)?;
-    let sides = sides_value(options.duplex, &options.duplex_edge)?;
+    let layout = options.layout.resolve(mode, orientation)?;
+    let sides = match layout.forced_sides() {
+        Some(forced) => forced,
+        None => sides_value(options.duplex, &options.duplex_edge)?,
+    };
+    let two_sided = sides != "one-sided";
+    let selection = page_selection(options.page_range.as_deref(), &options.page_subset)?;
 
     // macOS n’embarque pas le filtre `pdftopdf` de cups-filters : sa chaîne
-    // (`cgpdftoraster`) ignore `print-scaling` sans le signaler, et le driver
-    // ancre puis rogne à sa façon. Dès qu’on connaît les dimensions du media,
-    // on impose donc l’échelle dans le PDF lui-même — le driver n’a plus rien
-    // à décider et la sortie correspond à l’aperçu.
+    // (`cgpdftoraster`) ignore `print-scaling`, `number-up` ou `page-set` sans
+    // le signaler, et le driver ancre puis rogne à sa façon. Dès qu’on connaît
+    // les dimensions du media, on compose donc les feuilles dans le PDF
+    // lui-même : sélection, mise en page et ordre compris. Le driver n’a plus
+    // rien à décider et la sortie correspond à l’aperçu.
     let sheet = match (options.paper_width_pts, options.paper_height_pts) {
         (Some(w), Some(h)) if w > 1.0 && h > 1.0 => Some((w, h)),
         _ => None,
     };
+    let is_single = matches!(layout, Layout::Single { .. });
     let mut imposed = false;
     let payload: Vec<u8> = match sheet {
-        Some((sheet_width_pts, sheet_height_pts)) if options.fit_to_label => {
+        Some((sheet_width_pts, sheet_height_pts)) if options.fit_to_label && is_single => {
             // Recadrage d’étiquette : la page produite fait déjà exactement la
             // taille du media, contenu ajusté au plus grand. Toute imposition
             // supplémentaire ne pourrait que rétrécir le résultat.
@@ -549,63 +666,54 @@ pub fn print_pdf_with_options(bytes: &[u8], options: &PrintOptions) -> Result<()
                 margin_pt: options.label_margin_pt.max(0.0),
                 gutter_pt: options.label_gutter_pt.max(0.0),
             };
-            let fitted = fit_label_to_media(bytes, &target)?;
+            let source = if selection.is_everything() {
+                bytes.to_vec()
+            } else {
+                select_pages(bytes, &selection)?
+            };
+            let fitted = fit_label_to_media(&source, &target)?.bytes;
             imposed = true;
-            fitted.bytes
+            if options.reverse {
+                reverse_sheets(&fitted, two_sided)?
+            } else {
+                fitted
+            }
         }
         Some((sheet_width_pts, sheet_height_pts)) => {
-            let settings = Imposition {
+            let request = ComposeRequest {
                 sheet_width_pts,
                 sheet_height_pts,
-                mode,
-                orientation,
+                selection,
+                layout,
+                reverse: options.reverse,
+                two_sided,
             };
-            match impose(bytes, &settings) {
-                Ok(out) => {
+            match compose(bytes, &request) {
+                Ok(composition) => {
                     imposed = true;
-                    out
+                    composition.bytes
                 }
-                Err(error) => {
+                Err(error) if is_single => {
                     // Un PDF que lopdf refuse ne doit pas rendre l’impression
-                    // impossible : on retombe sur les options CUPS brutes, en
-                    // laissant la trace pour le diagnostic.
+                    // simple impossible : on retombe sur les options CUPS
+                    // brutes, en laissant la trace pour le diagnostic.
                     eprintln!("[print] imposition impossible, repli sur CUPS : {error}");
                     bytes.to_vec()
                 }
+                Err(error) => return Err(error),
             }
         }
         None => bytes.to_vec(),
     };
-
-    let mut path = std::env::temp_dir();
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0);
-    path.push(format!("slate-print-{stamp}.pdf"));
-    fs::write(&path, &payload)
-        .map_err(|e| format!("Écriture du fichier d’impression impossible : {e}"))?;
 
     let mut args: Vec<String> = vec![
         "-d".into(),
         options.printer.clone(),
         "-n".into(),
         copies.to_string(),
+        "-o".into(),
+        format!("collate={}", options.collate),
     ];
-    if !imposed {
-        // Sans imposition, on laisse CUPS tenter l’orientation et l’échelle.
-        match orientation {
-            Orientation::Portrait => {
-                args.push("-o".into());
-                args.push("orientation-requested=3".into());
-            }
-            Orientation::Landscape => {
-                args.push("-o".into());
-                args.push("orientation-requested=4".into());
-            }
-            Orientation::Auto => {}
-        }
-    }
     if let Some(media) = options.paper_size.as_deref().filter(|s| !s.is_empty()) {
         args.push("-o".into());
         args.push(format!("media={media}"));
@@ -616,7 +724,18 @@ pub fn print_pdf_with_options(bytes: &[u8], options: &PrintOptions) -> Result<()
         args.push("-o".into());
         args.push("print-scaling=none".into());
     } else {
-        args.append(&mut scaling_args(&options.scaling, options.custom_scale)?);
+        args.append(&mut unimposed_layout_args(&layout, options, selection.parity)?);
+        if let Some(range) = selection.range {
+            // Garde-fou basique : chiffres, tirets, virgules, espaces.
+            if !range
+                .chars()
+                .all(|c| c.is_ascii_digit() || c == '-' || c == ',' || c.is_whitespace())
+            {
+                return Err("Plage de pages invalide (ex. 1-3,5).".into());
+            }
+            args.push("-P".into());
+            args.push(range.replace(' ', ""));
+        }
     }
     if options.grayscale {
         args.push("-o".into());
@@ -628,15 +747,10 @@ pub fn print_pdf_with_options(bytes: &[u8], options: &PrintOptions) -> Result<()
     // qui est souvent le recto verso sur une imprimante bureautique.
     args.push("-o".into());
     args.push(format!("sides={sides}"));
-    if options.reverse {
-        args.push("-o".into());
-        args.push("outputorder=reverse".into());
-    }
     for (keyword, choice) in &options.extra_options {
         // Les mots-clés et choix PPD sont des identifiants : tout le reste est
         // rejeté plutôt que transmis à `lp` en espérant que ça passe.
         if !is_ppd_token(keyword) || !is_ppd_token(choice) {
-            let _ = fs::remove_file(&path);
             return Err(format!("Réglage d’imprimante invalide : {keyword}={choice}"));
         }
         if RESERVED_OPTION_KEYWORDS
@@ -648,23 +762,15 @@ pub fn print_pdf_with_options(bytes: &[u8], options: &PrintOptions) -> Result<()
         args.push("-o".into());
         args.push(format!("{keyword}={choice}"));
     }
-    if let Some(range) = options
-        .page_range
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        // Garde-fou basique : chiffres, tirets, virgules, espaces.
-        if !range
-            .chars()
-            .all(|c| c.is_ascii_digit() || c == '-' || c == ',' || c.is_whitespace())
-        {
-            let _ = fs::remove_file(&path);
-            return Err("Plage de pages invalide (ex. 1-3,5).".into());
-        }
-        args.push("-P".into());
-        args.push(range.replace(' ', ""));
-    }
+
+    let mut path = std::env::temp_dir();
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    path.push(format!("slate-print-{stamp}.pdf"));
+    fs::write(&path, &payload)
+        .map_err(|e| format!("Écriture du fichier d’impression impossible : {e}"))?;
     args.push(path.to_string_lossy().to_string());
 
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
