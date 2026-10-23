@@ -1652,6 +1652,9 @@ const STATIC_UI_TEXT = [
 	],
 	['Resserrer les espaces vides entre les blocs', 'Tighten empty space between blocks'],
 	['Imprimer en recto verso', 'Print on both sides'],
+	['Reliure', 'Binding'],
+	['Bord long', 'Long edge'],
+	['Bord court', 'Short edge'],
 	['Auto.', 'Auto'],
 	['Paysage', 'Landscape'],
 	['Échelle : 100 %', 'Scale: 100%'],
@@ -18829,6 +18832,8 @@ function collectPrintFormSettings() {
 		pageRange: elements.printPageRange?.value?.trim() || '',
 		grayscale: Boolean(elements.printGrayscale?.checked),
 		duplex: Boolean(elements.printDuplex?.checked),
+		duplexEdge:
+			document.querySelector('input[name="print-duplex-edge"]:checked')?.value || 'long',
 		reverse: Boolean(elements.printReverse?.checked),
 		autoPaper: Boolean(elements.printAutoPaper?.checked),
 		fitLabel: Boolean(elements.printFitLabel?.checked),
@@ -18868,6 +18873,11 @@ function applyPrintFormSettings(settings) {
 	}
 	if (elements.printGrayscale) elements.printGrayscale.checked = Boolean(settings.grayscale);
 	if (elements.printDuplex) elements.printDuplex.checked = Boolean(settings.duplex);
+	const edgeRadio = document.querySelector(
+		`input[name="print-duplex-edge"][value="${settings.duplexEdge === 'short' ? 'short' : 'long'}"]`
+	);
+	if (edgeRadio) edgeRadio.checked = true;
+	syncPrintDuplexInputs();
 	if (elements.printReverse) elements.printReverse.checked = Boolean(settings.reverse);
 	if (elements.printAutoPaper) elements.printAutoPaper.checked = Boolean(settings.autoPaper);
 	// `fitLabel` absent = réglages d’avant cette option : on laisse l’auto-détection
@@ -19214,6 +19224,14 @@ function syncPrintScaleInputs() {
 		elements.printCustomScale.disabled = scaling !== 'custom';
 	}
 	void renderPrintPreview();
+}
+
+function syncPrintDuplexInputs() {
+	const active = Boolean(elements.printDuplex?.checked);
+	for (const radio of document.querySelectorAll('input[name="print-duplex-edge"]')) {
+		radio.disabled = !active;
+		radio.closest('.print-radio')?.classList.toggle('is-disabled', !active);
+	}
 }
 
 function syncPrintPageInputs() {
@@ -19676,6 +19694,7 @@ async function submitPrintJob() {
 				pageRange,
 				grayscale: form.grayscale,
 				duplex: form.duplex,
+				duplexEdge: form.duplexEdge,
 				reverse: form.reverse,
 				fitToLabel: form.fitLabel,
 				labelGutterPt: form.fitCompact ? LABEL_GUTTER_PT : 0,
@@ -25471,6 +25490,7 @@ document.querySelectorAll('input[name="print-scaling"]').forEach((input) => {
 document.querySelectorAll('input[name="print-pages"]').forEach((input) => {
 	input.addEventListener('change', syncPrintPageInputs);
 });
+elements.printDuplex?.addEventListener('change', syncPrintDuplexInputs);
 document.querySelectorAll('input[name="print-orientation"]').forEach((input) => {
 	input.addEventListener('change', () => void renderPrintPreview());
 });

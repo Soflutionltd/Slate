@@ -78,6 +78,9 @@ pub struct PrintOptions {
     pub grayscale: bool,
     #[serde(default)]
     pub duplex: bool,
+    /// Bord de reliure du recto verso : `long` | `short`. Vide = `long`.
+    #[serde(default)]
+    pub duplex_edge: String,
     #[serde(default)]
     pub reverse: bool,
     /// Réglages PPD choisis dans « Options avancées » (`keyword` → `choix`).
@@ -490,6 +493,19 @@ fn scale_mode_from(scaling: &str, custom_scale: Option<u32>) -> Result<ScaleMode
     }
 }
 
+/// Valeur IPP `sides`. Le bord s’entend sur la feuille physique : les pages
+/// imposées sont déjà dans l’orientation du media.
+fn sides_value(duplex: bool, edge: &str) -> Result<&'static str, String> {
+    if !duplex {
+        return Ok("one-sided");
+    }
+    match edge {
+        "long" | "" => Ok("two-sided-long-edge"),
+        "short" => Ok("two-sided-short-edge"),
+        other => Err(format!("Bord de reliure inconnu : {other}")),
+    }
+}
+
 fn orientation_from(orientation: &str) -> Result<Orientation, String> {
     match orientation {
         "auto" | "" => Ok(Orientation::Auto),
@@ -510,6 +526,7 @@ pub fn print_pdf_with_options(bytes: &[u8], options: &PrintOptions) -> Result<()
     let copies = options.copies.max(1).min(999);
     let mode = scale_mode_from(&options.scaling, options.custom_scale)?;
     let orientation = orientation_from(&options.orientation)?;
+    let sides = sides_value(options.duplex, &options.duplex_edge)?;
 
     // macOS n’embarque pas le filtre `pdftopdf` de cups-filters : sa chaîne
     // (`cgpdftoraster`) ignore `print-scaling` sans le signaler, et le driver
@@ -607,10 +624,10 @@ pub fn print_pdf_with_options(bytes: &[u8], options: &PrintOptions) -> Result<()
         args.push("-o".into());
         args.push("ColorModel=Gray".into());
     }
-    if options.duplex {
-        args.push("-o".into());
-        args.push("sides=two-sided-long-edge".into());
-    }
+    // Toujours explicite : sans `sides`, CUPS reprend le défaut de la file,
+    // qui est souvent le recto verso sur une imprimante bureautique.
+    args.push("-o".into());
+    args.push(format!("sides={sides}"));
     if options.reverse {
         args.push("-o".into());
         args.push("outputorder=reverse".into());
@@ -678,6 +695,15 @@ mod tests {
                 ("LB10".into(), false),
             ]
         );
+    }
+
+    #[test]
+    fn sides_follow_duplex_and_binding_edge() {
+        assert_eq!(sides_value(false, "short"), Ok("one-sided"));
+        assert_eq!(sides_value(true, ""), Ok("two-sided-long-edge"));
+        assert_eq!(sides_value(true, "long"), Ok("two-sided-long-edge"));
+        assert_eq!(sides_value(true, "short"), Ok("two-sided-short-edge"));
+        assert!(sides_value(true, "top; rm").is_err());
     }
 
     #[test]
