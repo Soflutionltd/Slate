@@ -19486,7 +19486,10 @@ function renderComposedPrintSummary(composed) {
 	let text = sides;
 	if (_printLayout === 'poster' && composed.posterColumns && composed.posterRows) {
 		const grid = `${composed.posterColumns} × ${composed.posterRows}`;
-		text = fr ? `Affiche : ${grid} feuilles par page · ${sides}` : `Poster: ${grid} sheets per page · ${sides}`;
+		const plural = composed.posterColumns * composed.posterRows > 1 ? 's' : '';
+		text = fr
+			? `Affiche : ${grid} feuille${plural} par page · ${sides}`
+			: `Poster: ${grid} sheet${plural} per page · ${sides}`;
 	} else if (_printLayout === 'booklet') {
 		const paperSheets = Math.ceil(sheets / 2);
 		text = fr
