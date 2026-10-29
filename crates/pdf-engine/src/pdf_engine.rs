@@ -2416,6 +2416,29 @@ pub fn render_pdf_page_png_bytes(bytes: &[u8], page_number: u32, scale: f64) -> 
     Ok((png, width_px, height_px))
 }
 
+/// Copie du PDF où `/NeedAppearances true` devient `null` (clé absente, PDF
+/// 32000 §7.3.9), ou `None` sans ce drapeau. Avec lui, PDFium reconstruit à
+/// l'ouverture l'apparence des boutons poussoirs depuis `/MK` : un bouton photo
+/// enregistré par iOS (`/MK` vide, image dans `/AP /N`) ressort blanc. Ne sert
+/// qu'au rendu écran, où les champs à régénérer sont masqués. `null` a la
+/// longueur de `true` : les offsets de la table xref restent justes.
+fn without_need_appearances(bytes: &[u8]) -> Option<Vec<u8>> {
+    static FLAG: OnceLock<regex::bytes::Regex> = OnceLock::new();
+    let flag = FLAG.get_or_init(|| {
+        regex::bytes::Regex::new(r"(?-u)/NeedAppearances[\x00\t\n\x0C\r ]*true")
+            .expect("motif NeedAppearances")
+    });
+    let ends: Vec<usize> = flag.find_iter(bytes).map(|found| found.end()).collect();
+    if ends.is_empty() {
+        return None;
+    }
+    let mut patched = bytes.to_vec();
+    for end in ends {
+        patched[end - 4..end].copy_from_slice(b"null");
+    }
+    Some(patched)
+}
+
 /// Rendu écran d'une page : RGBA brut de exactement `width`×`height` pixels,
 /// la taille du canvas qui l'affiche. La page est peinte depuis le coin haut
 /// gauche à `scale` pixels par point puis recadrée au canvas, comme PDF.js
@@ -2440,9 +2463,10 @@ pub fn render_page_rgba_for_view(
     let page_index = page_number
         .checked_sub(1)
         .ok_or_else(|| "Page numbers start at 1.".to_string())? as i32;
+    let view_bytes = without_need_appearances(bytes);
     let guard = pdfium_guard()?;
     let document = guard
-        .load_pdf_from_byte_slice(bytes, None)
+        .load_pdf_from_byte_slice(view_bytes.as_deref().unwrap_or(bytes), None)
         .map_err(|e| e.to_string())?;
     let page = document.pages().get(page_index).map_err(|e| e.to_string())?;
     for mut annotation in page.annotations().iter() {
@@ -2975,6 +2999,89 @@ pub fn remove_blank_pages(bytes: &[u8]) -> Result<(Vec<u8>, Vec<u32>), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn need_appearances_flag_is_nulled_in_place() {
+        let source = b"<< /NeedAppearances true >> << /NeedAppearances\ntrue/DA (x) >>".to_vec();
+        let patched = without_need_appearances(&source).expect("drapeau trouvé");
+        assert_eq!(patched.len(), source.len());
+        assert_eq!(
+            patched,
+            b"<< /NeedAppearances null >> << /NeedAppearances\nnull/DA (x) >>".to_vec()
+        );
+        assert!(without_need_appearances(b"<< /NeedAppearances false >>").is_none());
+    }
+
+    /// Bouton photo tel qu'iOS l'enregistre : `/MK` vide, image dans `/AP /N`,
+    /// `NeedAppearances true`. Ici l'« image » est un carré noir.
+    fn ios_photo_button_form() -> Vec<u8> {
+        use lopdf::{dictionary, Document, Object, Stream};
+        let mut doc = Document::with_version("1.7");
+        let pages_id = doc.new_object_id();
+        let page_id = doc.new_object_id();
+        let appearance = doc.add_object(Stream::new(
+            dictionary! {
+                "Type" => "XObject",
+                "Subtype" => "Form",
+                "BBox" => vec![0.into(), 0.into(), 100.into(), 100.into()],
+            },
+            b"0 g 0 0 100 100 re f".to_vec(),
+        ));
+        let widget = doc.add_object(dictionary! {
+            "Type" => "Annot",
+            "Subtype" => "Widget",
+            "FT" => "Btn",
+            "Ff" => 65536,
+            "T" => Object::string_literal("photo_oeuvre"),
+            "Rect" => vec![50.into(), 50.into(), 150.into(), 150.into()],
+            "F" => 4,
+            "MK" => dictionary! {},
+            "AP" => dictionary! { "N" => appearance },
+            "P" => page_id,
+        });
+        let contents = doc.add_object(Stream::new(dictionary! {}, Vec::new()));
+        doc.objects.insert(
+            page_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Page",
+                "Parent" => pages_id,
+                "MediaBox" => vec![0.into(), 0.into(), 200.into(), 200.into()],
+                "Contents" => contents,
+                "Annots" => vec![widget.into()],
+            }),
+        );
+        doc.objects.insert(
+            pages_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Pages",
+                "Kids" => vec![page_id.into()],
+                "Count" => 1,
+            }),
+        );
+        let catalog = doc.add_object(dictionary! {
+            "Type" => "Catalog",
+            "Pages" => pages_id,
+            "AcroForm" => dictionary! {
+                "Fields" => vec![widget.into()],
+                "NeedAppearances" => true,
+            },
+        });
+        doc.trailer.set("Root", catalog);
+        let mut out = Vec::new();
+        doc.save_to(&mut out).expect("enregistrement");
+        out
+    }
+
+    #[test]
+    fn view_render_keeps_push_button_appearance_despite_need_appearances() {
+        if pdfium_guard().is_err() {
+            eprintln!("PDFium indisponible : test ignoré.");
+            return;
+        }
+        let rgba = render_page_rgba_for_view(&ios_photo_button_form(), 1, 1.0, 200, 200).expect("rendu");
+        let center = (100 * 200 + 100) * 4;
+        assert!(rgba[center] < 64, "bouton repeint en blanc : {:?}", &rgba[center..center + 4]);
+    }
 
     fn char_box(text: &str, x: f64, y: f64, w: f64, h: f64) -> PdfCharBox {
         PdfCharBox {
