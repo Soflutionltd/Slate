@@ -797,11 +797,47 @@ fn windows_ocr_engine(language: Option<&str>) -> Result<windows::Media::Ocr::Ocr
     Err(tesseract_missing_message())
 }
 
+/// Langues Tesseract demandées (`fra+eng`…) restreintes à celles installées :
+/// une langue absente ferait échouer tout l'appel. Repli sur `eng`.
+fn tesseract_languages(requested: Option<&str>) -> String {
+    use std::sync::OnceLock;
+    static INSTALLED: OnceLock<Vec<String>> = OnceLock::new();
+    let installed = INSTALLED.get_or_init(|| {
+        Command::new("tesseract")
+            .arg("--list-langs")
+            .output()
+            .map(|out| {
+                // La liste sort sur stdout ou stderr selon la version.
+                let text = format!(
+                    "{}{}",
+                    String::from_utf8_lossy(&out.stdout),
+                    String::from_utf8_lossy(&out.stderr)
+                );
+                text.lines()
+                    .skip(1)
+                    .map(|line| line.trim().to_string())
+                    .filter(|line| !line.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default()
+    });
+    let kept: Vec<&str> = requested
+        .unwrap_or("eng")
+        .split('+')
+        .filter(|code| installed.is_empty() || installed.iter().any(|i| i == code))
+        .collect();
+    if kept.is_empty() {
+        "eng".to_string()
+    } else {
+        kept.join("+")
+    }
+}
+
 fn recognize_with_tesseract(
     image_bytes: &[u8],
     language: Option<String>,
 ) -> Result<Vec<OcrBlock>, String> {
-    let language = language.unwrap_or_else(|| "eng+fra".to_string());
+    let language = tesseract_languages(language.as_deref());
     let mut child = Command::new("tesseract")
         .args(["stdin", "stdout", "-l", &language, "tsv"])
         .stdin(Stdio::piped())
@@ -890,11 +926,37 @@ fn recognize_with_apple_vision(
         .collect())
 }
 
+/// Codes Tesseract (`fra+eng`…) → langues Apple Vision, séparées par des
+/// virgules, dans l'ordre de préférence. Le helper ne garde que celles que
+/// Vision prend en charge.
 #[cfg(target_os = "macos")]
-fn vision_language(language: Option<&str>) -> &'static str {
-    match language.unwrap_or_default() {
-        value if value.contains("fra") || value.contains("fr") => "fr-FR",
-        _ => "en-US",
+fn vision_language(language: Option<&str>) -> String {
+    let tags: Vec<&str> = language
+        .unwrap_or("eng")
+        .split('+')
+        .filter_map(|code| {
+            Some(match code {
+                "eng" => "en-US",
+                "fra" => "fr-FR",
+                "deu" => "de-DE",
+                "spa" => "es-ES",
+                "ita" => "it-IT",
+                "por" => "pt-BR",
+                "nld" => "nl-NL",
+                "chi_sim" => "zh-Hans",
+                "chi_tra" => "zh-Hant",
+                "jpn" => "ja-JP",
+                "kor" => "ko-KR",
+                "rus" => "ru-RU",
+                "ukr" => "uk-UA",
+                _ => return None,
+            })
+        })
+        .collect();
+    if tags.is_empty() {
+        "en-US".to_string()
+    } else {
+        tags.join(",")
     }
 }
 
@@ -943,7 +1005,9 @@ guard let image = NSImage(contentsOf: imageUrl),
 let request = VNRecognizeTextRequest()
 request.recognitionLevel = .accurate
 request.usesLanguageCorrection = true
-request.recognitionLanguages = [language, "en-US", "fr-FR"]
+let supported = (try? request.supportedRecognitionLanguages()) ?? ["en-US"]
+let wanted = language.split(separator: ",").map(String.init).filter { supported.contains($0) }
+request.recognitionLanguages = wanted.isEmpty ? ["en-US"] : wanted
 
 let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
 try handler.perform([request])

@@ -1840,6 +1840,27 @@ function weekStartDay() {
 	return currentLocale() === 'fr' ? 1 : 0;
 }
 
+// Langues OCR (codes Tesseract, ordre de préférence) : langue de l'interface,
+// langues système, puis l'anglais. Le natif écarte celles qu'il ne gère pas.
+const OCR_LANGUAGE_CODES = {
+	en: 'eng',
+	fr: 'fra',
+	de: 'deu',
+	es: 'spa',
+	it: 'ita',
+	pt: 'por',
+	nl: 'nld',
+	ja: 'jpn',
+	ko: 'kor',
+	ru: 'rus',
+	uk: 'ukr'
+};
+function ocrLanguages() {
+	const codes = [currentLocale(), ...systemLocale.languages, 'en']
+		.map((tag) => OCR_LANGUAGE_CODES[primaryLanguage(tag)])
+		.filter(Boolean);
+	return [...new Set(codes)].join('+');
+}
 
 // Aligne l'UI native (barre de menus, panneaux AppKit) sur le réglage de Slate.
 // "auto" est transmis tel quel : le natif suit alors les préférences système
@@ -7781,7 +7802,7 @@ async function runOcrForCurrentPage(openPanel = false, options = {}) {
 				ocrResult = await invokeCommand('ocr_pdf_page', {
 					bytes: Array.from(state.fileBytes),
 					page: state.page,
-					language: 'eng+fra'
+					language: ocrLanguages()
 				});
 			} catch (nativeError) {
 				console.warn('Native PDF OCR failed; falling back to rendered canvas.', nativeError);
@@ -7792,7 +7813,7 @@ async function runOcrForCurrentPage(openPanel = false, options = {}) {
 			const imageBytes = await canvasToPngBytes(canvas);
 			const ocrBlocks = await invokeCommand('ocr_page', {
 				imageBytes: Array.from(imageBytes),
-				language: 'eng+fra'
+				language: ocrLanguages()
 			});
 			ocrResult = {
 				blocks: ocrBlocks,
@@ -16161,7 +16182,7 @@ async function handleOcrSearchable() {
 		setStatus(t('ocrLayerProcessing'));
 		const out = await invokeBytes('ocr_searchable_pdf', {
 			bytes: Array.from(state.fileBytes),
-			language: 'eng+fra'
+			language: ocrLanguages()
 		});
 		const saved = await saveNativeFile(
 			suggestFileName(t('fileSuffixSearchable')),
