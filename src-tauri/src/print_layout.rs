@@ -387,12 +387,12 @@ fn transform_annotations(doc: &mut Document, page_id: ObjectId, matrix: Matrix) 
 /// Renvoie les octets du PDF imposé. Le PDF d’entrée n’est pas modifié.
 pub fn impose(bytes: &[u8], settings: &Imposition) -> Result<Vec<u8>, String> {
     if settings.sheet_width_pts <= 1.0 || settings.sheet_height_pts <= 1.0 {
-        return Err("Dimensions de papier invalides pour l’imposition.".into());
+        return Err(crate::i18n::msg("err.invalidPaperSize", &[]));
     }
     let mut doc = Document::load_mem(bytes).map_err(|e| format!("lopdf: {e}"))?;
     let pages = doc.get_pages();
     if pages.is_empty() {
-        return Err("Le PDF ne contient aucune page.".into());
+        return Err(crate::i18n::msg("err.pdfNoPages", &[]));
     }
 
     let sheet_w = settings.sheet_width_pts;
@@ -412,7 +412,7 @@ pub fn impose(bytes: &[u8], settings: &Imposition) -> Result<Vec<u8>, String> {
 
         let original = doc
             .get_page_content(page_id)
-            .map_err(|e| format!("Lecture du flux de la page impossible : {e}"))?;
+            .map_err(|e| crate::i18n::msg("err.readPageStream", &[("e", &e)]))?;
         // `q … Q` isole notre matrice : même si le flux d’origine laisse des
         // `q` non refermés, l’état graphique revient au nôtre à la fin.
         let mut content = Vec::with_capacity(original.len() + 64);
@@ -428,7 +428,7 @@ pub fn impose(bytes: &[u8], settings: &Imposition) -> Result<Vec<u8>, String> {
             .unwrap_or(false);
         if has_contents {
             doc.change_page_content(page_id, content)
-                .map_err(|e| format!("Écriture du flux de la page impossible : {e}"))?;
+                .map_err(|e| crate::i18n::msg("err.writePageStream", &[("e", &e)]))?;
         } else {
             // Page sans /Contents : on en crée un plutôt que d’échouer.
             let stream_id = doc.add_object(lopdf::Stream::new(lopdf::Dictionary::new(), content));
@@ -464,7 +464,7 @@ pub fn impose(bytes: &[u8], settings: &Imposition) -> Result<Vec<u8>, String> {
 
     let mut out = Vec::new();
     doc.save_to(&mut std::io::Cursor::new(&mut out))
-        .map_err(|e| format!("Enregistrement du PDF imposé impossible : {e}"))?;
+        .map_err(|e| crate::i18n::msg("err.saveImposedPdf", &[("e", &e)]))?;
     Ok(out)
 }
 
@@ -514,18 +514,18 @@ const BAND_CLIP_SLACK_PT: f64 = 1.0;
 /// étiquette plus petite que le media n’est pas agrandie.
 pub fn fit_label_to_media(bytes: &[u8], target: &LabelTarget) -> Result<LabelFitResult, String> {
     if target.width_pt <= 1.0 || target.height_pt <= 1.0 {
-        return Err("Dimensions d’étiquette cible invalides.".into());
+        return Err(crate::i18n::msg("err.invalidLabelSize", &[]));
     }
     let usable_width = target.width_pt - 2.0 * target.margin_pt.max(0.0);
     let usable_height = target.height_pt - 2.0 * target.margin_pt.max(0.0);
     if usable_width <= 1.0 || usable_height <= 1.0 {
-        return Err("Marge trop grande pour le format d’étiquette.".into());
+        return Err(crate::i18n::msg("err.labelMarginTooLarge", &[]));
     }
 
     let mut doc = Document::load_mem(bytes).map_err(|e| format!("lopdf: {e}"))?;
     let pages: BTreeMap<u32, ObjectId> = doc.get_pages();
     if pages.is_empty() {
-        return Err("Le PDF ne contient aucune page.".into());
+        return Err(crate::i18n::msg("err.pdfNoPages", &[]));
     }
 
     let mut min_scale = f64::INFINITY;
@@ -537,7 +537,10 @@ pub fn fit_label_to_media(bytes: &[u8], target: &LabelTarget) -> Result<LabelFit
         let layout = analyze_label_page(bytes, page_number, 72.0, MIN_GUTTER_PT)?;
         let content_width = layout.content.width() as f64;
         if content_width <= 0.0 {
-            return Err(format!("Contenu introuvable sur la page {page_number}."));
+            return Err(crate::i18n::msg(
+                "err.pageContentMissing",
+                &[("page", &page_number)],
+            ));
         }
         // La première page dicte ce qu’on affiche dans le panneau.
         if source_width == 0.0 {
@@ -550,7 +553,10 @@ pub fn fit_label_to_media(bytes: &[u8], target: &LabelTarget) -> Result<LabelFit
         let ink_height: f64 = bands.iter().map(|band| band.height() as f64).sum();
         let stacked_height = ink_height + gutter * (bands.len() - 1) as f64;
         if stacked_height <= 0.0 {
-            return Err(format!("Contenu vide sur la page {page_number}."));
+            return Err(crate::i18n::msg(
+                "err.pageContentEmpty",
+                &[("page", &page_number)],
+            ));
         }
 
         let scale = (usable_width / content_width)
@@ -570,7 +576,7 @@ pub fn fit_label_to_media(bytes: &[u8], target: &LabelTarget) -> Result<LabelFit
 
     let mut out = Vec::new();
     doc.save_to(&mut std::io::Cursor::new(&mut out))
-        .map_err(|e| format!("Enregistrement de l’étiquette recadrée impossible : {e}"))?;
+        .map_err(|e| crate::i18n::msg("err.saveCroppedLabel", &[("e", &e)]))?;
 
     Ok(LabelFitResult {
         bytes: out,
@@ -611,7 +617,7 @@ fn stack_bands_on_page(
         .unwrap_or_default();
     let content = doc
         .get_page_content(page_id)
-        .map_err(|e| format!("Lecture du flux de la page impossible : {e}"))?;
+        .map_err(|e| crate::i18n::msg("err.readPageStream", &[("e", &e)]))?;
 
     // Le contenu d’origine devient un Form XObject : on peut alors le dessiner
     // plusieurs fois, chaque fois avec un clip et une translation différents.

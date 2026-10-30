@@ -116,7 +116,7 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
     let updater = fresh_updater(&app)?;
 
     let Some(update) = updater.check().await.map_err(|e| e.to_string())? else {
-        return Err("Aucune mise à jour disponible".to_string());
+        return Err(crate::i18n::msg("err.noUpdate", &[]));
     };
 
     let progress_app = app.clone();

@@ -176,6 +176,17 @@ pub fn tr(lang: &str, key: &'static str) -> &'static str {
         .unwrap_or(key)
 }
 
+/// Message `key` dans la langue de l'interface, `{nom}` remplacés par `args`.
+/// Pour les erreurs renvoyées au frontend, qui les affiche telles quelles.
+pub fn msg(key: &'static str, args: &[(&str, &dyn std::fmt::Display)]) -> String {
+    alto_pdf_engine::messages::fill(tr(ui_language(), key), args)
+}
+
+/// Langue des messages du moteur PDF, alignée sur celle de l'interface.
+pub fn sync_engine_language() {
+    alto_pdf_engine::messages::set_language(ui_language());
+}
+
 fn lookup(table: &[(&str, &'static str)], key: &str) -> Option<&'static str> {
     table.iter().find(|(k, _)| *k == key).map(|(_, v)| *v)
 }
@@ -292,6 +303,55 @@ const EN: &[(&str, &str)] = &[
     ("menu.tutorials", "Slate Tutorials"),
     ("menu.manageAccount", "Manage My Account..."),
     ("menu.checkUpdates", "Check for Updates"),
+    ("err.mcpBinaryMissing", "The alto-mcp binary was not found next to the application."),
+    ("err.homeDirMissing", "User folder not found."),
+    ("err.claudeNotInstalled", "Claude Desktop is not installed on this Mac (configuration folder not found)."),
+    ("err.claudeConfigInvalid", "Invalid Claude configuration."),
+    ("err.labelCropInterrupted", "Label cropping was interrupted: {e}"),
+    ("err.defaultReaderUnsupported", "Setting the default PDF reader is not supported on this platform."),
+    ("err.printNotPdf", "The content to print is not a valid PDF."),
+    ("err.printWriteFile", "Could not write the print file: {e}"),
+    ("err.printLaunch", "Could not start printing: {e}"),
+    ("err.invalidUrl", "Invalid URL"),
+    ("err.writeFile", "Could not write {name}: {e}"),
+    ("err.runCommand", "Could not run {bin}: {e}"),
+    ("err.commandFailed", "{bin} failed (code {code})."),
+    ("err.printerNameMissing", "Printer name missing."),
+    ("err.noPrinterDetected", "No printer detected ({e}). Check CUPS / System Settings → Printers."),
+    ("err.noPrinterInstalled", "No printer installed."),
+    ("err.unknownScaleMode", "Unknown scaling mode: {mode}"),
+    ("err.choosePrinter", "Choose a printer."),
+    ("err.invalidPrinterOption", "Invalid printer setting: {keyword}={choice}"),
+    ("err.invalidPageRange", "Invalid page range (e.g. 1-3,5)."),
+    ("err.invalidPaperSize", "Invalid paper dimensions for imposition."),
+    ("err.pdfNoPages", "The PDF has no pages."),
+    ("err.readPageStream", "Could not read the page content stream: {e}"),
+    ("err.writePageStream", "Could not write the page content stream: {e}"),
+    ("err.saveImposedPdf", "Could not save the imposed PDF: {e}"),
+    ("err.invalidLabelSize", "Invalid target label dimensions."),
+    ("err.labelMarginTooLarge", "Margin too large for the label size."),
+    ("err.pageContentMissing", "No content found on page {page}."),
+    ("err.pageContentEmpty", "Empty content on page {page}."),
+    ("err.saveCroppedLabel", "Could not save the cropped label: {e}"),
+    ("err.ghostscriptMissing", "Ghostscript (gs) is required to convert colors. Install it with Homebrew: brew install ghostscript."),
+    ("err.iccProfileNotFound", "ICC profile not found: {path}"),
+    ("err.notValidPdf", "The file is not a valid PDF."),
+    ("err.tempDir", "Could not create the temporary folder: {e}"),
+    ("err.prepareIcc", "Could not prepare the ICC profile: {e}"),
+    ("err.writeTempPdf", "Could not write the temporary PDF: {e}"),
+    ("err.invalidTempIccPath", "Invalid temporary ICC path."),
+    ("err.invalidTempPdfPath", "Invalid temporary PDF path."),
+    ("err.ghostscriptLaunch", "Could not start Ghostscript: {e}"),
+    ("err.ghostscriptFailed", "Ghostscript failed (FOGRA39 conversion).\n{details}"),
+    ("err.readConvertedPdf", "Could not read the converted PDF: {e}"),
+    ("err.ghostscriptInvalidOutput", "Ghostscript did not produce a valid PDF."),
+    ("err.printDispatch", "Could not dispatch printing: {e}"),
+    ("err.hideApp", "Could not hide the app: {e}"),
+    ("err.tesseractMissingMac", "Local OCR requires Tesseract. Install it with `brew install tesseract tesseract-lang`, then try again."),
+    ("err.windowsOcrUnavailable", "Windows OCR is unavailable. Install the OCR language pack (Settings → Time & language → Language & region) or Tesseract, then try again."),
+    ("err.tesseractMissingLinux", "Local OCR requires Tesseract. Install it with `sudo apt install tesseract-ocr tesseract-ocr-fra`, then try again."),
+    ("err.noUpdate", "No update available"),
+    ("err.listFonts", "Could not list system fonts: {e}"),
 ];
 
 const FR: &[(&str, &str)] = &[
@@ -418,6 +478,55 @@ const FR: &[(&str, &str)] = &[
     ("menu.tutorials", "Tutoriels Slate"),
     ("menu.manageAccount", "Gérer mon compte..."),
     ("menu.checkUpdates", "Rechercher les mises à jour"),
+    ("err.mcpBinaryMissing", "Binaire alto-mcp introuvable à côté de l'application."),
+    ("err.homeDirMissing", "Dossier utilisateur introuvable."),
+    ("err.claudeNotInstalled", "Claude Desktop n'est pas installé sur ce Mac (dossier de configuration introuvable)."),
+    ("err.claudeConfigInvalid", "Configuration Claude invalide."),
+    ("err.labelCropInterrupted", "Recadrage d’étiquette interrompu : {e}"),
+    ("err.defaultReaderUnsupported", "Impossible de définir le lecteur PDF par défaut sur cette plateforme."),
+    ("err.printNotPdf", "Le contenu à imprimer n'est pas un PDF valide."),
+    ("err.printWriteFile", "Écriture du fichier d’impression impossible : {e}"),
+    ("err.printLaunch", "Lancement de l'impression impossible : {e}"),
+    ("err.invalidUrl", "URL invalide"),
+    ("err.writeFile", "Écriture de {name} impossible : {e}"),
+    ("err.runCommand", "Impossible d’exécuter {bin} : {e}"),
+    ("err.commandFailed", "{bin} a échoué (code {code})."),
+    ("err.printerNameMissing", "Nom d’imprimante manquant."),
+    ("err.noPrinterDetected", "Aucune imprimante détectée ({e}). Vérifie CUPS / Préférences Système → Imprimantes."),
+    ("err.noPrinterInstalled", "Aucune imprimante installée."),
+    ("err.unknownScaleMode", "Mode d’échelle inconnu : {mode}"),
+    ("err.choosePrinter", "Choisis une imprimante."),
+    ("err.invalidPrinterOption", "Réglage d’imprimante invalide : {keyword}={choice}"),
+    ("err.invalidPageRange", "Plage de pages invalide (ex. 1-3,5)."),
+    ("err.invalidPaperSize", "Dimensions de papier invalides pour l’imposition."),
+    ("err.pdfNoPages", "Le PDF ne contient aucune page."),
+    ("err.readPageStream", "Lecture du flux de la page impossible : {e}"),
+    ("err.writePageStream", "Écriture du flux de la page impossible : {e}"),
+    ("err.saveImposedPdf", "Enregistrement du PDF imposé impossible : {e}"),
+    ("err.invalidLabelSize", "Dimensions d’étiquette cible invalides."),
+    ("err.labelMarginTooLarge", "Marge trop grande pour le format d’étiquette."),
+    ("err.pageContentMissing", "Contenu introuvable sur la page {page}."),
+    ("err.pageContentEmpty", "Contenu vide sur la page {page}."),
+    ("err.saveCroppedLabel", "Enregistrement de l’étiquette recadrée impossible : {e}"),
+    ("err.ghostscriptMissing", "Ghostscript (gs) est requis pour convertir les couleurs. Installe-le via Homebrew : brew install ghostscript."),
+    ("err.iccProfileNotFound", "Profil ICC introuvable : {path}"),
+    ("err.notValidPdf", "Le fichier n'est pas un PDF valide."),
+    ("err.tempDir", "Impossible de créer le dossier temporaire : {e}"),
+    ("err.prepareIcc", "Impossible de préparer le profil ICC : {e}"),
+    ("err.writeTempPdf", "Écriture PDF temporaire impossible : {e}"),
+    ("err.invalidTempIccPath", "Chemin ICC temporaire invalide."),
+    ("err.invalidTempPdfPath", "Chemin PDF temporaire invalide."),
+    ("err.ghostscriptLaunch", "Échec du lancement de Ghostscript : {e}"),
+    ("err.ghostscriptFailed", "Ghostscript a échoué (conversion FOGRA39).\n{details}"),
+    ("err.readConvertedPdf", "Lecture du PDF converti impossible : {e}"),
+    ("err.ghostscriptInvalidOutput", "Ghostscript n'a pas produit un PDF valide."),
+    ("err.printDispatch", "Dispatch impression impossible : {e}"),
+    ("err.hideApp", "Masquage de l'app impossible : {e}"),
+    ("err.tesseractMissingMac", "L’OCR local nécessite Tesseract. Installe-le avec `brew install tesseract tesseract-lang` puis réessaie."),
+    ("err.windowsOcrUnavailable", "OCR Windows indisponible. Installe le pack de langue OCR (Paramètres → Heure et langue → Langue et région) ou Tesseract, puis réessaie."),
+    ("err.tesseractMissingLinux", "L’OCR local nécessite Tesseract. Installe-le avec `sudo apt install tesseract-ocr tesseract-ocr-fra` puis réessaie."),
+    ("err.noUpdate", "Aucune mise à jour disponible"),
+    ("err.listFonts", "Impossible de lister les polices système : {e}"),
 ];
 
 #[cfg(test)]

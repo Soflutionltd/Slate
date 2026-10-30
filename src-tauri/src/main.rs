@@ -1129,27 +1129,24 @@ fn mcp_binary_path() -> Result<String, String> {
         .and_then(|exe| exe.parent().map(|dir| dir.join("alto-mcp")))
         .filter(|path| path.exists())
         .map(|path| path.to_string_lossy().to_string())
-        .ok_or_else(|| "Binaire alto-mcp introuvable à côté de l'application.".to_string())
+        .ok_or_else(|| i18n::msg("err.mcpBinaryMissing", &[]))
 }
 
 /// Inscrit le serveur MCP `alto-mcp` dans la configuration de Claude Desktop
 /// (~/Library/Application Support/Claude/claude_desktop_config.json).
 #[tauri::command]
 fn connect_claude_desktop() -> Result<String, String> {
-    let home = dirs::home_dir().ok_or("Dossier utilisateur introuvable.")?;
+    let home = dirs::home_dir().ok_or_else(|| i18n::msg("err.homeDirMissing", &[]))?;
     let config_dir = home.join("Library/Application Support/Claude");
     if !config_dir.exists() {
-        return Err(
-            "Claude Desktop n'est pas installé sur ce Mac (dossier de configuration introuvable)."
-                .to_string(),
-        );
+        return Err(i18n::msg("err.claudeNotInstalled", &[]));
     }
 
     let mcp_path = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(|dir| dir.join("alto-mcp")))
         .filter(|path| path.exists())
-        .ok_or("Binaire alto-mcp introuvable à côté de l'application.")?;
+        .ok_or_else(|| i18n::msg("err.mcpBinaryMissing", &[]))?;
 
     let config_path = config_dir.join("claude_desktop_config.json");
     let mut config: serde_json::Value = if config_path.exists() {
@@ -1164,7 +1161,7 @@ fn connect_claude_desktop() -> Result<String, String> {
 
     let config_obj = config
         .as_object_mut()
-        .ok_or("Configuration Claude invalide.")?;
+        .ok_or_else(|| i18n::msg("err.claudeConfigInvalid", &[]))?;
     let servers = config_obj
         .entry("mcpServers")
         .or_insert_with(|| serde_json::json!({}));
@@ -1281,7 +1278,7 @@ async fn fit_label_to_media(
 ) -> Result<print_layout::LabelFitResult, String> {
     tauri::async_runtime::spawn_blocking(move || print_layout::fit_label_to_media(&bytes, &target))
         .await
-        .map_err(|e| format!("Recadrage d’étiquette interrompu : {e}"))?
+        .map_err(|e| i18n::msg("err.labelCropInterrupted", &[("e", &e)]))?
 }
 
 #[tauri::command]
@@ -1459,7 +1456,7 @@ fn set_default_pdf_handler() -> Result<(), String> {
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
-        Err("Impossible de définir le lecteur PDF par défaut sur cette plateforme.".to_string())
+        Err(i18n::msg("err.defaultReaderUnsupported", &[]))
     }
 }
 
@@ -1657,7 +1654,7 @@ async fn pick_certificate_file(app: tauri::AppHandle) -> Result<Option<String>, 
 #[tauri::command]
 async fn print_pdf(app: tauri::AppHandle, bytes: Vec<u8>) -> Result<(), String> {
     if !bytes.starts_with(b"%PDF-") {
-        return Err("Le contenu à imprimer n'est pas un PDF valide.".into());
+        return Err(i18n::msg("err.printNotPdf", &[]));
     }
 
     // macOS : panneau d'impression natif DANS l'app (PDFKit), façon Acrobat.
@@ -1676,8 +1673,7 @@ async fn print_pdf(app: tauri::AppHandle, bytes: Vec<u8>) -> Result<(), String> 
             .map(|d| d.as_millis())
             .unwrap_or(0);
         path.push(format!("alto-impression-{stamp}.pdf"));
-        std::fs::write(&path, &bytes)
-            .map_err(|e| format!("Écriture du fichier d'impression impossible : {e}"))?;
+        std::fs::write(&path, &bytes).map_err(|e| i18n::msg("err.printWriteFile", &[("e", &e)]))?;
         let path_str = path.to_string_lossy().to_string();
 
         #[cfg(target_os = "windows")]
@@ -1685,14 +1681,14 @@ async fn print_pdf(app: tauri::AppHandle, bytes: Vec<u8>) -> Result<(), String> 
             std::process::Command::new("cmd")
                 .args(["/C", "start", "", "/min", &path_str])
                 .spawn()
-                .map_err(|e| format!("Lancement de l'impression impossible : {e}"))?;
+                .map_err(|e| i18n::msg("err.printLaunch", &[("e", &e)]))?;
         }
         #[cfg(all(unix, not(target_os = "macos")))]
         {
             std::process::Command::new("lp")
                 .arg(&path_str)
                 .spawn()
-                .map_err(|e| format!("Lancement de l'impression impossible : {e}"))?;
+                .map_err(|e| i18n::msg("err.printLaunch", &[("e", &e)]))?;
         }
 
         Ok(())
@@ -1968,6 +1964,7 @@ fn build_app_menu<R: tauri::Runtime, M: Manager<R>>(
 #[tauri::command]
 fn set_native_language(app: tauri::AppHandle, lang: String) -> Result<(), String> {
     i18n::persist_setting(&lang);
+    i18n::sync_engine_language();
     #[cfg(target_os = "macos")]
     mac_print::apply_persisted_apple_languages();
     let menu = build_app_menu(&app, i18n::ui_language()).map_err(|e| e.to_string())?;
@@ -1984,7 +1981,7 @@ fn open_external(url: String) -> Result<(), String> {
         || url.starts_with("ms-outlook:")
         || url.starts_with("msteams:");
     if !allowed {
-        return Err("URL invalide".into());
+        return Err(i18n::msg("err.invalidUrl", &[]));
     }
     #[cfg(target_os = "macos")]
     let result = std::process::Command::new("open").arg(url).spawn();
@@ -2048,7 +2045,7 @@ async fn extract_images_to_folder(
     for image in &images {
         let name = format!("image-p{}-{}.png", image.page, image.index);
         std::fs::write(folder_path.join(&name), &image.png)
-            .map_err(|e| format!("Écriture de {name} impossible : {e}"))?;
+            .map_err(|e| i18n::msg("err.writeFile", &[("name", &name), ("e", &e)]))?;
     }
     Ok(Some(ExtractImagesReport {
         folder: folder_path.to_string_lossy().to_string(),
@@ -2437,6 +2434,7 @@ fn main() {
                 }
             }
 
+            i18n::sync_engine_language();
             let menu = build_app_menu(app, i18n::ui_language())?;
             app.set_menu(menu)?;
 

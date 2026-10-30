@@ -625,15 +625,15 @@ fn rotate_luma_same(image: &GrayImage, angle_degrees: f64) -> GrayImage {
 fn tesseract_missing_message() -> String {
     #[cfg(target_os = "macos")]
     {
-        return "L’OCR local nécessite Tesseract. Installe-le avec `brew install tesseract tesseract-lang` puis réessaie.".to_string();
+        return crate::i18n::msg("err.tesseractMissingMac", &[]);
     }
     #[cfg(target_os = "windows")]
     {
-        return "OCR Windows indisponible. Installe le pack de langue OCR (Paramètres → Heure et langue → Langue et région) ou Tesseract, puis réessaie.".to_string();
+        return crate::i18n::msg("err.windowsOcrUnavailable", &[]);
     }
     #[cfg(target_os = "linux")]
     {
-        return "L’OCR local nécessite Tesseract. Installe-le avec `sudo apt install tesseract-ocr tesseract-ocr-fra` puis réessaie.".to_string();
+        return crate::i18n::msg("err.tesseractMissingLinux", &[]);
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {

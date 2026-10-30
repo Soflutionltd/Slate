@@ -1,3 +1,4 @@
+use crate::messages::msg;
 use std::collections::BTreeMap;
 use std::io::Cursor;
 use std::sync::Arc;
@@ -503,7 +504,7 @@ fn collect_fonts(doc: &Document) -> Vec<PdfFontInfo> {
                 .get(b"BaseFont")
                 .ok()
                 .and_then(pdf_object_string)
-                .unwrap_or_else(|| "Sans nom".into());
+                .unwrap_or_else(|| msg("unnamedFont", &[]));
             // Préfixe de sous-ensemble ABCDEF+…
             let display = if base.len() > 7 && base.as_bytes().get(6) == Some(&b'+') {
                 base[7..].to_string()
@@ -577,9 +578,9 @@ pub fn document_properties(bytes: Vec<u8>) -> Result<PdfProperties, String> {
 
     let encrypted = doc.is_encrypted();
     let security_method = if encrypted {
-        "Mot de passe".to_string()
+        msg("securityPassword", &[])
     } else {
-        "Aucune".to_string()
+        msg("securityNone", &[])
     };
 
     Ok(PdfProperties {

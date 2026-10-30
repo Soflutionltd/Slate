@@ -12,7 +12,7 @@ pub fn list_system_fonts() -> Result<Vec<String>, String> {
     let source = SystemSource::new();
     let mut families = source
         .all_families()
-        .map_err(|e| format!("Impossible de lister les polices système : {e}"))?;
+        .map_err(|e| crate::i18n::msg("err.listFonts", &[("e", &e)]))?;
 
     // On écarte les familles vides / cachées (préfixe '.') que macOS expose
     // (ex. ".SF NS", ".Helvetica Neue DeskInterface") et qui ne sont pas

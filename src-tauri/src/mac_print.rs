@@ -465,7 +465,7 @@ pub fn print_pdf_native(app: &AppHandle, bytes: Vec<u8>) -> Result<(), String> {
         log("print_pdf_native: closure sur main thread");
         unsafe { run_print_panel(&bytes) };
     })
-    .map_err(|e| format!("Dispatch impression impossible : {e}"))
+    .map_err(|e| crate::i18n::msg("err.printDispatch", &[("e", &e)]))
 }
 
 /// Émet `alto-print-finished` vers le frontend (fin du panneau d'impression).
@@ -745,5 +745,5 @@ pub fn hide_app_native(app: &AppHandle) -> Result<(), String> {
             std::ptr::null_mut(),
         );
     })
-    .map_err(|e| format!("Masquage de l'app impossible : {e}"))
+    .map_err(|e| crate::i18n::msg("err.hideApp", &[("e", &e)]))
 }

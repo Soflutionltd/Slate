@@ -14,6 +14,7 @@
 //!
 //! Le rendu se fait via PDFium, déjà présent : aucune dépendance nouvelle.
 
+use crate::messages::msg;
 use pdfium_render::prelude::*;
 
 use crate::pdf_engine::pdfium_guard;
@@ -98,10 +99,10 @@ pub fn analyze_label_page(
     min_gutter_pt: f32,
 ) -> Result<LabelLayout, String> {
     if !bytes.starts_with(b"%PDF-") {
-        return Err("Le document à analyser n'est pas un PDF valide.".to_string());
+        return Err(msg("labelNotPdf", &[]));
     }
     if !(dpi >= 36.0) || !(dpi <= 300.0) {
-        return Err("Résolution d'analyse hors plage (36 à 300 dpi).".to_string());
+        return Err(msg("analysisDpiRange", &[]));
     }
 
     let guard = pdfium_guard()?;
@@ -110,7 +111,7 @@ pub fn analyze_label_page(
         .map_err(|e| e.to_string())?;
     let page_index = page_number
         .checked_sub(1)
-        .ok_or_else(|| "Les pages sont numérotées à partir de 1.".to_string())? as i32;
+        .ok_or_else(|| msg("pagesOneBased", &[]))? as i32;
     let page = document
         .pages()
         .get(page_index)
@@ -119,7 +120,7 @@ pub fn analyze_label_page(
     let page_width = page.width().value;
     let page_height = page.height().value;
     if page_width <= 0.0 || page_height <= 0.0 {
-        return Err("Dimensions de page invalides.".to_string());
+        return Err(msg("invalidPageSize", &[]));
     }
 
     let target_width = ((page_width * dpi / 72.0).round() as i32).clamp(16, 4000);
@@ -140,7 +141,7 @@ pub fn analyze_label_page(
     let rgba = rendered.to_rgba8();
     let (width_px, height_px) = (rgba.width(), rgba.height());
     if width_px == 0 || height_px == 0 {
-        return Err("Rendu d'analyse vide.".to_string());
+        return Err(msg("emptyAnalysisRender", &[]));
     }
 
     let mut row_ink = vec![0_u32; height_px as usize];
