@@ -465,7 +465,7 @@ pub fn print_pdf_native(app: &AppHandle, bytes: Vec<u8>) -> Result<(), String> {
         log("print_pdf_native: closure sur main thread");
         unsafe { run_print_panel(&bytes) };
     })
-    .map_err(|e| format!("Dispatch impression impossible : {e}"))
+    .map_err(|e| crate::i18n::msg("err.printDispatch", &[("e", &e)]))
 }
 
 /// Émet `alto-print-finished` vers le frontend (fin du panneau d'impression).
@@ -645,87 +645,33 @@ unsafe fn make_nsstring(s: &str) -> id {
     )
 }
 
-/// Fichier persisté pour que `setup()` applique la langue AVANT AppKit
-/// (le panneau d'impression lit `AppleLanguages` au boot, pas depuis le WebView).
-fn native_language_path() -> Option<PathBuf> {
-    let mut dir = dirs::home_dir()?;
-    dir.push("Library");
-    dir.push("Application Support");
-    dir.push("com.soflution.slate");
-    Some(dir.join("native-language"))
-}
-
-fn persist_native_language(lang: &str) {
-    let Some(path) = native_language_path() else {
-        return;
-    };
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
+/// Tags BCP-47 pour `AppleLanguages` quand la langue `lang` est forcée : les
+/// variantes régionales que l'utilisateur a choisies dans le système (en-AU,
+/// fr-CA…) d'abord, puis la langue seule.
+fn apple_language_tags(lang: &str) -> Vec<String> {
+    let lang = crate::i18n::primary_language(lang);
+    let mut tags: Vec<String> = crate::i18n::system_locale()
+        .languages
+        .into_iter()
+        .filter(|tag| crate::i18n::primary_language(tag) == lang)
+        .collect();
+    if !tags.contains(&lang) {
+        tags.push(lang);
     }
-    let value = if lang.is_empty() || lang == "auto" {
-        "auto"
-    } else {
-        lang
-    };
-    let _ = std::fs::write(&path, value);
+    tags
 }
 
-fn read_persisted_native_language() -> Option<String> {
-    let path = native_language_path()?;
-    let raw = std::fs::read_to_string(path).ok()?;
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
-}
-
-/// Tags BCP-47 pour `AppleLanguages` (FR → fr-FR puis fr).
-fn apple_language_tags(lang: &str) -> Vec<&'static str> {
-    match lang {
-        "fr" | "fr-FR" | "fr_FR" => vec!["fr-FR", "fr"],
-        "en" | "en-US" | "en_US" | "en-GB" => vec!["en"],
-        _ => vec![],
-    }
-}
-
-/// Relit le fichier persisté et applique `AppleLanguages`. À appeler le plus
-/// tôt possible (`main` avant le Builder) et avant impression / dialogues.
+/// Applique le réglage persisté à `AppleLanguages` (mode auto : retire
+/// l'override). À appeler le plus tôt possible (`main` avant le Builder) et
+/// avant impression / dialogues.
 pub fn apply_persisted_apple_languages() {
-    match read_persisted_native_language().as_deref() {
-        None | Some("auto") | Some("") => set_apple_languages("auto"),
-        Some(lang) => set_apple_languages(lang),
-    }
+    set_apple_languages(crate::i18n::forced_language().as_deref().unwrap_or("auto"));
 }
 
-/// Langue UI effective pour libellés natifs (filtres de dialogue…).
-/// `auto` / absent → suit la locale processus (souvent le système).
-pub fn effective_ui_language() -> String {
-    match read_persisted_native_language().as_deref() {
-        Some("fr") | Some("fr-FR") | Some("fr_FR") => "fr".into(),
-        Some("en") | Some("en-US") | Some("en_US") | Some("en-GB") => "en".into(),
-        Some(other) if other != "auto" && !other.is_empty() => other.to_string(),
-        _ => {
-            let locale = std::env::var("LANG")
-                .or_else(|_| std::env::var("LC_ALL"))
-                .unwrap_or_default()
-                .to_lowercase();
-            if locale.starts_with("fr") {
-                "fr".into()
-            } else {
-                "en".into()
-            }
-        }
-    }
-}
-
-/// Force la langue des panneaux natifs AppKit (impression, enregistrer…) et des
-/// menus en écrivant `AppleLanguages` dans les NSUserDefaults de l'app.
-/// Persiste aussi sur disque pour le prochain lancement. `lang` vide ou "auto"
-/// retire l'override (l'app suit alors les préférences système).
-pub fn set_apple_languages(lang: &str) {
-    persist_native_language(lang);
+/// Force la langue des panneaux natifs AppKit (impression, enregistrer…) en
+/// écrivant `AppleLanguages` dans les NSUserDefaults de l'app. `lang` vide ou
+/// "auto" retire l'override (l'app suit alors les préférences système).
+fn set_apple_languages(lang: &str) {
     unsafe {
         let defaults_class = objc_getClass(c"NSUserDefaults".as_ptr());
         if defaults_class.is_null() {
@@ -754,44 +700,23 @@ pub fn set_apple_languages(lang: &str) {
                 key,
             );
         } else {
-            let tags = apple_language_tags(lang);
-            if tags.is_empty() {
-                let lang_str = make_nsstring(lang);
-                let arr_class = objc_getClass(c"NSArray".as_ptr());
-                let make_arr: unsafe extern "C" fn(Class, SEL, id) -> id =
-                    std::mem::transmute(objc_msgSend as unsafe extern "C" fn());
-                let arr = make_arr(
-                    arr_class,
-                    sel_registerName(c"arrayWithObject:".as_ptr()),
-                    lang_str,
-                );
-                let set_obj: unsafe extern "C" fn(id, SEL, id, id) =
-                    std::mem::transmute(objc_msgSend as unsafe extern "C" fn());
-                set_obj(
-                    defaults,
-                    sel_registerName(c"setObject:forKey:".as_ptr()),
-                    arr,
-                    key,
-                );
-            } else {
-                // NSMutableArray + addObject pour fr-FR, fr
-                let mut_arr_class = objc_getClass(c"NSMutableArray".as_ptr());
-                let arr = cls_to_id(mut_arr_class, sel_registerName(c"array".as_ptr()));
-                let add: unsafe extern "C" fn(id, SEL, id) =
-                    std::mem::transmute(objc_msgSend as unsafe extern "C" fn());
-                for tag in tags {
-                    let tag_str = make_nsstring(tag);
-                    add(arr, sel_registerName(c"addObject:".as_ptr()), tag_str);
-                }
-                let set_obj: unsafe extern "C" fn(id, SEL, id, id) =
-                    std::mem::transmute(objc_msgSend as unsafe extern "C" fn());
-                set_obj(
-                    defaults,
-                    sel_registerName(c"setObject:forKey:".as_ptr()),
-                    arr,
-                    key,
-                );
+            // NSMutableArray + addObject pour chaque tag (en-AU, en…)
+            let mut_arr_class = objc_getClass(c"NSMutableArray".as_ptr());
+            let arr = cls_to_id(mut_arr_class, sel_registerName(c"array".as_ptr()));
+            let add: unsafe extern "C" fn(id, SEL, id) =
+                std::mem::transmute(objc_msgSend as unsafe extern "C" fn());
+            for tag in apple_language_tags(lang) {
+                let tag_str = make_nsstring(&tag);
+                add(arr, sel_registerName(c"addObject:".as_ptr()), tag_str);
             }
+            let set_obj: unsafe extern "C" fn(id, SEL, id, id) =
+                std::mem::transmute(objc_msgSend as unsafe extern "C" fn());
+            set_obj(
+                defaults,
+                sel_registerName(c"setObject:forKey:".as_ptr()),
+                arr,
+                key,
+            );
         }
 
         let sync: unsafe extern "C" fn(id, SEL) -> i8 =
@@ -820,5 +745,5 @@ pub fn hide_app_native(app: &AppHandle) -> Result<(), String> {
             std::ptr::null_mut(),
         );
     })
-    .map_err(|e| format!("Masquage de l'app impossible : {e}"))
+    .map_err(|e| crate::i18n::msg("err.hideApp", &[("e", &e)]))
 }

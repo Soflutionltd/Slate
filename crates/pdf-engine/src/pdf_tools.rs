@@ -6,6 +6,7 @@
 //
 // Repère PDFium natif : origine en BAS à GAUCHE, Y vers le HAUT, unité points.
 
+use crate::messages::msg;
 use pdfium_render::prelude::*;
 use serde::Serialize;
 
@@ -52,7 +53,7 @@ pub fn watermark_text(
     bold: bool,
 ) -> Result<Vec<u8>, String> {
     if text.trim().is_empty() {
-        return Err("Le texte du filigrane est vide.".into());
+        return Err(msg("emptyWatermark", &[]));
     }
     let guard = pdfium_guard()?;
     let document = guard
@@ -168,7 +169,7 @@ pub fn add_page_numbers(
 /// l'image en points : 1 px = 0,75 pt, soit 96 dpi).
 pub fn images_to_pdf(images: Vec<Vec<u8>>) -> Result<Vec<u8>, String> {
     if images.is_empty() {
-        return Err("Aucune image fournie.".into());
+        return Err(msg("noImageProvided", &[]));
     }
     let guard = pdfium_guard()?;
     let mut document = guard.create_new_pdf().map_err(|e| e.to_string())?;
@@ -207,7 +208,7 @@ pub fn remove_password(bytes: &[u8], password: &str) -> Result<Vec<u8>, String> 
     let guard = pdfium_guard()?;
     let source = guard
         .load_pdf_from_byte_slice(bytes, Some(password))
-        .map_err(|_| "Mot de passe incorrect ou PDF illisible.".to_string())?;
+        .map_err(|_| msg("wrongPassword", &[]))?;
     // Sauvegarder tel quel conserverait le chiffrement : on recopie les pages
     // dans un document vierge (donc sans handler de sécurité).
     let mut output = guard.create_new_pdf().map_err(|e| e.to_string())?;
@@ -244,7 +245,7 @@ pub fn crop_pages(
         let new_right = (pw - right).min(pw);
         let new_top = (ph - top).min(ph);
         if new_right - new_left < 10.0 || new_top - new_bottom < 10.0 {
-            return Err("Les marges de rognage sont trop grandes pour cette page.".into());
+            return Err(msg("cropTooLarge", &[]));
         }
         let rect = PdfRect::new(
             PdfPoints::new(new_bottom as f32),
@@ -325,7 +326,7 @@ pub fn extract_images(bytes: &[u8]) -> Result<Vec<ExtractedImage>, String> {
         }
     }
     if out.is_empty() {
-        return Err("Aucune image trouvée dans ce document.".into());
+        return Err(msg("noImagesInDocument", &[]));
     }
     Ok(out)
 }
@@ -343,7 +344,7 @@ pub fn auto_redact(
 ) -> Result<(Vec<u8>, usize), String> {
     let terms: Vec<&String> = terms.iter().filter(|t| !t.trim().is_empty()).collect();
     if terms.is_empty() {
-        return Err("Fournis au moins un terme à caviarder.".into());
+        return Err(msg("redactNoTerms", &[]));
     }
 
     let mut areas: Vec<(u32, (f64, f64, f64, f64))> = Vec::new();
@@ -436,7 +437,7 @@ pub fn sanitize(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let mut out = Vec::new();
     document
         .save_to(&mut std::io::Cursor::new(&mut out))
-        .map_err(|e| format!("Sauvegarde impossible : {e}"))?;
+        .map_err(|e| msg("saveFailed", &[("e", &e)]))?;
     Ok(out)
 }
 
@@ -490,7 +491,7 @@ pub fn set_bookmarks(bytes: &[u8], items: &[BookmarkItem]) -> Result<Vec<u8>, St
     let mut document = Document::load_mem(bytes).map_err(|e| format!("PDF illisible : {e}"))?;
     let pages: Vec<(u32, lopdf::ObjectId)> = document.get_pages().into_iter().collect();
     if pages.is_empty() {
-        return Err("Document sans page.".into());
+        return Err(msg("documentNoPages", &[]));
     }
 
     // Repartir d'une arborescence vide.
@@ -529,6 +530,6 @@ pub fn set_bookmarks(bytes: &[u8], items: &[BookmarkItem]) -> Result<Vec<u8>, St
     let mut out = Vec::new();
     document
         .save_to(&mut std::io::Cursor::new(&mut out))
-        .map_err(|e| format!("Sauvegarde impossible : {e}"))?;
+        .map_err(|e| msg("saveFailed", &[("e", &e)]))?;
     Ok(out)
 }

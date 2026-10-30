@@ -100,7 +100,7 @@ fn run_capture(bin: &str, args: &[&str]) -> Result<String, String> {
     let output = Command::new(bin)
         .args(args)
         .output()
-        .map_err(|e| format!("Impossible d’exécuter {bin} : {e}"))?;
+        .map_err(|e| crate::i18n::msg("err.runCommand", &[("bin", &bin), ("e", &e)]))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -110,7 +110,13 @@ fn run_capture(bin: &str, args: &[&str]) -> Result<String, String> {
             stdout.trim().to_string()
         };
         return Err(if detail.is_empty() {
-            format!("{bin} a échoué (code {:?}).", output.status.code())
+            crate::i18n::msg(
+                "err.commandFailed",
+                &[
+                    ("bin", &bin),
+                    ("code", &format!("{:?}", output.status.code())),
+                ],
+            )
         } else {
             format!("{bin} : {detail}")
         });
@@ -234,7 +240,7 @@ pub fn parse_ppd_choice_labels(ppd: &str) -> HashMap<(String, String), String> {
 /// Réglages PPD de l’imprimante, hors ceux déjà pilotés par le panneau.
 pub fn list_printer_options(printer: &str) -> Result<Vec<PrinterOption>, String> {
     if printer.trim().is_empty() {
-        return Err("Nom d’imprimante manquant.".into());
+        return Err(crate::i18n::msg("err.printerNameMissing", &[]));
     }
     let listing = run_capture("lpoptions", &["-p", printer, "-l"])?;
     let labels = fs::read_to_string(ppd_path_for(printer))
@@ -389,11 +395,8 @@ fn ppd_path_for(printer: &str) -> PathBuf {
 
 /// Liste les imprimantes CUPS.
 pub fn list_printers() -> Result<Vec<PrinterInfo>, String> {
-    let names_raw = run_capture("lpstat", &["-e"]).map_err(|e| {
-        format!(
-            "Aucune imprimante détectée ({e}). Vérifie CUPS / Préférences Système → Imprimantes."
-        )
-    })?;
+    let names_raw = run_capture("lpstat", &["-e"])
+        .map_err(|e| crate::i18n::msg("err.noPrinterDetected", &[("e", &e)]))?;
     let default = default_printer_name();
     let ready = printer_ready_set();
     let mut printers = Vec::new();
@@ -406,7 +409,7 @@ pub fn list_printers() -> Result<Vec<PrinterInfo>, String> {
         });
     }
     if printers.is_empty() {
-        return Err("Aucune imprimante installée.".into());
+        return Err(crate::i18n::msg("err.noPrinterInstalled", &[]));
     }
     // Défaut en tête pour l’UX.
     printers.sort_by(|a, b| b.is_default.cmp(&a.is_default).then(a.display_name.cmp(&b.display_name)));
@@ -416,7 +419,7 @@ pub fn list_printers() -> Result<Vec<PrinterInfo>, String> {
 /// Formats de papier exposés par l’imprimante (lpoptions + PPD).
 pub fn list_paper_sizes(printer: &str) -> Result<Vec<PaperSize>, String> {
     if printer.trim().is_empty() {
-        return Err("Nom d’imprimante manquant.".into());
+        return Err(crate::i18n::msg("err.printerNameMissing", &[]));
     }
     let options = run_capture("lpoptions", &["-p", printer, "-l"])?;
     let mut ids: Vec<(String, bool)> = Vec::new();
@@ -463,7 +466,10 @@ fn scaling_args(scaling: &str, custom_scale: Option<u32>) -> Result<Vec<String>,
             let pct = custom_scale.unwrap_or(100).clamp(1, 400);
             Ok(vec!["-o".into(), format!("scaling={pct}")])
         }
-        other => Err(format!("Mode d’échelle inconnu : {other}")),
+        other => Err(crate::i18n::msg(
+            "err.unknownScaleMode",
+            &[("mode", &other)],
+        )),
     }
 }
 
@@ -486,7 +492,10 @@ fn scale_mode_from(scaling: &str, custom_scale: Option<u32>) -> Result<ScaleMode
         "custom" => Ok(ScaleMode::Custom(
             custom_scale.unwrap_or(100).clamp(1, 400) as f64
         )),
-        other => Err(format!("Mode d’échelle inconnu : {other}")),
+        other => Err(crate::i18n::msg(
+            "err.unknownScaleMode",
+            &[("mode", &other)],
+        )),
     }
 }
 
@@ -502,10 +511,10 @@ fn orientation_from(orientation: &str) -> Result<Orientation, String> {
 /// Envoie le PDF à CUPS avec les options du panneau Slate.
 pub fn print_pdf_with_options(bytes: &[u8], options: &PrintOptions) -> Result<(), String> {
     if !bytes.starts_with(b"%PDF-") {
-        return Err("Le contenu à imprimer n’est pas un PDF valide.".into());
+        return Err(crate::i18n::msg("err.printNotPdf", &[]));
     }
     if options.printer.trim().is_empty() {
-        return Err("Choisis une imprimante.".into());
+        return Err(crate::i18n::msg("err.choosePrinter", &[]));
     }
     let copies = options.copies.max(1).min(999);
     let mode = scale_mode_from(&options.scaling, options.custom_scale)?;
@@ -566,8 +575,7 @@ pub fn print_pdf_with_options(bytes: &[u8], options: &PrintOptions) -> Result<()
         .map(|d| d.as_millis())
         .unwrap_or(0);
     path.push(format!("slate-print-{stamp}.pdf"));
-    fs::write(&path, &payload)
-        .map_err(|e| format!("Écriture du fichier d’impression impossible : {e}"))?;
+    fs::write(&path, &payload).map_err(|e| crate::i18n::msg("err.printWriteFile", &[("e", &e)]))?;
 
     let mut args: Vec<String> = vec![
         "-d".into(),
@@ -620,7 +628,10 @@ pub fn print_pdf_with_options(bytes: &[u8], options: &PrintOptions) -> Result<()
         // rejeté plutôt que transmis à `lp` en espérant que ça passe.
         if !is_ppd_token(keyword) || !is_ppd_token(choice) {
             let _ = fs::remove_file(&path);
-            return Err(format!("Réglage d’imprimante invalide : {keyword}={choice}"));
+            return Err(crate::i18n::msg(
+                "err.invalidPrinterOption",
+                &[("keyword", &keyword), ("choice", &choice)],
+            ));
         }
         if RESERVED_OPTION_KEYWORDS
             .iter()
@@ -643,7 +654,7 @@ pub fn print_pdf_with_options(bytes: &[u8], options: &PrintOptions) -> Result<()
             .all(|c| c.is_ascii_digit() || c == '-' || c == ',' || c.is_whitespace())
         {
             let _ = fs::remove_file(&path);
-            return Err("Plage de pages invalide (ex. 1-3,5).".into());
+            return Err(crate::i18n::msg("err.invalidPageRange", &[]));
         }
         args.push("-P".into());
         args.push(range.replace(' ', ""));

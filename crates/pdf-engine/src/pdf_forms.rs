@@ -6,6 +6,7 @@
 //! Les listes déroulantes / listes (combo/list) sont exposées en lecture seule
 //! (pdfium-render 0.9.1 n'offre pas de setter pour ces types).
 
+use crate::messages::msg;
 use std::collections::HashMap;
 
 use lopdf::{dictionary, Dictionary, Document, Object, ObjectId, Stream};
@@ -575,7 +576,7 @@ fn widget_rect_size(doc: &Document, widget_id: ObjectId) -> Result<(f32, f32), S
         })
         .collect();
     if values.len() != 4 {
-        return Err("Rectangle du bouton invalide.".into());
+        return Err(msg("invalidButtonRect", &[]));
     }
     Ok(((values[2] - values[0]).abs(), (values[3] - values[1]).abs()))
 }
@@ -728,12 +729,12 @@ pub fn set_form_button_image(
         return Err("The selected file is not a valid PDF document.".to_string());
     }
     if image_bytes.is_empty() {
-        return Err("Aucune image fournie.".into());
+        return Err(msg("noImageProvided", &[]));
     }
     let mut doc = Document::load_mem(bytes).map_err(|e| e.to_string())?;
     let widgets = find_stampable_widgets(&doc, field_name);
     if widgets.is_empty() {
-        return Err(format!("Champ image ou signature « {field_name} » introuvable."));
+        return Err(msg("imageFieldNotFound", &[("field", &field_name)]));
     }
     let image = add_image_xobject(&mut doc, image_bytes)?;
     for widget_id in widgets {

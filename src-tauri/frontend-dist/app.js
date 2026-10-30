@@ -732,7 +732,293 @@ const translations = {
 		signDone: 'Document signed (PAdES).',
 		editBookmarks: 'Edit bookmarks',
 		bookmarkTitle: 'Title',
-		bookmarksDone: 'Bookmarks saved.'
+		bookmarksDone: 'Bookmarks saved.',
+		printAll: 'All',
+		printCurrent: 'Current',
+		printFit: 'Fit',
+		printActualSize: 'Actual size',
+		printShrink: 'Shrink oversized pages',
+		printCustomScale: 'Custom scale',
+		orientationAuto: 'Auto',
+		orientationLandscape: 'Landscape',
+		advancedSettings: 'Advanced settings',
+		color: 'Color',
+		home: 'Home',
+		profile: 'Profile',
+		undo: 'Undo',
+		undoShortcut: 'Undo (⌘Z)',
+		redo: 'Redo',
+		redoShortcut: 'Redo (⌘⇧Z)',
+		printShortcut: 'Print (⌘P)',
+		saveShortcut: 'Save (⌘S)',
+		autoSaveToggleTitle: 'Auto-save this document',
+		exitModify: 'Exit Modify',
+		back: 'Back',
+		comingSoon: 'Coming soon',
+		outputPreview: 'Output preview',
+		preflight: 'Preflight',
+		saveAsPdfx: 'Save as PDF/X',
+		setPageBoxes: 'Set page boxes',
+		addPrinterMarks: 'Add printer marks',
+		inkManager: 'Ink manager',
+		editPage: 'Edit page',
+		pageActions: 'Page actions',
+		select: 'Select',
+		rotate: 'Rotate',
+		delete: 'Delete',
+		extract: 'Extract',
+		addContent: 'Add content',
+		addText: 'Text',
+		more: 'More',
+		watermarkMenu: 'Watermark',
+		formatText: 'Format text',
+		documentFont: 'Document font',
+		searchFont: 'Search fonts…',
+		bold: 'Bold',
+		italic: 'Italic',
+		underline: 'Underline',
+		textColor: 'Text color',
+		alignment: 'Alignment',
+		alignLeft: 'Align left',
+		alignCenter: 'Center',
+		alignRight: 'Align right',
+		lists: 'Lists',
+		bulletList: 'Bulleted list',
+		numberedList: 'Numbered list',
+		tilt: 'Tilt',
+		designWithAlto: 'Design with Alto',
+		designWithAltoDesc: 'Create outstanding documents with Alto Express, included in your subscription.',
+		useDesignTools: 'Use design tools',
+		designNewPage: 'Design a new page',
+		otherOptions: 'Other options',
+		homeSub: 'Open a PDF, drop it here, or pick up a recent file.',
+		create: 'Create',
+		homeDropzone: 'Drop a PDF here, or click to choose',
+		recents: 'Recent',
+		view: 'View',
+		grid: 'Grid',
+		list: 'List',
+		clearList: 'Clear list',
+		createPdf: 'Create a PDF',
+		close: 'Close',
+		createViewTitle: 'Create a PDF, a template, or a PDF Space',
+		createSingleFile: 'Single file',
+		notAvailableYet: 'Not available yet',
+		createMultipleFiles: 'Multiple files',
+		createScreenshot: 'Screenshot',
+		createWebPage: 'Web page',
+		createClipboard: 'Clipboard',
+		createBlankPage: 'Blank page',
+		selectFile: 'Select a file',
+		createHintFile: 'Choose a .pdf for now (more formats coming).',
+		supportedFormats: 'Supported formats',
+		help: 'Help',
+		fitPage: 'Fit page',
+		outlineEmpty: 'This PDF has no bookmarks.',
+		fillAndSave: 'Fill and save',
+		signIntro: 'Save a signature and initials, then click the page to place them.',
+		signatureLabel: 'Signature',
+		initialsLabel: 'Initials',
+		signHint: 'Click a card, then the page to place it. Handles: corners resize, the top circle rotates.',
+		aiConnection: 'Model connection',
+		aiBaseUrlField: 'Base URL (local / proxy)',
+		aiLocalProvider: 'Local / OpenAI-compatible',
+		aiInputPlaceholder: 'Ask for a change: “Replace SERVILEC with SERVITEC”, “Delete page 2”...',
+		send: 'Send',
+		confirm: 'Confirm',
+		bookmarksHelp: 'Add a title and the target page number. This list replaces the existing bookmarks.',
+		addBookmark: '+ Add a bookmark',
+		createSignature: 'Create a signature',
+		draw: 'Draw',
+		type: 'Type',
+		import: 'Import',
+		clear: 'Clear',
+		typeYourName: 'Type your name',
+		saveSignature: 'Save signature',
+		defaultAppTitle: 'Make Slate your default PDF reader?',
+		defaultAppHelp: 'Your PDF files will open directly in Slate with a double-click.',
+		dontAskAgain: 'Don\'t ask again',
+		later: 'Later',
+		setAsDefault: 'Yes, make it the default',
+		printer: 'Printer',
+		advancedOptions: 'Advanced options',
+		printGrayscale: 'Print in grayscale',
+		pagesToPrint: 'Pages to print',
+		reversePages: 'Reverse pages',
+		pageSizingHandling: 'Page sizing & handling',
+		printSize: 'Size',
+		paperSize: 'Paper size',
+		paperTray: 'Tray',
+		autoPaperSource: 'Choose paper source by PDF page size',
+		fitToLabel: 'Fit to label (auto-crop)',
+		fitToLabelHint: 'Removes white margins and tightens empty space to print the label as large as possible without cutting anything off.',
+		compactGaps: 'Tighten empty space between blocks',
+		printDuplex: 'Print on both sides',
+		previousPage: 'Previous page',
+		nextPage: 'Next page',
+		printerSetup: 'Printer…',
+		printerSettings: 'Printer settings',
+		restoreDefaults: 'Restore defaults',
+		convertColorsLead: 'Converts the document to CMYK for offset printing using the target profile.',
+		destinationProfile: 'Destination profile',
+		searchingIccProfile: 'Looking for the ICC profile…',
+		convertColorsNoteSource: 'The source file is not overwritten until you save.',
+		convertColorsNoteFlatten: 'Some effects / transparencies may be flattened.',
+		propsSections: 'Property sections',
+		propsFonts: 'Fonts',
+		propsInitialView: 'Initial view',
+		propsCustomTab: 'Custom',
+		propsAdvancedTab: 'Advanced',
+		propsFile: 'File:',
+		propsTitle: 'Title:',
+		propsAuthor: 'Author:',
+		propsSubject: 'Subject:',
+		propsKeywords: 'Keywords:',
+		propsCreated: 'Created:',
+		propsModified: 'Modified:',
+		propsApplication: 'Application:',
+		propsExtraMeta: 'Additional metadata...',
+		propsAdvancedDescription: 'Advanced description',
+		propsProducer: 'PDF producer:',
+		propsPdfVersion: 'PDF version:',
+		propsLocation: 'Location:',
+		propsFileSize: 'File size:',
+		propsPageSize: 'Page size:',
+		propsPageCount: 'Number of pages:',
+		propsTagged: 'Tagged PDF:',
+		propsFastWebView: 'Fast web view:',
+		propsSecurity: 'Document security',
+		propsSecurityMethod: 'Security method:',
+		propsPermPrint: 'Printing:',
+		propsPermModify: 'Changing the document:',
+		propsPermAssemble: 'Document assembly:',
+		propsPermCopy: 'Content copying:',
+		propsPermAnnotate: 'Commenting:',
+		propsPermForms: 'Form field fill-in:',
+		propsFontsUsed: 'Fonts used in this document',
+		propsPageLayout: 'Page layout:',
+		propsPageMode: 'Navigation tab:',
+		propsMagnification: 'Magnification:',
+		byDefault: 'Default',
+		propsOpenPage: 'Open to page:',
+		propsCustom: 'Custom properties',
+		propsName: 'Name',
+		propsValue: 'Value',
+		propsNoCustom: 'No custom properties.',
+		propsReadingOptions: 'Reading options',
+		propsReadingDirection: 'Binding:',
+		leftToRight: 'Left to right',
+		propsLanguage: 'Language:',
+		propsPrintOptions: 'Print options',
+		propsTrapped: 'Trapped:',
+		propsOverprint: 'Overprint preview:',
+		always: 'Always',
+		compareTitle: 'Compare two PDFs',
+		comparePickA: 'Choose PDF A',
+		comparePickB: 'Choose PDF B',
+		fileName: 'File name',
+		inviteByEmail: 'Invite by email',
+		getLink: 'Get a link',
+		emailAddress: 'Email address',
+		fileAccess: 'File access',
+		signatureFontElegant: 'Elegant',
+		signatureFontHandwritten: 'Handwritten',
+		preview: 'preview',
+		aiConnectionSaved: 'Connection saved.',
+		aiNeedsKey: 'Set your API key in “Model connection” first.',
+		aiActionReplace: (find, replace) => `Replace “${find}” with “${replace}”`,
+		aiActionRedact: (find) => `Redact “${find}”`,
+		aiActionRotate: (page, angle) => `Rotate page ${page} by ${angle}°`,
+		aiActionDelete: (page) => `Delete page ${page}`,
+		aiActionGoto: (page) => `Go to page ${page}`,
+		aiActionUnknown: (action) => `Unknown action: ${action}`,
+		aiActionUnsupported: (action) => `Unsupported action: ${action}`,
+		aiTextNotFound: (find, page) => `Text “${find}” not found on page ${page}.`,
+		applied: 'Applied',
+		skip: 'Skip',
+		fontAuto: (font) => `Auto: ${font}`,
+		detectedFont: 'Detected font',
+		noFontFound: 'No font found',
+		fontUnavailableBadge: (font) => `Font “${font}” is not available on this computer. The original text is kept as is; added characters use a similar font. Install the font for an exact match.`,
+		unknownFont: 'unknown',
+		logoNotEditableFont: (font) => `Logo not editable (font “${font}” not detected). You can move it.`,
+		logoNotEditable: 'Logo not editable. You can move it.',
+		fontNotInstalled: (font) => `Font “${font}” not installed`,
+		download: 'Download',
+		printFitSummary: (source, percent, paper) => `Document ${source} mm, ${percent >= 100 ? 'printed at 100%' : `scaled to ${percent}%`} to fit ${paper} mm`,
+		printFitGaps: (count) => `· ${count} empty gap${count > 1 ? 's' : ''} tightened`,
+		advancedOptionsCount: (count) => `Advanced options (${count})`,
+		printerNoOptions: 'This printer exposes no additional settings via CUPS.',
+		defaultSuffix: ' (default)',
+		printerOffline: ' · offline',
+		printDesktopOnly: 'Printing is available in the desktop app.',
+		printPageOf: (page, total) => `Page ${page} of ${total}`,
+		printScale: (percent) => `Scale: ${percent}%`,
+		yes: 'Yes',
+		no: 'No',
+		allowed: 'Allowed',
+		notAllowed: 'Not allowed',
+		securityNone: 'None',
+		securityPassword: 'Password',
+		layoutSinglePage: 'Single page',
+		layoutOneColumn: 'One column',
+		layoutTwoColumnLeft: 'Two columns (left)',
+		layoutTwoColumnRight: 'Two columns (right)',
+		layoutTwoPageLeft: 'Two pages (left)',
+		layoutTwoPageRight: 'Two pages (right)',
+		modeUseNone: 'Page only',
+		modeUseOutlines: 'Bookmarks panel and page',
+		modeUseThumbs: 'Pages panel and page',
+		modeFullScreen: 'Full screen',
+		modeUseOC: 'Layers panel and page',
+		modeUseAttachments: 'Attachments panel and page',
+		notSpecified: 'Not specified',
+		noFontsInDocument: 'No fonts detected in this document.',
+		untitledFont: 'Unnamed',
+		fontEmbedded: 'Embedded',
+		fontNotEmbedded: 'Not embedded',
+		fileSizeLabel: (size) => `${(size / (1024 * 1024)).toLocaleString(formatLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MB (${Math.round(size).toLocaleString(formatLocale())} bytes)`,
+		metadataNotSaved: 'Metadata not saved.',
+		metadataUpdated: 'Metadata updated.',
+		propertiesHelp: 'Help: PDF metadata (title, author, security, fonts…).',
+		auditFlattenedPage: (page, reason) => `Page ${page} flattened (${reason}): text on this page will not be selectable.`,
+		auditCriticalHidden: (field, page) => `Critical field ${field} hidden/deleted on page ${page}.`,
+		auditCriticalModified: (field, page) => `Critical field ${field} modified on page ${page}.`,
+		auditOcrLowConfidence: (page) => `Low-confidence OCR block exported on page ${page}.`,
+		auditOcrNativeLayer: (page) => `OCR block on page ${page} exported as a native PDF text layer.`,
+		auditTotalWithoutTax: 'Total modified without changing the related VAT.',
+		auditTitle: 'Pre-export audit:',
+		auditContinue: 'Continue anyway?',
+		auditCancelled: 'Export cancelled after audit.',
+		fieldDocumentNumber: 'Number',
+		fieldTax: 'VAT',
+		fieldVatId: 'EU VAT number',
+		fieldParty: 'Party',
+		fieldGeneric: 'Field',
+		iccProfileFound: (info) => `Profile found: ${info}`,
+		iccProfileMissing: 'Coated FOGRA39 profile not found. Install Acrobat (Adobe profile) or put ISOcoated_v2_eci.icc in ~/Library/ColorSync/Profiles/.',
+		convertNoResult: 'Conversion produced no result.',
+		createHintBlank: 'A blank A4 page will be created.',
+		createFailed: 'Could not create the document.',
+		saveFailed: 'Could not save.',
+		resizePanel: 'Resize panel',
+		fileSuffixCombined: 'combined',
+		fileSuffixProtected: 'protected',
+		fileSuffixCompressed: 'compressed',
+		fileSuffixWatermarked: 'watermarked',
+		fileSuffixNumbered: 'numbered',
+		fileSuffixCropped: 'cropped',
+		fileSuffixRedacted: 'redacted',
+		fileSuffixFlattened: 'flattened',
+		fileSuffixSanitized: 'sanitized',
+		fileSuffixRepaired: 'repaired',
+		fileSuffixNoAnnotations: 'no-annotations',
+		fileSuffixNoBlankPages: 'no-blank-pages',
+		fileSuffixSigned: 'signed',
+		fileSuffixSearchable: 'searchable',
+		fileSuffixUnlocked: 'unlocked',
+		fileSuffixBookmarks: 'bookmarks',
+		newDocumentFileName: 'New document.pdf'
 	},
 	fr: {
 		allTools: 'Tous les outils',
@@ -1070,7 +1356,293 @@ const translations = {
 		signDone: 'Document signé (PAdES).',
 		editBookmarks: 'Éditer les marque-pages',
 		bookmarkTitle: 'Titre',
-		bookmarksDone: 'Marque-pages enregistrés.'
+		bookmarksDone: 'Marque-pages enregistrés.',
+		printAll: 'Tout',
+		printCurrent: 'Active',
+		printFit: 'Ajuster',
+		printActualSize: 'Taille réelle',
+		printShrink: 'Réduire les pages hors format',
+		printCustomScale: 'Échelle personnalisée',
+		orientationAuto: 'Auto.',
+		orientationLandscape: 'Paysage',
+		advancedSettings: 'Paramètres avancés',
+		color: 'Couleur',
+		home: 'Accueil',
+		profile: 'Profil',
+		undo: 'Annuler',
+		undoShortcut: 'Annuler (⌘Z)',
+		redo: 'Rétablir',
+		redoShortcut: 'Rétablir (⌘⇧Z)',
+		printShortcut: 'Imprimer (⌘P)',
+		saveShortcut: 'Enregistrer (⌘S)',
+		autoSaveToggleTitle: 'Enregistrement automatique de ce document',
+		exitModify: 'Quitter Modifier',
+		back: 'Retour',
+		comingSoon: 'Bientôt',
+		outputPreview: 'Aperçu de la sortie',
+		preflight: 'Contrôle en amont',
+		saveAsPdfx: 'Enregistrer au format PDF/X',
+		setPageBoxes: 'Définir des zones de page',
+		addPrinterMarks: 'Ajouter des repères d’impression',
+		inkManager: 'Gestionnaires d’encres',
+		editPage: 'Modifier la page',
+		pageActions: 'Actions page',
+		select: 'Sélectionner',
+		rotate: 'Rotation',
+		delete: 'Supprimer',
+		extract: 'Extraire',
+		addContent: 'Ajouter un contenu',
+		addText: 'Texte',
+		more: 'Plus',
+		watermarkMenu: 'Filigrane',
+		formatText: 'Mettre le texte en forme',
+		documentFont: 'Police du document',
+		searchFont: 'Rechercher une police…',
+		bold: 'Gras',
+		italic: 'Italique',
+		underline: 'Souligné',
+		textColor: 'Couleur du texte',
+		alignment: 'Alignement',
+		alignLeft: 'Aligner à gauche',
+		alignCenter: 'Centrer',
+		alignRight: 'Aligner à droite',
+		lists: 'Listes',
+		bulletList: 'Liste à puces',
+		numberedList: 'Liste numérotée',
+		tilt: 'Inclinaison',
+		designWithAlto: 'Concevoir avec Alto',
+		designWithAltoDesc: 'Crée des documents exceptionnels avec Alto Express, inclus dans votre abonnement.',
+		useDesignTools: 'Utiliser les outils de conception',
+		designNewPage: 'Concevoir une nouvelle page',
+		otherOptions: 'Autres options',
+		homeSub: 'Ouvrez un PDF, déposez-le ici, ou reprenez un fichier récent.',
+		create: 'Créer',
+		homeDropzone: 'Glissez un PDF ici, ou cliquez pour choisir',
+		recents: 'Récents',
+		view: 'Affichage',
+		grid: 'Grille',
+		list: 'Liste',
+		clearList: 'Effacer la liste',
+		createPdf: 'Créer un PDF',
+		close: 'Fermer',
+		createViewTitle: 'Créer un PDF, un modèle ou un PDF Space',
+		createSingleFile: 'Un seul fichier',
+		notAvailableYet: 'Pas encore disponible',
+		createMultipleFiles: 'Plusieurs fichiers',
+		createScreenshot: 'Capture d\'écran',
+		createWebPage: 'Page web',
+		createClipboard: 'Presse-papiers',
+		createBlankPage: 'Page vierge',
+		selectFile: 'Sélectionner un fichier',
+		createHintFile: 'Choisir parmi .pdf pour le moment (autres formats à venir).',
+		supportedFormats: 'Formats pris en charge',
+		help: 'Aide',
+		fitPage: 'Ajuster la page',
+		outlineEmpty: 'Pas de marque-pages dans ce PDF.',
+		fillAndSave: 'Remplir et enregistrer',
+		signIntro: 'Enregistre une signature et un paraphe, puis clique sur la page pour les poser.',
+		signatureLabel: 'Signature',
+		initialsLabel: 'Paraphe',
+		signHint: 'Clique une carte puis la page pour poser. Poignées : coins pour redimensionner, rond du haut pour pivoter.',
+		aiConnection: 'Connexion au modèle',
+		aiBaseUrlField: 'URL de base (local / proxy)',
+		aiLocalProvider: 'Local / compatible OpenAI',
+		aiInputPlaceholder: 'Demande une modification : « Remplace SERVILEC par SERVITEC », « Supprime la page 2 »...',
+		send: 'Envoyer',
+		confirm: 'Confirmer',
+		bookmarksHelp: 'Ajoute un titre et le numéro de page cible. La liste remplace les marque-pages existants.',
+		addBookmark: '+ Ajouter un marque-page',
+		createSignature: 'Créer une signature',
+		draw: 'Dessiner',
+		type: 'Taper',
+		import: 'Importer',
+		clear: 'Effacer',
+		typeYourName: 'Tape ton nom',
+		saveSignature: 'Enregistrer la signature',
+		defaultAppTitle: 'Définir Slate comme lecteur PDF par défaut ?',
+		defaultAppHelp: 'Tes fichiers PDF s\'ouvriront directement dans Slate d\'un double-clic.',
+		dontAskAgain: 'Ne plus demander',
+		later: 'Plus tard',
+		setAsDefault: 'Oui, définir par défaut',
+		printer: 'Imprimante',
+		advancedOptions: 'Options avancées',
+		printGrayscale: 'Imprimer en nuances de gris',
+		pagesToPrint: 'Pages à imprimer',
+		reversePages: 'Inverser',
+		pageSizingHandling: 'Dimensionnement et gestion des pages',
+		printSize: 'Taille',
+		paperSize: 'Format de papier',
+		paperTray: 'Bac',
+		autoPaperSource: 'Choisir la source de papier selon le format de la page PDF',
+		fitToLabel: 'Adapter à l’étiquette (recadrage automatique)',
+		fitToLabelHint: 'Supprime les marges blanches et resserre les espaces vides pour imprimer l’étiquette au plus grand, sans rien couper.',
+		compactGaps: 'Resserrer les espaces vides entre les blocs',
+		printDuplex: 'Imprimer en recto verso',
+		previousPage: 'Page précédente',
+		nextPage: 'Page suivante',
+		printerSetup: 'Imprimante…',
+		printerSettings: 'Réglages de l’imprimante',
+		restoreDefaults: 'Réglages par défaut',
+		convertColorsLead: 'Convertit le document en CMYK pour l’impression offset selon le profil cible.',
+		destinationProfile: 'Profil de destination',
+		searchingIccProfile: 'Recherche du profil ICC…',
+		convertColorsNoteSource: 'Le fichier source n’est pas écrasé tant que tu n’enregistres pas.',
+		convertColorsNoteFlatten: 'Certains effets / transparences peuvent être aplatis.',
+		propsSections: 'Sections des propriétés',
+		propsFonts: 'Polices',
+		propsInitialView: 'Vue initiale',
+		propsCustomTab: 'Personnalisées',
+		propsAdvancedTab: 'Avancées',
+		propsFile: 'Fichier :',
+		propsTitle: 'Titre :',
+		propsAuthor: 'Auteur :',
+		propsSubject: 'Sujet :',
+		propsKeywords: 'Mots-clés :',
+		propsCreated: 'Date de création :',
+		propsModified: 'Modifié le :',
+		propsApplication: 'Application :',
+		propsExtraMeta: 'Métadonnées supplémentaires...',
+		propsAdvancedDescription: 'Description avancée',
+		propsProducer: 'Outil de conversion PDF :',
+		propsPdfVersion: 'Version PDF :',
+		propsLocation: 'Emplacement :',
+		propsFileSize: 'Taille du fichier :',
+		propsPageSize: 'Format de page :',
+		propsPageCount: 'Nombre de pages :',
+		propsTagged: 'PDF balisé :',
+		propsFastWebView: 'Affichage web rapide :',
+		propsSecurity: 'Sécurité du document',
+		propsSecurityMethod: 'Méthode de sécurité :',
+		propsPermPrint: 'Impression :',
+		propsPermModify: 'Modification du document :',
+		propsPermAssemble: 'Assemblage du document :',
+		propsPermCopy: 'Copie du contenu :',
+		propsPermAnnotate: 'Commentaires :',
+		propsPermForms: 'Remplissage de formulaires :',
+		propsFontsUsed: 'Polices utilisées dans ce document',
+		propsPageLayout: 'Disposition des pages :',
+		propsPageMode: 'Mode d’affichage :',
+		propsMagnification: 'Magnification :',
+		byDefault: 'Par défaut',
+		propsOpenPage: 'Ouvrir à la page :',
+		propsCustom: 'Propriétés personnalisées',
+		propsName: 'Nom',
+		propsValue: 'Valeur',
+		propsNoCustom: 'Aucune propriété personnalisée.',
+		propsReadingOptions: 'Options de lecture',
+		propsReadingDirection: 'Sens de lecture :',
+		leftToRight: 'Gauche à droite',
+		propsLanguage: 'Langue :',
+		propsPrintOptions: 'Options d’impression',
+		propsTrapped: 'Recouvrement :',
+		propsOverprint: 'Prévisualisation de la surimpression :',
+		always: 'Toujours',
+		compareTitle: 'Comparer deux PDF',
+		comparePickA: 'Choisir PDF A',
+		comparePickB: 'Choisir PDF B',
+		fileName: 'Nom du fichier',
+		inviteByEmail: 'Inviter par e-mail',
+		getLink: 'Obtenir un lien',
+		emailAddress: 'Adresse e-mail',
+		fileAccess: 'Accès au fichier',
+		signatureFontElegant: 'Élégant',
+		signatureFontHandwritten: 'Manuscrit',
+		preview: 'aperçu',
+		aiConnectionSaved: 'Connexion enregistrée.',
+		aiNeedsKey: 'Configure d’abord ta clé API dans « Connexion au modèle ».',
+		aiActionReplace: (find, replace) => `Remplacer « ${find} » par « ${replace} »`,
+		aiActionRedact: (find) => `Masquer « ${find} »`,
+		aiActionRotate: (page, angle) => `Pivoter la page ${page} de ${angle}°`,
+		aiActionDelete: (page) => `Supprimer la page ${page}`,
+		aiActionGoto: (page) => `Aller à la page ${page}`,
+		aiActionUnknown: (action) => `Action inconnue : ${action}`,
+		aiActionUnsupported: (action) => `Action non supportée : ${action}`,
+		aiTextNotFound: (find, page) => `Texte « ${find} » introuvable sur la page ${page}.`,
+		applied: 'Appliqué',
+		skip: 'Ignorer',
+		fontAuto: (font) => `Auto : ${font}`,
+		detectedFont: 'Police détectée',
+		noFontFound: 'Aucune police trouvée',
+		fontUnavailableBadge: (font) => `Police « ${font} » non disponible sur cet ordinateur. Le texte d'origine est préservé tel quel ; les caractères ajoutés utilisent une police approchante. Installez la police pour une correspondance exacte.`,
+		unknownFont: 'inconnue',
+		logoNotEditableFont: (font) => `Logo non éditable (police « ${font} » non détectée). Vous pouvez le déplacer.`,
+		logoNotEditable: 'Logo non éditable. Vous pouvez le déplacer.',
+		fontNotInstalled: (font) => `Police « ${font} » non installée`,
+		download: 'Télécharger',
+		printFitSummary: (source, percent, paper) => `Document ${source} mm, ${percent >= 100 ? 'imprimé à 100 %' : `réduit à ${percent} %`} pour tenir sur ${paper} mm`,
+		printFitGaps: (count) => `· ${count} espace${count > 1 ? 's' : ''} vide${count > 1 ? 's' : ''} resserré${count > 1 ? 's' : ''}`,
+		advancedOptionsCount: (count) => `Options avancées (${count})`,
+		printerNoOptions: 'Cette imprimante n’expose aucun réglage supplémentaire via CUPS.',
+		defaultSuffix: ' (défaut)',
+		printerOffline: ' · hors ligne',
+		printDesktopOnly: 'Impression disponible dans l’app desktop.',
+		printPageOf: (page, total) => `Page ${page} sur ${total}`,
+		printScale: (percent) => `Échelle : ${percent} %`,
+		yes: 'Oui',
+		no: 'Non',
+		allowed: 'Autorisée',
+		notAllowed: 'Non autorisée',
+		securityNone: 'Aucune',
+		securityPassword: 'Mot de passe',
+		layoutSinglePage: 'Une seule page',
+		layoutOneColumn: 'Une colonne',
+		layoutTwoColumnLeft: 'Deux colonnes (gauche)',
+		layoutTwoColumnRight: 'Deux colonnes (droite)',
+		layoutTwoPageLeft: 'Deux pages (gauche)',
+		layoutTwoPageRight: 'Deux pages (droite)',
+		modeUseNone: 'Page seule',
+		modeUseOutlines: 'Signets et page',
+		modeUseThumbs: 'Vignettes et page',
+		modeFullScreen: 'Plein écran',
+		modeUseOC: 'Calques et page',
+		modeUseAttachments: 'Pièces jointes et page',
+		notSpecified: 'Non spécifié',
+		noFontsInDocument: 'Aucune police détectée dans ce document.',
+		untitledFont: 'Sans nom',
+		fontEmbedded: 'Incorporée',
+		fontNotEmbedded: 'Non incorporée',
+		fileSizeLabel: (size) => `${(size / (1024 * 1024)).toLocaleString(formatLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Mo (${Math.round(size).toLocaleString(formatLocale())} octets)`,
+		metadataNotSaved: 'Métadonnées non enregistrées.',
+		metadataUpdated: 'Métadonnées mises à jour.',
+		propertiesHelp: 'Aide : métadonnées du PDF (titre, auteur, sécurité, polices…).',
+		auditFlattenedPage: (page, reason) => `Page ${page} aplatie (${reason}) : texte non sélectionnable sur cette page.`,
+		auditCriticalHidden: (field, page) => `Champ critique ${field} masqué/supprimé page ${page}.`,
+		auditCriticalModified: (field, page) => `Champ critique ${field} modifié page ${page}.`,
+		auditOcrLowConfidence: (page) => `Bloc OCR faible confiance exporté page ${page}.`,
+		auditOcrNativeLayer: (page) => `Bloc OCR page ${page} exporté en couche texte PDF native.`,
+		auditTotalWithoutTax: 'Total modifié sans TVA associée modifiée.',
+		auditTitle: 'Audit avant export :',
+		auditContinue: 'Continuer quand même ?',
+		auditCancelled: 'Export annulé après audit.',
+		fieldDocumentNumber: 'Numéro',
+		fieldTax: 'TVA',
+		fieldVatId: 'TVA intracom',
+		fieldParty: 'Tiers',
+		fieldGeneric: 'Champ',
+		iccProfileFound: (info) => `Profil trouvé : ${info}`,
+		iccProfileMissing: 'Profil Coated FOGRA39 introuvable. Installe Acrobat (profil Adobe) ou place ISOcoated_v2_eci.icc dans ~/Library/ColorSync/Profiles/.',
+		convertNoResult: 'Conversion sans résultat.',
+		createHintBlank: 'Une page A4 blanche sera créée.',
+		createFailed: 'Création impossible.',
+		saveFailed: 'Enregistrement impossible.',
+		resizePanel: 'Redimensionner le panneau',
+		fileSuffixCombined: 'combine',
+		fileSuffixProtected: 'protege',
+		fileSuffixCompressed: 'compresse',
+		fileSuffixWatermarked: 'filigrane',
+		fileSuffixNumbered: 'numerote',
+		fileSuffixCropped: 'rogne',
+		fileSuffixRedacted: 'caviarde',
+		fileSuffixFlattened: 'aplati',
+		fileSuffixSanitized: 'nettoye',
+		fileSuffixRepaired: 'repare',
+		fileSuffixNoAnnotations: 'sans-annotations',
+		fileSuffixNoBlankPages: 'sans-pages-blanches',
+		fileSuffixSigned: 'signe',
+		fileSuffixSearchable: 'recherchable',
+		fileSuffixUnlocked: 'deverrouille',
+		fileSuffixBookmarks: 'marque-pages',
+		newDocumentFileName: 'Nouveau document.pdf'
 	}
 };
 
@@ -1225,18 +1797,77 @@ const iconTints = {
 	bookmark: 'amber',
 };
 
-function currentLocale() {
-	if (state.settings.language && state.settings.language !== 'auto') return state.settings.language;
-	return navigator.language?.toLowerCase().startsWith('fr') ? 'fr' : 'en';
+// Langues préférées et région du système, injectées par Rust avant la page
+// (i18n::js_init_script). navigator.languages reflète l'override AppleLanguages
+// de Slate et ignore la région : il ne sert que de repli (build web).
+const systemLocale = window.__SLATE_LOCALE__ || { languages: [...(navigator.languages || [])], region: null };
+
+function primaryLanguage(tag) {
+	return String(tag || '').split(/[-_]/)[0].toLowerCase();
 }
 
-// Aligne la langue des panneaux et menus NATIFS macOS (impression, enregistrer…)
-// sur le réglage de Slate. Persiste côté Rust pour le prochain boot (AppKit lit
-// AppleLanguages au démarrage). En mode "auto", on résout vers la locale détectée.
+// Langue de l'interface : le réglage s'il est traduit, sinon la première langue
+// système traduite, sinon l'anglais (même règle que i18n::resolve_language).
+function currentLocale() {
+	const setting = state.settings.language;
+	const candidates = setting && setting !== 'auto' ? [setting, ...systemLocale.languages] : systemLocale.languages;
+	return candidates.map(primaryLanguage).find((lang) => lang in translations) || 'en';
+}
+
+// Locale de mise en forme (dates, nombres, début de semaine) : langue de
+// l'interface + région du système, p. ex. en-AU ou fr-CA.
+function formatLocale() {
+	const lang = currentLocale();
+	const regionalTag = systemLocale.languages.find((tag) => primaryLanguage(tag) === lang && /[-_][A-Za-z]{2}$/.test(tag));
+	const region = systemLocale.region || regionalTag?.slice(-2);
+	const tag = region ? `${lang}-${region.toUpperCase()}` : lang;
+	try {
+		return Intl.getCanonicalLocales(tag)[0];
+	} catch {
+		return lang;
+	}
+}
+
+// Premier jour de la semaine (0 = dimanche, 1 = lundi) selon la région.
+function weekStartDay() {
+	try {
+		const locale = new Intl.Locale(formatLocale());
+		const info = locale.getWeekInfo?.() ?? locale.weekInfo;
+		if (info?.firstDay) return info.firstDay % 7;
+	} catch {
+		/* Intl.Locale sans weekInfo : repli ci-dessous. */
+	}
+	return currentLocale() === 'fr' ? 1 : 0;
+}
+
+// Langues OCR (codes Tesseract, ordre de préférence) : langue de l'interface,
+// langues système, puis l'anglais. Le natif écarte celles qu'il ne gère pas.
+const OCR_LANGUAGE_CODES = {
+	en: 'eng',
+	fr: 'fra',
+	de: 'deu',
+	es: 'spa',
+	it: 'ita',
+	pt: 'por',
+	nl: 'nld',
+	ja: 'jpn',
+	ko: 'kor',
+	ru: 'rus',
+	uk: 'ukr'
+};
+function ocrLanguages() {
+	const codes = [currentLocale(), ...systemLocale.languages, 'en']
+		.map((tag) => OCR_LANGUAGE_CODES[primaryLanguage(tag)])
+		.filter(Boolean);
+	return [...new Set(codes)].join('+');
+}
+
+// Aligne l'UI native (barre de menus, panneaux AppKit) sur le réglage de Slate.
+// "auto" est transmis tel quel : le natif suit alors les préférences système
+// au lieu de figer la langue détectée.
 let _lastNativeLang = null;
 function syncNativeLanguage() {
-	const setting = state.settings.language || 'auto';
-	const lang = setting === 'auto' ? currentLocale() : setting;
+	const lang = state.settings.language || 'auto';
 	if (lang === _lastNativeLang) return;
 	_lastNativeLang = lang;
 	void invokeCommand('set_native_language', { lang }).catch(() => {});
@@ -1275,6 +1906,16 @@ function applyIcon(element, name) {
 function localizeUi() {
 	document.documentElement.lang = currentLocale();
 	document.title = 'Slate';
+
+	// Libellés statiques d’index.html : data-i18n (texte) et data-i18n-<attr>.
+	document.querySelectorAll('[data-i18n]').forEach((element) => {
+		element.textContent = t(element.dataset.i18n);
+	});
+	for (const attr of ['title', 'aria-label', 'placeholder']) {
+		document.querySelectorAll(`[data-i18n-${attr}]`).forEach((element) => {
+			element.setAttribute(attr, t(element.getAttribute(`data-i18n-${attr}`)));
+		});
+	}
 
 	setText('.top-tabs [data-open-panel="tools"]', 'allTools');
 	setText(elements.modifyTab, 'modify');
@@ -1336,31 +1977,6 @@ function localizeUi() {
 	setText('.edit-help strong', 'nativeEditing');
 	setText('.edit-help span', 'nativeEditingDesc');
 	setText('#settings-title', 'settings');
-	const settingTitles = [
-		['autoSaveSetting', 'autoSaveDesc'],
-		['autoUpdateSetting', 'autoUpdateDesc'],
-		['defaultZoom', 'defaultZoomDesc'],
-		['language', 'languageDesc'],
-		['pageLayoutSetting', 'pageLayoutDesc'],
-		['fitWidthSetting', 'fitWidthDesc'],
-		['showTools', 'showToolsDesc'],
-		['showRail', 'showRailDesc'],
-		['showNotes', 'showNotesDesc'],
-		['smartGuides', 'smartGuidesDesc'],
-		['highlightColor', 'highlightColorDesc'],
-		['identityNameLabel', 'identityNameDesc'],
-		['identityEmailLabel', 'identityEmailDesc'],
-		['aiProviderLabel', 'aiProviderDesc'],
-		['aiModelLabel', 'aiModelDesc'],
-		['aiKeyLabel', 'aiKeyDesc'],
-		['aiBaseUrlLabel', 'aiBaseUrlDesc']
-	];
-	document.querySelectorAll('[data-settings-pane] .setting-row').forEach((row, index) => {
-		const [titleKey, descKey] = settingTitles[index] || [];
-		if (!titleKey) return;
-		setText(row.querySelector('strong'), titleKey);
-		setText(row.querySelector('small'), descKey);
-	});
 	setText(elements.settingsTabGeneral, 'settingsTabGeneral');
 	setText(elements.settingsTabDisplay, 'settingsTabDisplay');
 	setText(elements.settingsTabIdentity, 'settingsTabIdentity');
@@ -1378,6 +1994,7 @@ function localizeUi() {
 	setText(elements.settingMcpDesc, 'mcpClientsDesc');
 	setText(elements.copyMcpPath, 'copyMcpPath');
 	setText(elements.settingsDone, 'done');
+	setFontComboValue(_fontComboValue);
 	setText('#save-changes-title', 'saveChangesTitle');
 	setText(elements.saveChangesMessage, 'saveChangesMessage');
 	setText(elements.protectTitle, 'protectTitle');
@@ -2659,8 +3276,8 @@ function scrollActiveTabIntoView() {
 const SIGNATURES_KEY = 'alto-saved-signatures';
 const SIGNATURE_FONTS = [
 	{ label: 'Cursive', css: '"Snell Roundhand", "Apple Chancery", cursive' },
-	{ label: 'Élégant', css: '"Zapfino", "Apple Chancery", cursive' },
-	{ label: 'Manuscrit', css: '"Bradley Hand", "Segoe Script", cursive' }
+	{ labelKey: 'signatureFontElegant', css: '"Zapfino", "Apple Chancery", cursive' },
+	{ labelKey: 'signatureFontHandwritten', css: '"Bradley Hand", "Segoe Script", cursive' }
 ];
 
 const signElements = {};
@@ -2814,7 +3431,7 @@ function renderSignSlot(listEl, kind) {
 		const del = document.createElement('button');
 		del.type = 'button';
 		del.className = 'sign-item-delete';
-		del.setAttribute('aria-label', 'Supprimer');
+		del.setAttribute('aria-label', t('delete'));
 		del.textContent = '×';
 		del.addEventListener('click', (event) => {
 			event.stopPropagation();
@@ -3330,7 +3947,7 @@ function setupSignFeature() {
 			const btn = document.createElement('button');
 			btn.type = 'button';
 			btn.className = 'signature-font-button';
-			btn.textContent = font.label;
+			btn.textContent = font.labelKey ? t(font.labelKey) : font.label;
 			btn.style.fontFamily = font.css;
 			if (font.css === _signTypedFont) btn.classList.add('active');
 			btn.addEventListener('click', () => {
@@ -3362,7 +3979,7 @@ function setupSignFeature() {
 		reader.onload = () => {
 			_signImportDataUrl = reader.result;
 			if (signElements.importPreview) {
-				signElements.importPreview.innerHTML = `<img src="${_signImportDataUrl}" alt="aperçu" />`;
+				signElements.importPreview.innerHTML = `<img src="${_signImportDataUrl}" alt="${t('preview')}" />`;
 			}
 		};
 		reader.readAsDataURL(file);
@@ -3694,7 +4311,7 @@ async function setupAiAssistant() {
 					base_url: aiState.config.baseUrl
 				}
 			});
-			aiElements.configStatus.textContent = 'Connexion enregistrée.';
+			aiElements.configStatus.textContent = t('aiConnectionSaved');
 			aiElements.settings.open = false;
 		} catch (error) {
 			aiElements.configStatus.textContent = String(error);
@@ -3735,27 +4352,36 @@ function appendAiBubble(role, text) {
 }
 
 async function buildAiSystemPrompt() {
+	// Consignes en anglais (langue de travail du modèle) ; la réponse suit la
+	// langue de l'utilisateur, avec la langue de l'interface comme défaut.
+	let uiLanguage = currentLocale();
+	try {
+		uiLanguage = new Intl.DisplayNames(['en'], { type: 'language' }).of(uiLanguage) || uiLanguage;
+	} catch {
+		/* Intl.DisplayNames indisponible : on garde le code de langue. */
+	}
 	const lines = [
-		"Tu es l'assistant intégré de Slate, un éditeur PDF. Tu réponds en français, de façon concise.",
-		"Tu peux proposer des modifications du document. Pour cela, termine ta réponse par un bloc de code délimité ```alto-actions contenant un tableau JSON d'actions.",
-		'Actions disponibles :',
-		'- {"action":"replace_text","find":"texte exact actuel","replace":"nouveau texte","page":N}',
-		'- {"action":"redact","find":"texte à masquer","page":N}',
+		'You are the assistant built into Slate, a PDF editor. Be concise.',
+		`Reply in the language of the user's message. If it is unclear, reply in ${uiLanguage}.`,
+		'You can propose document changes. To do so, end your reply with a fenced ```alto-actions code block containing a JSON array of actions.',
+		'Available actions:',
+		'- {"action":"replace_text","find":"exact current text","replace":"new text","page":N}',
+		'- {"action":"redact","find":"text to redact","page":N}',
 		'- {"action":"rotate_page","page":N,"angle":90|180|-90}',
 		'- {"action":"delete_page","page":N}',
 		'- {"action":"goto_page","page":N}',
-		"\"page\" est optionnel pour replace_text/redact (défaut: page courante). N'invente jamais un texte qui n'existe pas dans le document. Si aucune modification n'est demandée, ne mets pas de bloc d'actions."
+		'"page" is optional for replace_text/redact (default: current page). Never invent text that is not in the document. If no change is requested, do not include an actions block.'
 	];
 	if (state.pdf) {
-		lines.push(`\nDocument : « ${state.fileName} », ${state.pdf.numPages} pages, page courante ${state.page}.`);
+		lines.push(`\nDocument: "${state.fileName}", ${state.pdf.numPages} pages, current page ${state.page}.`);
 		try {
 			const text = await extractPageText(state.page);
-			if (text) lines.push(`Texte de la page ${state.page} :\n"""${text.slice(0, 4000)}"""`);
+			if (text) lines.push(`Text of page ${state.page}:\n"""${text.slice(0, 4000)}"""`);
 		} catch (_err) {
 			/* noop */
 		}
 	} else {
-		lines.push('\nAucun document ouvert actuellement.');
+		lines.push('\nNo document is currently open.');
 	}
 	return lines.join('\n');
 }
@@ -3777,7 +4403,7 @@ function parseAiActions(text) {
 async function sendAiMessage(text) {
 	if (aiState.busy) return;
 	if (aiState.config.provider !== 'local' && !aiState.config.apiKey) {
-		appendAiBubble('system', 'Configure d’abord ta clé API dans « Connexion au modèle ».');
+		appendAiBubble('system', t('aiNeedsKey'));
 		aiElements.settings.open = true;
 		return;
 	}
@@ -3818,17 +4444,17 @@ async function sendAiMessage(text) {
 function describeAiAction(action) {
 	switch (action.action) {
 		case 'replace_text':
-			return `Remplacer « ${action.find} » par « ${action.replace} »${action.page ? ` (page ${action.page})` : ''}`;
+			return `${t('aiActionReplace', action.find, action.replace)}${action.page ? ` (page ${action.page})` : ''}`;
 		case 'redact':
-			return `Masquer « ${action.find} »${action.page ? ` (page ${action.page})` : ''}`;
+			return `${t('aiActionRedact', action.find)}${action.page ? ` (page ${action.page})` : ''}`;
 		case 'rotate_page':
-			return `Pivoter la page ${action.page} de ${action.angle}°`;
+			return t('aiActionRotate', action.page, action.angle);
 		case 'delete_page':
-			return `Supprimer la page ${action.page}`;
+			return t('aiActionDelete', action.page);
 		case 'goto_page':
-			return `Aller à la page ${action.page}`;
+			return t('aiActionGoto', action.page);
 		default:
-			return `Action inconnue : ${action.action}`;
+			return t('aiActionUnknown', action.action);
 	}
 }
 
@@ -3850,17 +4476,17 @@ function renderAiActionCards(actions) {
 		const apply = document.createElement('button');
 		apply.type = 'button';
 		apply.className = 'ai-apply-button';
-		apply.textContent = 'Appliquer';
+		apply.textContent = t('apply');
 		const skip = document.createElement('button');
 		skip.type = 'button';
 		skip.className = 'ai-skip-button';
-		skip.textContent = 'Ignorer';
+		skip.textContent = t('skip');
 		apply.addEventListener('click', async () => {
 			apply.disabled = true;
 			const ok = await applyAiAction(action);
 			if (ok) {
 				apply.classList.add('done');
-				apply.textContent = 'Appliqué';
+				apply.textContent = t('applied');
 				skip.remove();
 			} else {
 				apply.disabled = false;
@@ -3941,7 +4567,7 @@ async function applyAiAction(action) {
 				await ensureEditBlocksForPage(page);
 				const block = findAiBlock(action.find, state.page);
 				if (!block) {
-					appendAiBubble('system', `Texte « ${action.find} » introuvable sur la page ${state.page}.`);
+					appendAiBubble('system', t('aiTextNotFound', action.find, state.page));
 					return false;
 				}
 				pushHistory('histTextEdit');
@@ -3958,7 +4584,7 @@ async function applyAiAction(action) {
 				await ensureEditBlocksForPage(page);
 				const block = findAiBlock(action.find, state.page);
 				if (!block) {
-					appendAiBubble('system', `Texte « ${action.find} » introuvable sur la page ${state.page}.`);
+					appendAiBubble('system', t('aiTextNotFound', action.find, state.page));
 					return false;
 				}
 				pushHistory('histBlockDelete');
@@ -3968,7 +4594,7 @@ async function applyAiAction(action) {
 				return true;
 			}
 			default:
-				appendAiBubble('system', `Action non supportée : ${action.action}`);
+				appendAiBubble('system', t('aiActionUnsupported', action.action));
 				return false;
 		}
 	} catch (error) {
@@ -3994,7 +4620,7 @@ function setupToolsResize() {
 	const handle = document.createElement('div');
 	handle.className = 'tools-resize-handle';
 	handle.setAttribute('role', 'separator');
-	handle.setAttribute('aria-label', 'Redimensionner le panneau');
+	handle.setAttribute('aria-label', t('resizePanel'));
 	document.body.append(handle);
 
 	const apply = (value) => {
@@ -5108,9 +5734,13 @@ function dateFormatOf(widget) {
 		const match = script.match(/AFDate_(?:Keystroke|Format)(?:Ex)?\(['"]([^'"]+)['"]\)/i);
 		if (match) return match[1];
 	}
+	// Pas de format déclaré : un libellé explicite fait foi, sinon '' (la région
+	// décide, voir dateDisplayFormat).
 	const hint = `${widget?.alternativeText || ''} ${widget?.fieldName || ''}`;
-	if (/jj\s*\/\s*mm\s*\/\s*aaaa/i.test(hint)) return 'dd/mm/yyyy';
-	return 'dd/mm/yyyy';
+	if (/jj\s*\/\s*mm\s*\/\s*aaaa|dd\s*\/\s*mm\s*\/\s*yyyy/i.test(hint)) return 'dd/mm/yyyy';
+	if (/mm\s*\/\s*dd\s*\/\s*yyyy/i.test(hint)) return 'mm/dd/yyyy';
+	if (/yyyy\s*-\s*mm\s*-\s*dd|aaaa\s*-\s*mm\s*-\s*jj/i.test(hint)) return 'yyyy-mm-dd';
+	return '';
 }
 
 function isDateWidget(widget) {
@@ -5118,7 +5748,7 @@ function isDateWidget(widget) {
 	if (widget.datetimeType === 'date' || widget.datetimeType === 'datetime-local') return true;
 	if (dateActionScripts(widget).some((script) => /AFDate_/i.test(script))) return true;
 	const hint = `${widget.alternativeText || ''} ${widget.fieldName || ''}`;
-	if (/jj\s*\/\s*mm\s*\/\s*aaaa|dd\s*\/\s*mm\s*\/\s*yyyy/i.test(hint)) return true;
+	if (/jj\s*\/\s*mm\s*\/\s*aaaa|dd\s*\/\s*mm\s*\/\s*yyyy|mm\s*\/\s*dd\s*\/\s*yyyy/i.test(hint)) return true;
 	return /^date([_-]|$)/i.test(widget.fieldName || '');
 }
 
@@ -5130,21 +5760,62 @@ function isDateWidget(widget) {
 // « d/m/26 » au clic dans le calendrier, masqué ensuite en « 26/ ».
 const DATE_FORMAT_TOKEN_RE = /yyyy|yy|mmmm|mmm|mm|m|dd|d|HH|H|hh|h|MM|tt|t/g;
 const DATE_TIME_TOKENS = new Set(['HH', 'H', 'hh', 'h', 'MM', 'tt', 't']);
-// Affichage / stockage : toujours jj/mm/aaaa (05/07/2026). Le format Acrobat
-// du PDF (souvent d/m/yy) ne sert plus qu'à lire une valeur déjà saisie.
-const DATE_DISPLAY_FORMAT = 'dd/mm/yyyy';
 
-function parseFlexibleDateToIso(value, acrobatFormat) {
+// Ordre et séparateurs de date de la région (en-US → mm/dd/yyyy, en-AU →
+// dd/mm/yyyy, de → dd.mm.yyyy, ja → yyyy/mm/dd), d'après les données CLDR d'Intl.
+function localeDateFormat() {
+	try {
+		const parts = new Intl.DateTimeFormat(formatLocale(), {
+			day: '2-digit',
+			month: '2-digit',
+			year: 'numeric'
+		}).formatToParts(new Date(2026, 2, 5));
+		const tokens = { day: 'dd', month: 'mm', year: 'yyyy' };
+		// Lettres retirées des séparateurs : elles seraient lues comme des jetons.
+		const pattern = parts
+			.map((part) => tokens[part.type] ?? (part.type === 'literal' ? part.value.replace(/[A-Za-z]/g, '') : ''))
+			.join('');
+		if (pattern.includes('dd') && pattern.includes('mm') && pattern.includes('yyyy')) return pattern;
+	} catch {
+		/* Intl indisponible : repli ci-dessous. */
+	}
+	return 'dd/mm/yyyy';
+}
+
+// Format d'affichage / stockage d'un champ date : ordre et séparateurs du
+// format déclaré par le PDF (c'est ce qu'attend l'auteur du formulaire), sinon
+// ceux de la région. Mois numérique et jour sur deux chiffres, année sur quatre
+// (« d/m/yy » → « dd/mm/yyyy », 05/07/2026 ; « mmm d, yy » → « mmm d, yyyy ») ;
+// la partie heure est ignorée.
+function dateDisplayFormat(declaredFormat) {
+	const tokens = dateFormatTokens(declaredFormat);
+	const namedMonth = tokens.some((entry) => entry.token === 'mmm' || entry.token === 'mmmm');
+	const widen = namedMonth ? { yy: 'yyyy' } : { d: 'dd', m: 'mm', yy: 'yyyy' };
+	let out = '';
+	let pendingLiteral = '';
+	for (const entry of tokens) {
+		if (entry.literal) {
+			pendingLiteral += entry.literal;
+			continue;
+		}
+		if (DATE_TIME_TOKENS.has(entry.token)) break;
+		out += pendingLiteral + (widen[entry.token] ?? entry.token);
+		pendingLiteral = '';
+	}
+	return out || localeDateFormat();
+}
+
+function parseFlexibleDateToIso(value, declaredFormat) {
 	return (
-		dateToIso(value, DATE_DISPLAY_FORMAT) ||
-		dateToIso(value, acrobatFormat) ||
+		dateToIso(value, dateDisplayFormat(declaredFormat)) ||
+		(declaredFormat ? dateToIso(value, declaredFormat) : '') ||
 		''
 	);
 }
 
 function normalizeDateFormat(format) {
 	const raw = String(format || '').trim();
-	return raw || 'dd/mm/yyyy';
+	return raw || localeDateFormat();
 }
 
 function dateFormatTokens(format) {
@@ -5162,7 +5833,7 @@ function dateFormatTokens(format) {
 
 function dateMonthNames(kind) {
 	const names = [];
-	for (const locale of ['fr-FR', 'en-US']) {
+	for (const locale of new Set([formatLocale(), 'fr-FR', 'en-US'])) {
 		const formatter = new Intl.DateTimeFormat(locale, { month: kind });
 		for (let month = 0; month < 12; month += 1) {
 			names.push({ month: month + 1, name: formatter.format(new Date(2024, month, 1)) });
@@ -5362,7 +6033,7 @@ function caretPosAfterDateDigits(formatted, count) {
 		seen += 1;
 		if (seen < count) continue;
 		let pos = i + 1;
-		while (pos < formatted.length && formatted[pos] === '/') pos += 1;
+		while (pos < formatted.length && !/\d/.test(formatted[pos])) pos += 1;
 		return pos;
 	}
 	return formatted.length;
@@ -5385,7 +6056,7 @@ function applyDateMask(input, raw, format) {
 function isoToDate(iso, format) {
 	if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
 	const [yyyy, mm, dd] = iso.split('-');
-	const locale = currentLocale() === 'fr' ? 'fr-FR' : 'en-US';
+	const locale = formatLocale();
 	const date = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
 	return dateFormatTokens(format)
 		.map((entry) => {
@@ -5592,7 +6263,7 @@ function ensureSignatureHitTarget(container, widget, viewport) {
 let _dateCal = {
 	input: null,
 	section: null,
-	format: 'dd/mm/yyyy',
+	format: '',
 	commit: null,
 	view: new Date()
 };
@@ -5689,7 +6360,7 @@ function positionDateCalendar(anchor) {
 }
 
 function dateWeekdayLabels(weekStartsOn) {
-	const locale = currentLocale() === 'fr' ? 'fr-FR' : 'en-US';
+	const locale = formatLocale();
 	const labels = [];
 	for (let i = 0; i < 7; i += 1) {
 		const day = new Date(2024, 0, 1 + i);
@@ -5704,8 +6375,8 @@ function renderDateCalendar() {
 	const view = _dateCal.view instanceof Date ? _dateCal.view : new Date();
 	const year = view.getFullYear();
 	const month = view.getMonth();
-	const locale = currentLocale() === 'fr' ? 'fr-FR' : 'en-US';
-	const weekStartsOn = currentLocale() === 'fr' ? 1 : 0;
+	const locale = formatLocale();
+	const weekStartsOn = weekStartDay();
 	const selectedIso = dateToIso(_dateCal.input?.value || '', _dateCal.format);
 	const todayIso = toIsoDate(new Date());
 	const title = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(
@@ -5794,7 +6465,7 @@ function bindDateWidget(container, widget) {
 	const input = section?.querySelector('input:not(.form-date-picker)');
 	if (!input) return;
 	const acrobatFormat = dateFormatOf(widget);
-	const format = DATE_DISPLAY_FORMAT;
+	const format = dateDisplayFormat(acrobatFormat);
 	const stored = formStorage()?.getRawValue(widget.id)?.value ?? widget.fieldValue ?? input.value;
 	const formatted =
 		isoToDate(parseFlexibleDateToIso(String(stored ?? ''), acrobatFormat), format) ||
@@ -5877,7 +6548,7 @@ function bindDateWidget(container, widget) {
 		if (event.key !== 'Backspace') return;
 		const start = input.selectionStart ?? 0;
 		const end = input.selectionEnd ?? 0;
-		if (start !== end || start === 0 || input.value[start - 1] !== '/') return;
+		if (start !== end || start === 0 || /\d/.test(input.value[start - 1])) return;
 		event.preventDefault();
 		const digits = dateDigits(input.value);
 		const before = dateDigits(input.value.slice(0, start)).length;
@@ -6248,7 +6919,7 @@ async function collectFormFields() {
 					readOnly: Boolean(widget.readOnly),
 					widgets: [],
 					options: Array.isArray(widget.options) ? widget.options : [],
-					dateFormat: kind === 'date' ? DATE_DISPLAY_FORMAT : null
+					dateFormat: kind === 'date' ? dateDisplayFormat(dateFormatOf(widget)) : null
 				};
 				byName.set(widget.fieldName, field);
 			}
@@ -7176,7 +7847,7 @@ async function runOcrForCurrentPage(openPanel = false, options = {}) {
 				ocrResult = await invokeCommand('ocr_pdf_page', {
 					bytes: Array.from(state.fileBytes),
 					page: state.page,
-					language: 'eng+fra'
+					language: ocrLanguages()
 				});
 			} catch (nativeError) {
 				console.warn('Native PDF OCR failed; falling back to rendered canvas.', nativeError);
@@ -7187,7 +7858,7 @@ async function runOcrForCurrentPage(openPanel = false, options = {}) {
 			const imageBytes = await canvasToPngBytes(canvas);
 			const ocrBlocks = await invokeCommand('ocr_page', {
 				imageBytes: Array.from(imageBytes),
-				language: 'eng+fra'
+				language: ocrLanguages()
 			});
 			ocrResult = {
 				blocks: ocrBlocks,
@@ -7676,7 +8347,7 @@ function _mergeFontFamilies(families) {
 // libellé "auto" (police détectée du bloc).
 let _fontComboFamilies = [];
 let _fontComboValue = '';
-let _fontComboAutoLabel = 'Police du document';
+let _fontComboAutoLabel = '';
 // Plage de texte mémorisée à l'ouverture du combobox (si on éditait en inline avec
 // une sous-sélection). Permet d'appliquer la police aux SEULS caractères choisis,
 // car ouvrir/chercher dans le popover détruit la sélection native.
@@ -7690,7 +8361,7 @@ function isFontComboOpen() {
 function setFontComboValue(value) {
 	_fontComboValue = value || '';
 	if (!elements.fontComboValue) return;
-	const label = _fontComboValue || _fontComboAutoLabel || 'Police du document';
+	const label = _fontComboValue || _fontComboAutoLabel || t('documentFont');
 	elements.fontComboValue.textContent = label;
 	elements.fontComboValue.style.fontFamily = _fontComboValue
 		? `"${_fontComboValue}", sans-serif`
@@ -7703,7 +8374,7 @@ function renderFontComboList(filter) {
 	if (!list) return;
 	const query = (filter || '').trim().toLowerCase();
 	const rows = [];
-	const autoLabel = _fontComboAutoLabel || 'Police du document';
+	const autoLabel = _fontComboAutoLabel || t('documentFont');
 	if (!query || autoLabel.toLowerCase().includes(query)) {
 		rows.push({ value: '', label: autoLabel });
 	}
@@ -7717,7 +8388,7 @@ function renderFontComboList(filter) {
 	if (!rows.length) {
 		const empty = document.createElement('div');
 		empty.className = 'font-combo-empty';
-		empty.textContent = 'Aucune police trouvée';
+		empty.textContent = t('noFontFound');
 		list.append(empty);
 		return;
 	}
@@ -8874,11 +9545,11 @@ function blockFontUnavailable(block) {
 }
 
 function appendFontWarningBadge(editLayer, block, visualBox) {
-	const base = baseFamilyName(cleanFontName(block.fontName)) || 'inconnue';
+	const base = baseFamilyName(cleanFontName(block.fontName)) || t('unknownFont');
 	const badge = document.createElement('div');
 	badge.className = 'font-warning-badge';
 	badge.textContent = '!';
-	badge.title = `Police « ${base} » non disponible sur cet ordinateur. Le texte d'origine est préservé tel quel ; les caractères ajoutés utilisent une police approchante. Installez la police pour une correspondance exacte.`;
+	badge.title = t('fontUnavailableBadge', base);
 	const x = (visualBox?.x ?? block.x) + (visualBox?.width ?? block.width);
 	const y = visualBox?.y ?? block.y;
 	badge.style.left = `${x + 8}px`;
@@ -8938,15 +9609,15 @@ function detectFieldKind(text, documentType = 'other') {
 
 function fieldLabel(kind) {
 	return ({
-		document_number: 'Numéro',
+		document_number: t('fieldDocumentNumber'),
 		date: 'Date',
 		total: 'Total',
-		tax: 'TVA',
+		tax: t('fieldTax'),
 		company_id: 'SIRET/SIREN',
-		vat_id: 'TVA intracom',
+		vat_id: t('fieldVatId'),
 		iban: 'IBAN',
-		party: 'Tiers'
-	})[kind] || 'Champ';
+		party: t('fieldParty')
+	})[kind] || t('fieldGeneric');
 }
 
 function isCriticalField(kind) {
@@ -12958,9 +13629,7 @@ function startInlineEdit(id, opts = {}) {
 	if (isLogoBlock(block)) {
 		const base = baseFamilyName(cleanFontName(block.fontName)) || '';
 		setStatus(
-			base
-				? `Logo non éditable (police « ${base} » non détectée). Vous pouvez le déplacer.`
-				: 'Logo non éditable. Vous pouvez le déplacer.',
+			base ? t('logoNotEditableFont', base) : t('logoNotEditable'),
 			'info'
 		);
 		selectEditBlock(id);
@@ -13264,7 +13933,7 @@ function updateFormatPanel(block) {
 	}
 
 	const detected = cleanFontName(block.fontName);
-	_fontComboAutoLabel = detected ? `Auto : ${detected}` : 'Police détectée';
+	_fontComboAutoLabel = detected ? t('fontAuto', detected) : t('detectedFont');
 	if (detected) ensureCloudFont(baseFamilyName(detected));
 
 	setFontComboValue(block.fontFamilyOverride || '');
@@ -13372,11 +14041,11 @@ function updateFontWarning(detected) {
 		icon.textContent = '!';
 		const label = document.createElement('span');
 		label.className = 'format-font-warning-label';
-		label.textContent = `Police « ${base} » non installée`;
+		label.textContent = t('fontNotInstalled', base);
 		const link = document.createElement('button');
 		link.type = 'button';
 		link.className = 'format-font-warning-link';
-		link.textContent = 'Télécharger';
+		link.textContent = t('download');
 		link.addEventListener('click', () => {
 			invokeCommand('open_external', { url: `https://fonts.google.com/?query=${query}` }).catch(() => {});
 		});
@@ -14964,7 +15633,7 @@ async function handleSaveDocument() {
 		return Boolean(savedPath);
 	} catch (error) {
 		console.error(error);
-		setStatus(error instanceof Error ? error.message : 'Enregistrement impossible.', 'error');
+		setStatus(error instanceof Error ? error.message : t('saveFailed'), 'error');
 		return false;
 	}
 }
@@ -14981,7 +15650,7 @@ async function handleSaveAsDocument() {
 		return Boolean(savedPath);
 	} catch (error) {
 		console.error(error);
-		setStatus(error instanceof Error ? error.message : 'Enregistrement impossible.', 'error');
+		setStatus(error instanceof Error ? error.message : t('saveFailed'), 'error');
 		return false;
 	}
 }
@@ -15016,7 +15685,7 @@ async function handleCombineFiles() {
 		setStatus(t('combineProcessing'));
 		const merged = await invokeBytes('merge_pdfs', { sources });
 		const bytes = new Uint8Array(merged);
-		const filename = suggestFileName('combine', 'alto-combine.pdf');
+		const filename = suggestFileName(t('fileSuffixCombined'), `alto-${t('fileSuffixCombined')}.pdf`);
 		const saved = await saveNativeFile(filename, 'pdf', bytes);
 		if (saved) setStatus(t('combineDone'));
 	} catch (error) {
@@ -15039,7 +15708,7 @@ async function handleProtectPdf() {
 			userPassword: credentials.password,
 			ownerPassword: credentials.password
 		});
-		const filename = suggestFileName('protege', 'alto-protege.pdf');
+		const filename = suggestFileName(t('fileSuffixProtected'), `alto-${t('fileSuffixProtected')}.pdf`);
 		const saved = await saveNativeFile(filename, 'pdf', new Uint8Array(encrypted));
 		if (saved) setStatus(t('protectDone'));
 	} catch (error) {
@@ -15082,7 +15751,7 @@ async function handleCompressPdf() {
 		const bytes = new Uint8Array(compressed);
 		const reduction = Math.max(0, originalSize - bytes.length);
 		const percent = originalSize > 0 ? Math.round((reduction / originalSize) * 100) : 0;
-		const filename = suggestFileName('compresse', 'alto-compresse.pdf');
+		const filename = suggestFileName(t('fileSuffixCompressed'), `alto-${t('fileSuffixCompressed')}.pdf`);
 		const saved = await saveNativeFile(filename, 'pdf', bytes);
 		if (saved) {
 			const fmt = t('compressDone');
@@ -15245,7 +15914,7 @@ async function handleWatermark() {
 			color: hexToRgb(opts.color),
 			bold: opts.bold
 		});
-		const saved = await saveNativeFile(suggestFileName('filigrane'), 'pdf', new Uint8Array(out));
+		const saved = await saveNativeFile(suggestFileName(t('fileSuffixWatermarked')), 'pdf', new Uint8Array(out));
 		if (saved) setStatus(t('watermarkDone'));
 		else setStatus('');
 	} catch (error) {
@@ -15293,7 +15962,7 @@ async function handlePageNumbers() {
 			fontSize: opts.fontSize,
 			margin: opts.margin
 		});
-		const saved = await saveNativeFile(suggestFileName('numerote'), 'pdf', new Uint8Array(out));
+		const saved = await saveNativeFile(suggestFileName(t('fileSuffixNumbered')), 'pdf', new Uint8Array(out));
 		if (saved) setStatus(t('pageNumbersDone'));
 		else setStatus('');
 	} catch (error) {
@@ -15349,7 +16018,7 @@ async function handleCrop() {
 			right: opts.right,
 			bottom: opts.bottom
 		});
-		const saved = await saveNativeFile(suggestFileName('rogne'), 'pdf', new Uint8Array(out));
+		const saved = await saveNativeFile(suggestFileName(t('fileSuffixCropped')), 'pdf', new Uint8Array(out));
 		if (saved) setStatus(t('cropDone'));
 		else setStatus('');
 	} catch (error) {
@@ -15389,7 +16058,7 @@ async function handleAutoRedact() {
 			setStatus(t('autoRedactNone'));
 			return;
 		}
-		const saved = await saveNativeFile(suggestFileName('caviarde'), 'pdf', new Uint8Array(result.bytes));
+		const saved = await saveNativeFile(suggestFileName(t('fileSuffixRedacted')), 'pdf', new Uint8Array(result.bytes));
 		if (saved) {
 			const fmt = t('autoRedactDone');
 			setStatus(typeof fmt === 'function' ? fmt(result.count) : fmt);
@@ -15411,7 +16080,7 @@ async function handleFlatten() {
 		setStatus(t('processing'));
 		const bytes = await currentDocumentBytes();
 		const out = await invokeBytes('flatten_pdf', { bytes });
-		const saved = await saveNativeFile(suggestFileName('aplati'), 'pdf', new Uint8Array(out));
+		const saved = await saveNativeFile(suggestFileName(t('fileSuffixFlattened')), 'pdf', new Uint8Array(out));
 		if (saved) setStatus(t('flattenDone'));
 		else setStatus('');
 	} catch (error) {
@@ -15429,7 +16098,7 @@ async function handleSanitize() {
 		setStatus(t('processing'));
 		const bytes = await currentDocumentBytes();
 		const out = await invokeBytes('sanitize_pdf', { bytes });
-		const saved = await saveNativeFile(suggestFileName('nettoye'), 'pdf', new Uint8Array(out));
+		const saved = await saveNativeFile(suggestFileName(t('fileSuffixSanitized')), 'pdf', new Uint8Array(out));
 		if (saved) setStatus(t('sanitizeDone'));
 		else setStatus('');
 	} catch (error) {
@@ -15446,7 +16115,7 @@ async function handleRepairPdf() {
 	try {
 		setStatus(t('repairProcessing'));
 		const out = await invokeBytes('repair_pdf', { bytes: Array.from(state.fileBytes) });
-		const saved = await saveNativeFile(suggestFileName('repare'), 'pdf', new Uint8Array(out));
+		const saved = await saveNativeFile(suggestFileName(t('fileSuffixRepaired')), 'pdf', new Uint8Array(out));
 		if (saved) setStatus(t('repairDone'));
 		else setStatus('');
 	} catch (error) {
@@ -15464,7 +16133,7 @@ async function handleRemoveAnnotations() {
 		setStatus(t('processing'));
 		const bytes = await currentDocumentBytes();
 		const out = await invokeBytes('remove_annotations', { bytes });
-		const saved = await saveNativeFile(suggestFileName('sans-annotations'), 'pdf', new Uint8Array(out));
+		const saved = await saveNativeFile(suggestFileName(t('fileSuffixNoAnnotations')), 'pdf', new Uint8Array(out));
 		if (saved) setStatus(t('removeAnnotationsDone'));
 		else setStatus('');
 	} catch (error) {
@@ -15489,7 +16158,7 @@ async function handleRemoveBlankPages() {
 			return;
 		}
 		const saved = await saveNativeFile(
-			suggestFileName('sans-pages-blanches'),
+			suggestFileName(t('fileSuffixNoBlankPages')),
 			'pdf',
 			new Uint8Array(result.bytes)
 		);
@@ -15540,7 +16209,7 @@ async function handleSignPdf() {
 			location: opts.location ? opts.location : null,
 			contact: null
 		});
-		const saved = await saveNativeFile(suggestFileName('signe'), 'pdf', new Uint8Array(out));
+		const saved = await saveNativeFile(suggestFileName(t('fileSuffixSigned')), 'pdf', new Uint8Array(out));
 		if (saved) setStatus(t('signDone'));
 		else setStatus('');
 	} catch (error) {
@@ -15558,10 +16227,10 @@ async function handleOcrSearchable() {
 		setStatus(t('ocrLayerProcessing'));
 		const out = await invokeBytes('ocr_searchable_pdf', {
 			bytes: Array.from(state.fileBytes),
-			language: 'eng+fra'
+			language: ocrLanguages()
 		});
 		const saved = await saveNativeFile(
-			suggestFileName('recherchable'),
+			suggestFileName(t('fileSuffixSearchable')),
 			'pdf',
 			new Uint8Array(out)
 		);
@@ -15616,7 +16285,7 @@ async function handleUnlock() {
 			bytes: Array.from(state.fileBytes),
 			password: opts.password
 		});
-		const saved = await saveNativeFile(suggestFileName('deverrouille'), 'pdf', new Uint8Array(out));
+		const saved = await saveNativeFile(suggestFileName(t('fileSuffixUnlocked')), 'pdf', new Uint8Array(out));
 		if (saved) setStatus(t('unlockDone'));
 		else setStatus('');
 	} catch (error) {
@@ -15696,7 +16365,7 @@ async function handleBookmarks() {
 			setStatus(t('processing'));
 			const bytes = await currentDocumentBytes();
 			const out = await invokeBytes('set_bookmarks', { bytes, items });
-			const saved = await saveNativeFile(suggestFileName('marque-pages'), 'pdf', new Uint8Array(out));
+			const saved = await saveNativeFile(suggestFileName(t('fileSuffixBookmarks')), 'pdf', new Uint8Array(out));
 			if (saved) setStatus(t('bookmarksDone'));
 			else setStatus('');
 		} catch (error) {
@@ -16035,14 +16704,15 @@ function renderFitLabelSummary(fit) {
 	}
 	const percent = Math.round(fit.scale * 100);
 	const parts = [
-		`Document ${formatPrintMm(fit.sourceWidthPt)} × ${formatPrintMm(fit.sourceHeightPt)} mm,`,
-		percent >= 100 ? 'imprimé à 100 %' : `réduit à ${percent} %`,
-		`pour tenir sur ${formatPrintMm(fit.paperWidthPt)} × ${formatPrintMm(fit.paperHeightPt)} mm`
+		t(
+			'printFitSummary',
+			`${formatPrintMm(fit.sourceWidthPt)} × ${formatPrintMm(fit.sourceHeightPt)}`,
+			percent,
+			`${formatPrintMm(fit.paperWidthPt)} × ${formatPrintMm(fit.paperHeightPt)}`
+		)
 	];
 	if (fit.compactedGutters > 0) {
-		parts.push(
-			`· ${fit.compactedGutters} espace${fit.compactedGutters > 1 ? 's' : ''} vide${fit.compactedGutters > 1 ? 's' : ''} resserré${fit.compactedGutters > 1 ? 's' : ''}`
-		);
+		parts.push(t('printFitGaps', fit.compactedGutters));
 	}
 	summary.textContent = parts.join(' ');
 	summary.classList.remove('hidden');
@@ -16151,7 +16821,7 @@ function updatePrintAdvancedButton() {
 	if (elements.printAdvancedOpen) {
 		elements.printAdvancedOpen.disabled = available === 0;
 		elements.printAdvancedOpen.textContent =
-			count > 0 ? `Options avancées (${count})` : 'Options avancées';
+			count > 0 ? t('advancedOptionsCount', count) : t('advancedOptions');
 	}
 	if (elements.printLayoutFocus) {
 		elements.printLayoutFocus.disabled = available === 0;
@@ -16166,8 +16836,7 @@ function renderPrintAdvanced() {
 	if (!visible.length) {
 		const empty = document.createElement('p');
 		empty.className = 'print-advanced-empty';
-		empty.textContent =
-			'Cette imprimante n’expose aucun réglage supplémentaire via CUPS.';
+		empty.textContent = t('printerNoOptions');
 		body.appendChild(empty);
 		return;
 	}
@@ -16180,9 +16849,7 @@ function renderPrintAdvanced() {
 		for (const choice of option.choices) {
 			const item = document.createElement('option');
 			item.value = choice.id;
-			item.textContent = choice.isDefault
-				? `${choice.label} (défaut)`
-				: choice.label;
+			item.textContent = choice.isDefault ? `${choice.label}${t('defaultSuffix')}` : choice.label;
 			select.appendChild(item);
 		}
 		const fallback =
@@ -16264,7 +16931,7 @@ async function getPrintPageSizePts(pageNumber) {
 
 function formatPrintMm(pts) {
 	const mm = (pts * 25.4) / 72;
-	return mm.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
+	return mm.toLocaleString(formatLocale(), { maximumFractionDigits: 2 });
 }
 
 /**
@@ -16380,7 +17047,7 @@ async function renderPrintPreview() {
 	const total = state.pdf.numPages || 1;
 	_printPreviewPage = Math.max(1, Math.min(total, _printPreviewPage || 1));
 	if (elements.printPreviewPage) {
-		elements.printPreviewPage.textContent = `Page ${_printPreviewPage} sur ${total}`;
+		elements.printPreviewPage.textContent = t('printPageOf', _printPreviewPage, total);
 	}
 	if (elements.printPreviewPrev) elements.printPreviewPrev.disabled = _printPreviewPage <= 1;
 	if (elements.printPreviewNext) elements.printPreviewNext.disabled = _printPreviewPage >= total;
@@ -16420,7 +17087,7 @@ async function renderPrintPreview() {
 			elements.printDimsLabel.textContent = `${formatPrintMm(base.width)} × ${formatPrintMm(base.height)} mm`;
 		}
 		if (elements.printScaleLabel) {
-			elements.printScaleLabel.textContent = `Échelle : ${Math.round(placement.scale * 100)} %`;
+			elements.printScaleLabel.textContent = t('printScale', Math.round(placement.scale * 100));
 		}
 
 		const maxWidth = 360;
@@ -16504,7 +17171,7 @@ async function drawFittedLabelPreview(canvas, fit, token) {
 		elements.printDimsLabel.textContent = `${formatPrintMm(base.width)} × ${formatPrintMm(base.height)} mm`;
 	}
 	if (elements.printScaleLabel) {
-		elements.printScaleLabel.textContent = `Échelle : ${Math.round(fit.scale * 100)} %`;
+		elements.printScaleLabel.textContent = t('printScale', Math.round(fit.scale * 100));
 	}
 	renderFitLabelSummary(fit);
 }
@@ -16554,7 +17221,7 @@ async function openPrintModal() {
 		return;
 	}
 	if (!window.__TAURI__) {
-		setStatus('Impression disponible dans l’app desktop.', 'error');
+		setStatus(t('printDesktopOnly'), 'error');
 		return;
 	}
 	setPrintError('');
@@ -16583,8 +17250,8 @@ async function openPrintModal() {
 		for (const printer of list) {
 			const opt = document.createElement('option');
 			opt.value = printer.name;
-			const ready = printer.isReady === false ? ' · hors ligne' : '';
-			opt.textContent = `${printer.displayName || printer.name}${printer.isDefault ? ' (défaut)' : ''}${ready}`;
+			const ready = printer.isReady === false ? t('printerOffline') : '';
+			opt.textContent = `${printer.displayName || printer.name}${printer.isDefault ? t('defaultSuffix') : ''}${ready}`;
 			elements.printPrinter.appendChild(opt);
 		}
 		// Dernière imprimante utilisée d’abord ; défaut système seulement si
@@ -16896,19 +17563,15 @@ function formatPdfVersionLabel(version) {
 }
 
 function formatFileSizeAcrobat(bytes) {
-	const size = Number(bytes) || 0;
-	const mo = size / (1024 * 1024);
-	const moLabel = mo.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-	const octets = Math.round(size).toLocaleString('de-DE');
-	return `${moLabel} Mo (${octets} octets)`;
+	return t('fileSizeLabel', Number(bytes) || 0);
 }
 
 function yesNo(value) {
-	return value ? 'Oui' : 'Non';
+	return value ? t('yes') : t('no');
 }
 
 function allowedLabel(allowed) {
-	return allowed ? 'Autorisée' : 'Non autorisée';
+	return allowed ? t('allowed') : t('notAllowed');
 }
 
 function setPropsTab(tabId) {
@@ -16954,7 +17617,7 @@ function showPropertiesModal(props, pageFormat) {
 	setText('props-tagged', yesNo(Boolean(props.tagged)));
 	setText('props-linearized', yesNo(Boolean(props.linearized)));
 
-	setText('props-security-method', props.securityMethod || (props.encrypted ? 'Mot de passe' : 'Aucune'));
+	setText('props-security-method', props.securityMethod || (props.encrypted ? t('securityPassword') : t('securityNone')));
 	setText('props-perm-print', allowedLabel(Boolean(props.canPrint)));
 	setText('props-perm-modify', allowedLabel(Boolean(props.canModify)));
 	setText('props-perm-assemble', allowedLabel(Boolean(props.canModify)));
@@ -16963,24 +17626,24 @@ function showPropertiesModal(props, pageFormat) {
 	setText('props-perm-forms', allowedLabel(Boolean(props.canAnnotate)));
 
 	const layoutMap = {
-		SinglePage: 'Une seule page',
-		OneColumn: 'Une colonne',
-		TwoColumnLeft: 'Deux colonnes (gauche)',
-		TwoColumnRight: 'Deux colonnes (droite)',
-		TwoPageLeft: 'Deux pages (gauche)',
-		TwoPageRight: 'Deux pages (droite)'
+		SinglePage: t('layoutSinglePage'),
+		OneColumn: t('layoutOneColumn'),
+		TwoColumnLeft: t('layoutTwoColumnLeft'),
+		TwoColumnRight: t('layoutTwoColumnRight'),
+		TwoPageLeft: t('layoutTwoPageLeft'),
+		TwoPageRight: t('layoutTwoPageRight')
 	};
 	const modeMap = {
-		UseNone: 'Page seule',
-		UseOutlines: 'Signets et page',
-		UseThumbs: 'Vignettes et page',
-		FullScreen: 'Plein écran',
-		UseOC: 'Calques et page',
-		UseAttachments: 'Pièces jointes et page'
+		UseNone: t('modeUseNone'),
+		UseOutlines: t('modeUseOutlines'),
+		UseThumbs: t('modeUseThumbs'),
+		FullScreen: t('modeFullScreen'),
+		UseOC: t('modeUseOC'),
+		UseAttachments: t('modeUseAttachments')
 	};
-	setText('props-page-layout', layoutMap[props.pageLayout] || props.pageLayout || 'Par défaut');
-	setText('props-page-mode', modeMap[props.pageMode] || props.pageMode || 'Par défaut');
-	setText('props-trapped', props.trapped || 'Non spécifié');
+	setText('props-page-layout', layoutMap[props.pageLayout] || props.pageLayout || t('byDefault'));
+	setText('props-page-mode', modeMap[props.pageMode] || props.pageMode || t('byDefault'));
+	setText('props-trapped', props.trapped || t('notSpecified'));
 
 	const fontsList = document.getElementById('props-fonts-list');
 	if (fontsList) {
@@ -16988,17 +17651,17 @@ function showPropertiesModal(props, pageFormat) {
 		const fonts = Array.isArray(props.fonts) ? props.fonts : [];
 		if (!fonts.length) {
 			const empty = document.createElement('li');
-			empty.textContent = 'Aucune police détectée dans ce document.';
+			empty.textContent = t('noFontsInDocument');
 			fontsList.append(empty);
 		} else {
 			for (const font of fonts) {
 				const li = document.createElement('li');
 				const name = document.createElement('span');
 				name.className = 'font-name';
-				name.textContent = font.name || 'Sans nom';
+				name.textContent = font.name || t('untitledFont');
 				const meta = document.createElement('span');
 				meta.className = 'font-meta';
-				const bits = [font.subtype || null, font.encoding || null, font.embedded ? 'Incorporée' : 'Non incorporée'].filter(Boolean);
+				const bits = [font.subtype || null, font.encoding || null, font.embedded ? t('fontEmbedded') : t('fontNotEmbedded')].filter(Boolean);
 				meta.textContent = bits.join(' · ');
 				li.append(name, meta);
 				fontsList.append(li);
@@ -17064,7 +17727,7 @@ async function applyPropertiesModal() {
 			subject,
 			keywords
 		});
-		if (!bytes?.length) throw new Error('Métadonnées non enregistrées.');
+		if (!bytes?.length) throw new Error(t('metadataNotSaved'));
 		state.fileBytes = bytes;
 		const tab = currentTab();
 		if (tab) tab.fileBytes = bytes;
@@ -17076,7 +17739,7 @@ async function applyPropertiesModal() {
 		invalidateAllPages();
 		await renderCurrentPage();
 		closePropertiesModal();
-		setStatus('Métadonnées mises à jour.', 'info');
+		setStatus(t('metadataUpdated'), 'info');
 	} catch (error) {
 		console.error(error);
 		setStatus(error instanceof Error ? error.message : String(error), 'error');
@@ -17099,7 +17762,7 @@ function formatPdfDate(raw) {
 		)
 	);
 	if (isNaN(date.getTime())) return raw;
-	return date.toLocaleString(currentLocale() === 'fr' ? 'fr-FR' : 'en-US');
+	return date.toLocaleString(formatLocale());
 }
 
 const RECENT_FILES_KEY = 'alto-recent-files';
@@ -17364,13 +18027,12 @@ function profileInitials() {
 function formatRecentDate(timestamp) {
 	if (!timestamp) return '';
 	const date = new Date(timestamp);
-	const fr = currentLocale() === 'fr';
 	const now = new Date();
 	const sameDay = date.toDateString() === now.toDateString();
 	if (sameDay) {
-		return date.toLocaleTimeString(fr ? 'fr-FR' : 'en-US', { hour: '2-digit', minute: '2-digit' });
+		return date.toLocaleTimeString(formatLocale(), { hour: '2-digit', minute: '2-digit' });
 	}
-	return date.toLocaleDateString(fr ? 'fr-FR' : 'en-US', { day: 'numeric', month: 'short' });
+	return date.toLocaleDateString(formatLocale(), { day: 'numeric', month: 'short' });
 }
 
 function refreshProfileAvatar() {
@@ -17951,26 +18613,27 @@ function buildExportAuditReport() {
 		const strategy = exportStrategyForPage(pageNumber);
 		strategies.push(strategy);
 		if (strategy.mode === 'flatten_page') {
-			warnings.push(`Page ${pageNumber} aplatie (${strategy.reason}) : texte non sélectionnable sur cette page.`);
+			warnings.push(t('auditFlattenedPage', pageNumber, strategy.reason));
 		}
 	}
 	for (const block of state.editBlocks) {
 		const dirty = block.hidden || block.added || isBlockDirty(block);
 		if (!dirty) continue;
 		if (block.critical) {
-			const action = block.hidden ? 'masqué/supprimé' : 'modifié';
-			warnings.push(`Champ critique ${fieldLabel(block.fieldKind)} ${action} page ${block.page}.`);
+			warnings.push(
+				t(block.hidden ? 'auditCriticalHidden' : 'auditCriticalModified', fieldLabel(block.fieldKind), block.page)
+			);
 		}
 		if (block.source === 'ocr' && Number(block.confidence ?? 100) < 70) {
-			warnings.push(`Bloc OCR faible confiance exporté page ${block.page}.`);
+			warnings.push(t('auditOcrLowConfidence', block.page));
 		} else if (block.source === 'ocr' && canVectorEditBlock(block)) {
-			warnings.push(`Bloc OCR page ${block.page} exporté en couche texte PDF native.`);
+			warnings.push(t('auditOcrNativeLayer', block.page));
 		}
 	}
 	const totalsChanged = state.editBlocks.some((block) => block.fieldKind === 'total' && isBlockDirty(block));
 	const taxChanged = state.editBlocks.some((block) => block.fieldKind === 'tax' && isBlockDirty(block));
 	if (totalsChanged && !taxChanged) {
-		warnings.push('Total modifié sans TVA associée modifiée.');
+		warnings.push(t('auditTotalWithoutTax'));
 	}
 	return {
 		warnings: Array.from(new Set(warnings)).slice(0, 8),
@@ -17981,11 +18644,11 @@ function buildExportAuditReport() {
 function confirmExportAudit(report) {
 	if (!report?.warnings?.length) return true;
 	const message = [
-		'Audit avant export :',
+		t('auditTitle'),
 		'',
 		...report.warnings.map((warning) => `- ${warning}`),
 		'',
-		'Continuer quand même ?'
+		t('auditContinue')
 	].join('\n');
 	return window.confirm(message);
 }
@@ -18149,7 +18812,7 @@ async function exportEditedPdfBytes(options = {}) {
 	if (options.audit) {
 		const report = buildExportAuditReport();
 		if (!confirmExportAudit(report)) {
-			throw new Error('Export annulé après audit.');
+			throw new Error(t('auditCancelled'));
 		}
 	}
 	await ensureEditorFontsReady();
@@ -18594,7 +19257,7 @@ function formatHistoryTime(ts) {
 		date.getFullYear() === now.getFullYear() &&
 		date.getMonth() === now.getMonth() &&
 		date.getDate() === now.getDate();
-	const locale = currentLocale() === 'fr' ? 'fr-FR' : 'en-US';
+	const locale = formatLocale();
 	const time = date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 	if (sameDay) return time;
 	return `${date.toLocaleDateString(locale, { day: 'numeric', month: 'short' })} ${time}`;
@@ -19064,7 +19727,7 @@ async function renderFormsPanel() {
 			input.value = parseFlexibleDateToIso(String(value ?? ''), field.dateFormat);
 			input.disabled = field.readOnly;
 			input.addEventListener('change', () =>
-				setFormFieldValue(field, isoToDate(input.value, DATE_DISPLAY_FORMAT))
+				setFormFieldValue(field, isoToDate(input.value, field.dateFormat))
 			);
 			row.append(input);
 		} else if (field.kind === 'checkbox') {
@@ -19528,7 +20191,7 @@ async function openConvertColorsModal() {
 	openPrepressPanel();
 	const statusEl = elements.convertColorsProfileStatus;
 	if (statusEl) {
-		statusEl.textContent = 'Recherche du profil ICC…';
+		statusEl.textContent = t('searchingIccProfile');
 		statusEl.dataset.tone = '';
 	}
 	elements.convertColorsBackdrop?.classList.remove('hidden');
@@ -19537,12 +20200,11 @@ async function openConvertColorsModal() {
 		const info = await invokeCommand('fogra39_profile_status');
 		if (statusEl) {
 			if (info) {
-				statusEl.textContent = `Profil trouvé : ${info}`;
+				statusEl.textContent = t('iccProfileFound', info);
 				statusEl.dataset.tone = 'ok';
 				elements.convertColorsOk.disabled = false;
 			} else {
-				statusEl.textContent =
-					'Profil Coated FOGRA39 introuvable. Installe Acrobat (profil Adobe) ou place ISOcoated_v2_eci.icc dans ~/Library/ColorSync/Profiles/.';
+				statusEl.textContent = t('iccProfileMissing');
 				statusEl.dataset.tone = 'error';
 				elements.convertColorsOk.disabled = true;
 			}
@@ -19574,7 +20236,7 @@ async function applyConvertColorsFogra39() {
 			bytes: Array.from(state.fileBytes),
 			iccPath: null
 		});
-		if (!bytes?.length) throw new Error('Conversion sans résultat.');
+		if (!bytes?.length) throw new Error(t('convertNoResult'));
 		state.fileBytes = bytes;
 		const tab = currentTab();
 		if (tab) tab.fileBytes = bytes;
@@ -20062,13 +20724,11 @@ function updateCreateSourceUi() {
 	elements.createSources.querySelectorAll('[data-create-source]').forEach((button) => {
 		button.classList.toggle('active', button.dataset.createSource === state.createSource);
 	});
-	if (state.createSource === 'blank') {
-		elements.createPick.style.display = 'none';
-		elements.createHint.textContent = 'Une page A4 blanche sera créée.';
-	} else {
-		elements.createPick.style.display = '';
-		elements.createHint.textContent = 'Choisir parmi .pdf pour le moment (autres formats à venir).';
-	}
+	const blank = state.createSource === 'blank';
+	elements.createPick.style.display = blank ? 'none' : '';
+	// data-i18n garde le bon libellé si localizeUi() repasse (changement de langue).
+	elements.createHint.dataset.i18n = blank ? 'createHintBlank' : 'createHintFile';
+	elements.createHint.textContent = t(elements.createHint.dataset.i18n);
 }
 
 async function confirmCreate() {
@@ -20080,12 +20740,12 @@ async function confirmCreate() {
 		try {
 			const bytes = await invokeBytes('create_blank_pdf');
 			const blob = new Blob([new Uint8Array(bytes)], { type: 'application/pdf' });
-			const file = new File([blob], 'Nouveau document.pdf', { type: 'application/pdf' });
+			const file = new File([blob], t('newDocumentFileName'), { type: 'application/pdf' });
 			closeCreateView();
 			await openFile(file);
 		} catch (error) {
 			console.error(error);
-			setStatus(error instanceof Error ? error.message : 'Création impossible.', 'error');
+			setStatus(error instanceof Error ? error.message : t('createFailed'), 'error');
 		}
 	}
 }
@@ -20881,7 +21541,7 @@ elements.saveChangesFilename.addEventListener('keydown', (event) => {
 elements.propertiesOkButton?.addEventListener('click', () => void applyPropertiesModal());
 elements.propertiesCancelButton?.addEventListener('click', closePropertiesModal);
 elements.propertiesHelpButton?.addEventListener('click', () => {
-	setStatus('Aide : métadonnées du PDF (titre, auteur, sécurité, polices…).', 'info');
+	setStatus(t('propertiesHelp'), 'info');
 });
 elements.propertiesBackdrop?.addEventListener('click', closePropertiesModal);
 elements.prepressBack?.addEventListener('click', closePrepressPanel);

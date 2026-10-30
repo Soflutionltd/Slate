@@ -39,10 +39,7 @@ fn find_ghostscript() -> Result<PathBuf, String> {
             }
         }
     }
-    Err(
-        "Ghostscript (gs) est requis pour convertir les couleurs. Installe-le via Homebrew : brew install ghostscript."
-            .into(),
-    )
+    Err(crate::i18n::msg("err.ghostscriptMissing", &[]))
 }
 
 /// Chemins connus pour Coated FOGRA39 / ISO Coated v2 (ECI).
@@ -88,7 +85,10 @@ fn resolve_fogra39_profile(explicit: Option<&str>) -> Result<(PathBuf, String), 
                 "Coated FOGRA39 (ISO 12647-2:2004)".into(),
             ));
         }
-        return Err(format!("Profil ICC introuvable : {path}"));
+        return Err(crate::i18n::msg(
+            "err.iccProfileNotFound",
+            &[("path", &path)],
+        ));
     }
     for candidate in fogra39_candidates() {
         if candidate.is_file() {
@@ -118,7 +118,7 @@ pub fn convert_to_fogra39(
     icc_path: Option<&str>,
 ) -> Result<ColorConvertResult, String> {
     if !bytes.starts_with(b"%PDF-") {
-        return Err("Le fichier n'est pas un PDF valide.".into());
+        return Err(crate::i18n::msg("err.notValidPdf", &[]));
     }
     let gs = find_ghostscript()?;
     let (profile, profile_label) = resolve_fogra39_profile(icc_path)?;
@@ -131,24 +131,23 @@ pub fn convert_to_fogra39(
             .map(|d| d.as_millis())
             .unwrap_or(0)
     ));
-    fs::create_dir_all(&tmp).map_err(|e| format!("Impossible de créer le dossier temporaire : {e}"))?;
+    fs::create_dir_all(&tmp).map_err(|e| crate::i18n::msg("err.tempDir", &[("e", &e)]))?;
     let input = tmp.join("input.pdf");
     let output = tmp.join("output.pdf");
     // Copie locale : avec -dSAFER, gs ne peut pas lire le profil Adobe hors sandbox.
     let local_icc = tmp.join("fogra39.icc");
-    fs::copy(&profile, &local_icc)
-        .map_err(|e| format!("Impossible de préparer le profil ICC : {e}"))?;
-    fs::write(&input, bytes).map_err(|e| format!("Écriture PDF temporaire impossible : {e}"))?;
+    fs::copy(&profile, &local_icc).map_err(|e| crate::i18n::msg("err.prepareIcc", &[("e", &e)]))?;
+    fs::write(&input, bytes).map_err(|e| crate::i18n::msg("err.writeTempPdf", &[("e", &e)]))?;
 
     let profile_str = local_icc
         .to_str()
-        .ok_or_else(|| "Chemin ICC temporaire invalide.".to_string())?;
+        .ok_or_else(|| crate::i18n::msg("err.invalidTempIccPath", &[]))?;
     let default_cmyk = format!("-sDefaultCMYKProfile={profile_str}");
     let output_icc = format!("-sOutputICCProfile={profile_str}");
     let output_file = format!("-sOutputFile={}", output.display());
     let input_str = input
         .to_str()
-        .ok_or_else(|| "Chemin PDF temporaire invalide.".to_string())?
+        .ok_or_else(|| crate::i18n::msg("err.invalidTempPdfPath", &[]))?
         .to_string();
 
     let status = Command::new(&gs)
@@ -168,25 +167,25 @@ pub fn convert_to_fogra39(
         .arg(&output_file)
         .arg(&input_str)
         .output()
-        .map_err(|e| format!("Échec du lancement de Ghostscript : {e}"))?;
+        .map_err(|e| crate::i18n::msg("err.ghostscriptLaunch", &[("e", &e)]))?;
 
     if !status.status.success() {
         let stderr = String::from_utf8_lossy(&status.stderr);
         let _ = fs::remove_dir_all(&tmp);
-        return Err(format!(
-            "Ghostscript a échoué (conversion FOGRA39).\n{}",
-            stderr.chars().take(800).collect::<String>()
+        return Err(crate::i18n::msg(
+            "err.ghostscriptFailed",
+            &[("details", &stderr.chars().take(800).collect::<String>())],
         ));
     }
 
     let out_bytes = fs::read(&output).map_err(|e| {
         let _ = fs::remove_dir_all(&tmp);
-        format!("Lecture du PDF converti impossible : {e}")
+        crate::i18n::msg("err.readConvertedPdf", &[("e", &e)])
     })?;
     let _ = fs::remove_dir_all(&tmp);
 
     if out_bytes.len() < 32 || !out_bytes.starts_with(b"%PDF-") {
-        return Err("Ghostscript n'a pas produit un PDF valide.".into());
+        return Err(crate::i18n::msg("err.ghostscriptInvalidOutput", &[]));
     }
 
     Ok(ColorConvertResult {
