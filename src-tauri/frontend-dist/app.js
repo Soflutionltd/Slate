@@ -5734,9 +5734,13 @@ function dateFormatOf(widget) {
 		const match = script.match(/AFDate_(?:Keystroke|Format)(?:Ex)?\(['"]([^'"]+)['"]\)/i);
 		if (match) return match[1];
 	}
+	// Pas de format déclaré : un libellé explicite fait foi, sinon '' (la région
+	// décide, voir dateDisplayFormat).
 	const hint = `${widget?.alternativeText || ''} ${widget?.fieldName || ''}`;
-	if (/jj\s*\/\s*mm\s*\/\s*aaaa/i.test(hint)) return 'dd/mm/yyyy';
-	return 'dd/mm/yyyy';
+	if (/jj\s*\/\s*mm\s*\/\s*aaaa|dd\s*\/\s*mm\s*\/\s*yyyy/i.test(hint)) return 'dd/mm/yyyy';
+	if (/mm\s*\/\s*dd\s*\/\s*yyyy/i.test(hint)) return 'mm/dd/yyyy';
+	if (/yyyy\s*-\s*mm\s*-\s*dd|aaaa\s*-\s*mm\s*-\s*jj/i.test(hint)) return 'yyyy-mm-dd';
+	return '';
 }
 
 function isDateWidget(widget) {
@@ -5744,7 +5748,7 @@ function isDateWidget(widget) {
 	if (widget.datetimeType === 'date' || widget.datetimeType === 'datetime-local') return true;
 	if (dateActionScripts(widget).some((script) => /AFDate_/i.test(script))) return true;
 	const hint = `${widget.alternativeText || ''} ${widget.fieldName || ''}`;
-	if (/jj\s*\/\s*mm\s*\/\s*aaaa|dd\s*\/\s*mm\s*\/\s*yyyy/i.test(hint)) return true;
+	if (/jj\s*\/\s*mm\s*\/\s*aaaa|dd\s*\/\s*mm\s*\/\s*yyyy|mm\s*\/\s*dd\s*\/\s*yyyy/i.test(hint)) return true;
 	return /^date([_-]|$)/i.test(widget.fieldName || '');
 }
 
@@ -5756,21 +5760,62 @@ function isDateWidget(widget) {
 // « d/m/26 » au clic dans le calendrier, masqué ensuite en « 26/ ».
 const DATE_FORMAT_TOKEN_RE = /yyyy|yy|mmmm|mmm|mm|m|dd|d|HH|H|hh|h|MM|tt|t/g;
 const DATE_TIME_TOKENS = new Set(['HH', 'H', 'hh', 'h', 'MM', 'tt', 't']);
-// Affichage / stockage : toujours jj/mm/aaaa (05/07/2026). Le format Acrobat
-// du PDF (souvent d/m/yy) ne sert plus qu'à lire une valeur déjà saisie.
-const DATE_DISPLAY_FORMAT = 'dd/mm/yyyy';
 
-function parseFlexibleDateToIso(value, acrobatFormat) {
+// Ordre et séparateurs de date de la région (en-US → mm/dd/yyyy, en-AU →
+// dd/mm/yyyy, de → dd.mm.yyyy, ja → yyyy/mm/dd), d'après les données CLDR d'Intl.
+function localeDateFormat() {
+	try {
+		const parts = new Intl.DateTimeFormat(formatLocale(), {
+			day: '2-digit',
+			month: '2-digit',
+			year: 'numeric'
+		}).formatToParts(new Date(2026, 2, 5));
+		const tokens = { day: 'dd', month: 'mm', year: 'yyyy' };
+		// Lettres retirées des séparateurs : elles seraient lues comme des jetons.
+		const pattern = parts
+			.map((part) => tokens[part.type] ?? (part.type === 'literal' ? part.value.replace(/[A-Za-z]/g, '') : ''))
+			.join('');
+		if (pattern.includes('dd') && pattern.includes('mm') && pattern.includes('yyyy')) return pattern;
+	} catch {
+		/* Intl indisponible : repli ci-dessous. */
+	}
+	return 'dd/mm/yyyy';
+}
+
+// Format d'affichage / stockage d'un champ date : ordre et séparateurs du
+// format déclaré par le PDF (c'est ce qu'attend l'auteur du formulaire), sinon
+// ceux de la région. Mois numérique et jour sur deux chiffres, année sur quatre
+// (« d/m/yy » → « dd/mm/yyyy », 05/07/2026 ; « mmm d, yy » → « mmm d, yyyy ») ;
+// la partie heure est ignorée.
+function dateDisplayFormat(declaredFormat) {
+	const tokens = dateFormatTokens(declaredFormat);
+	const namedMonth = tokens.some((entry) => entry.token === 'mmm' || entry.token === 'mmmm');
+	const widen = namedMonth ? { yy: 'yyyy' } : { d: 'dd', m: 'mm', yy: 'yyyy' };
+	let out = '';
+	let pendingLiteral = '';
+	for (const entry of tokens) {
+		if (entry.literal) {
+			pendingLiteral += entry.literal;
+			continue;
+		}
+		if (DATE_TIME_TOKENS.has(entry.token)) break;
+		out += pendingLiteral + (widen[entry.token] ?? entry.token);
+		pendingLiteral = '';
+	}
+	return out || localeDateFormat();
+}
+
+function parseFlexibleDateToIso(value, declaredFormat) {
 	return (
-		dateToIso(value, DATE_DISPLAY_FORMAT) ||
-		dateToIso(value, acrobatFormat) ||
+		dateToIso(value, dateDisplayFormat(declaredFormat)) ||
+		(declaredFormat ? dateToIso(value, declaredFormat) : '') ||
 		''
 	);
 }
 
 function normalizeDateFormat(format) {
 	const raw = String(format || '').trim();
-	return raw || 'dd/mm/yyyy';
+	return raw || localeDateFormat();
 }
 
 function dateFormatTokens(format) {
@@ -5988,7 +6033,7 @@ function caretPosAfterDateDigits(formatted, count) {
 		seen += 1;
 		if (seen < count) continue;
 		let pos = i + 1;
-		while (pos < formatted.length && formatted[pos] === '/') pos += 1;
+		while (pos < formatted.length && !/\d/.test(formatted[pos])) pos += 1;
 		return pos;
 	}
 	return formatted.length;
@@ -6218,7 +6263,7 @@ function ensureSignatureHitTarget(container, widget, viewport) {
 let _dateCal = {
 	input: null,
 	section: null,
-	format: 'dd/mm/yyyy',
+	format: '',
 	commit: null,
 	view: new Date()
 };
@@ -6420,7 +6465,7 @@ function bindDateWidget(container, widget) {
 	const input = section?.querySelector('input:not(.form-date-picker)');
 	if (!input) return;
 	const acrobatFormat = dateFormatOf(widget);
-	const format = DATE_DISPLAY_FORMAT;
+	const format = dateDisplayFormat(acrobatFormat);
 	const stored = formStorage()?.getRawValue(widget.id)?.value ?? widget.fieldValue ?? input.value;
 	const formatted =
 		isoToDate(parseFlexibleDateToIso(String(stored ?? ''), acrobatFormat), format) ||
@@ -6503,7 +6548,7 @@ function bindDateWidget(container, widget) {
 		if (event.key !== 'Backspace') return;
 		const start = input.selectionStart ?? 0;
 		const end = input.selectionEnd ?? 0;
-		if (start !== end || start === 0 || input.value[start - 1] !== '/') return;
+		if (start !== end || start === 0 || /\d/.test(input.value[start - 1])) return;
 		event.preventDefault();
 		const digits = dateDigits(input.value);
 		const before = dateDigits(input.value.slice(0, start)).length;
@@ -6874,7 +6919,7 @@ async function collectFormFields() {
 					readOnly: Boolean(widget.readOnly),
 					widgets: [],
 					options: Array.isArray(widget.options) ? widget.options : [],
-					dateFormat: kind === 'date' ? DATE_DISPLAY_FORMAT : null
+					dateFormat: kind === 'date' ? dateDisplayFormat(dateFormatOf(widget)) : null
 				};
 				byName.set(widget.fieldName, field);
 			}
@@ -19682,7 +19727,7 @@ async function renderFormsPanel() {
 			input.value = parseFlexibleDateToIso(String(value ?? ''), field.dateFormat);
 			input.disabled = field.readOnly;
 			input.addEventListener('change', () =>
-				setFormFieldValue(field, isoToDate(input.value, DATE_DISPLAY_FORMAT))
+				setFormFieldValue(field, isoToDate(input.value, field.dateFormat))
 			);
 			row.append(input);
 		} else if (field.kind === 'checkbox') {
