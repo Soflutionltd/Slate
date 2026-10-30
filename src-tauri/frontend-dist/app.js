@@ -4293,27 +4293,36 @@ function appendAiBubble(role, text) {
 }
 
 async function buildAiSystemPrompt() {
+	// Consignes en anglais (langue de travail du modèle) ; la réponse suit la
+	// langue de l'utilisateur, avec la langue de l'interface comme défaut.
+	let uiLanguage = currentLocale();
+	try {
+		uiLanguage = new Intl.DisplayNames(['en'], { type: 'language' }).of(uiLanguage) || uiLanguage;
+	} catch {
+		/* Intl.DisplayNames indisponible : on garde le code de langue. */
+	}
 	const lines = [
-		"Tu es l'assistant intégré de Slate, un éditeur PDF. Tu réponds en français, de façon concise.",
-		"Tu peux proposer des modifications du document. Pour cela, termine ta réponse par un bloc de code délimité ```alto-actions contenant un tableau JSON d'actions.",
-		'Actions disponibles :',
-		'- {"action":"replace_text","find":"texte exact actuel","replace":"nouveau texte","page":N}',
-		'- {"action":"redact","find":"texte à masquer","page":N}',
+		'You are the assistant built into Slate, a PDF editor. Be concise.',
+		`Reply in the language of the user's message. If it is unclear, reply in ${uiLanguage}.`,
+		'You can propose document changes. To do so, end your reply with a fenced ```alto-actions code block containing a JSON array of actions.',
+		'Available actions:',
+		'- {"action":"replace_text","find":"exact current text","replace":"new text","page":N}',
+		'- {"action":"redact","find":"text to redact","page":N}',
 		'- {"action":"rotate_page","page":N,"angle":90|180|-90}',
 		'- {"action":"delete_page","page":N}',
 		'- {"action":"goto_page","page":N}',
-		"\"page\" est optionnel pour replace_text/redact (défaut: page courante). N'invente jamais un texte qui n'existe pas dans le document. Si aucune modification n'est demandée, ne mets pas de bloc d'actions."
+		'"page" is optional for replace_text/redact (default: current page). Never invent text that is not in the document. If no change is requested, do not include an actions block.'
 	];
 	if (state.pdf) {
-		lines.push(`\nDocument : « ${state.fileName} », ${state.pdf.numPages} pages, page courante ${state.page}.`);
+		lines.push(`\nDocument: "${state.fileName}", ${state.pdf.numPages} pages, current page ${state.page}.`);
 		try {
 			const text = await extractPageText(state.page);
-			if (text) lines.push(`Texte de la page ${state.page} :\n"""${text.slice(0, 4000)}"""`);
+			if (text) lines.push(`Text of page ${state.page}:\n"""${text.slice(0, 4000)}"""`);
 		} catch (_err) {
 			/* noop */
 		}
 	} else {
-		lines.push('\nAucun document ouvert actuellement.');
+		lines.push('\nNo document is currently open.');
 	}
 	return lines.join('\n');
 }
