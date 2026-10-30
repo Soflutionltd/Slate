@@ -10,7 +10,7 @@ const _FRONTEND_FINGERPRINT: &str =
     include_str!(concat!(env!("OUT_DIR"), "/frontend_fingerprint.txt"));
 
 use sofdocs_desktop::{
-    llm, ocr, pdf_compress, pdf_edit, pdf_engine, pdf_forms, pdf_ops, pdf_sign, pdf_tools,
+    i18n, llm, ocr, pdf_compress, pdf_edit, pdf_engine, pdf_forms, pdf_ops, pdf_sign, pdf_tools,
     system_fonts,
 };
 
@@ -1551,21 +1551,10 @@ fn windows_reg_query(key: &str, value_name: &str) -> Option<String> {
     None
 }
 
-/// Langue pour les libellés de dialogues fichier (filtres). Sur macOS, suit
-/// le réglage Slate persisté ; sinon LANG/LC_ALL.
+/// Langue pour les libellés de dialogues fichier (filtres) : réglage Slate,
+/// sinon langues préférées du système.
 fn dialog_ui_is_french() -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        return mac_print::effective_ui_language().starts_with("fr");
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let locale = std::env::var("LANG")
-            .or_else(|_| std::env::var("LC_ALL"))
-            .unwrap_or_default()
-            .to_lowercase();
-        locale.starts_with("fr")
-    }
+    i18n::ui_language() == "fr"
 }
 
 fn dialog_filter_pdf() -> &'static str {
@@ -1725,20 +1714,14 @@ fn hide_app(app: tauri::AppHandle) -> Result<(), String> {
     }
 }
 
-/// Force la langue des panneaux et menus natifs macOS (impression, enregistrer…)
-/// pour qu'ils suivent le réglage de langue de Slate. Persiste sur disque et
-/// écrit `AppleLanguages` ; AppKit applique pleinement au (re)lancement.
-/// Passer "auto"/"" suit le système.
+/// Aligne l'UI native sur le réglage de langue de Slate ("auto" suit le
+/// système) : persiste le réglage et, sur macOS, règle `AppleLanguages` pour
+/// les panneaux et menus AppKit, appliqué pleinement au prochain lancement.
 #[tauri::command]
 fn set_native_language(lang: String) -> Result<(), String> {
+    i18n::persist_setting(&lang);
     #[cfg(target_os = "macos")]
-    {
-        mac_print::set_apple_languages(&lang);
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = lang;
-    }
+    mac_print::apply_persisted_apple_languages();
     Ok(())
 }
 
@@ -2167,6 +2150,12 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // Langues et région système, connues du WebView avant le premier rendu.
+        .plugin(
+            tauri::plugin::Builder::<tauri::Wry>::new("slate-locale")
+                .js_init_script(i18n::js_init_script())
+                .build(),
+        )
         .manage(PendingOpens::default())
         .manage(PendingPrints::default())
         .manage(PendingDetachedTabs::default())

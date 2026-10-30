@@ -977,7 +977,7 @@ const translations = {
 		untitledFont: 'Unnamed',
 		fontEmbedded: 'Embedded',
 		fontNotEmbedded: 'Not embedded',
-		fileSizeLabel: (size) => `${(size / (1024 * 1024)).toLocaleString(currentLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MB (${Math.round(size).toLocaleString(currentLocale())} bytes)`,
+		fileSizeLabel: (size) => `${(size / (1024 * 1024)).toLocaleString(formatLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MB (${Math.round(size).toLocaleString(formatLocale())} bytes)`,
 		metadataNotSaved: 'Metadata not saved.',
 		metadataUpdated: 'Metadata updated.',
 		propertiesHelp: 'Help: PDF metadata (title, author, security, fonts…).',
@@ -1601,7 +1601,7 @@ const translations = {
 		untitledFont: 'Sans nom',
 		fontEmbedded: 'Incorporée',
 		fontNotEmbedded: 'Non incorporée',
-		fileSizeLabel: (size) => `${(size / (1024 * 1024)).toLocaleString(currentLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Mo (${Math.round(size).toLocaleString(currentLocale())} octets)`,
+		fileSizeLabel: (size) => `${(size / (1024 * 1024)).toLocaleString(formatLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Mo (${Math.round(size).toLocaleString(formatLocale())} octets)`,
 		metadataNotSaved: 'Métadonnées non enregistrées.',
 		metadataUpdated: 'Métadonnées mises à jour.',
 		propertiesHelp: 'Aide : métadonnées du PDF (titre, auteur, sécurité, polices…).',
@@ -1797,18 +1797,56 @@ const iconTints = {
 	bookmark: 'amber',
 };
 
-function currentLocale() {
-	if (state.settings.language && state.settings.language !== 'auto') return state.settings.language;
-	return navigator.language?.toLowerCase().startsWith('fr') ? 'fr' : 'en';
+// Langues préférées et région du système, injectées par Rust avant la page
+// (i18n::js_init_script). navigator.languages reflète l'override AppleLanguages
+// de Slate et ignore la région : il ne sert que de repli (build web).
+const systemLocale = window.__SLATE_LOCALE__ || { languages: [...(navigator.languages || [])], region: null };
+
+function primaryLanguage(tag) {
+	return String(tag || '').split(/[-_]/)[0].toLowerCase();
 }
 
-// Aligne la langue des panneaux et menus NATIFS macOS (impression, enregistrer…)
-// sur le réglage de Slate. Persiste côté Rust pour le prochain boot (AppKit lit
-// AppleLanguages au démarrage). En mode "auto", on résout vers la locale détectée.
+// Langue de l'interface : le réglage s'il est traduit, sinon la première langue
+// système traduite, sinon l'anglais (même règle que i18n::resolve_language).
+function currentLocale() {
+	const setting = state.settings.language;
+	const candidates = setting && setting !== 'auto' ? [setting, ...systemLocale.languages] : systemLocale.languages;
+	return candidates.map(primaryLanguage).find((lang) => lang in translations) || 'en';
+}
+
+// Locale de mise en forme (dates, nombres, début de semaine) : langue de
+// l'interface + région du système, p. ex. en-AU ou fr-CA.
+function formatLocale() {
+	const lang = currentLocale();
+	const regionalTag = systemLocale.languages.find((tag) => primaryLanguage(tag) === lang && /[-_][A-Za-z]{2}$/.test(tag));
+	const region = systemLocale.region || regionalTag?.slice(-2);
+	const tag = region ? `${lang}-${region.toUpperCase()}` : lang;
+	try {
+		return Intl.getCanonicalLocales(tag)[0];
+	} catch {
+		return lang;
+	}
+}
+
+// Premier jour de la semaine (0 = dimanche, 1 = lundi) selon la région.
+function weekStartDay() {
+	try {
+		const locale = new Intl.Locale(formatLocale());
+		const info = locale.getWeekInfo?.() ?? locale.weekInfo;
+		if (info?.firstDay) return info.firstDay % 7;
+	} catch {
+		/* Intl.Locale sans weekInfo : repli ci-dessous. */
+	}
+	return currentLocale() === 'fr' ? 1 : 0;
+}
+
+
+// Aligne l'UI native (barre de menus, panneaux AppKit) sur le réglage de Slate.
+// "auto" est transmis tel quel : le natif suit alors les préférences système
+// au lieu de figer la langue détectée.
 let _lastNativeLang = null;
 function syncNativeLanguage() {
-	const setting = state.settings.language || 'auto';
-	const lang = setting === 'auto' ? currentLocale() : setting;
+	const lang = state.settings.language || 'auto';
 	if (lang === _lastNativeLang) return;
 	_lastNativeLang = lang;
 	void invokeCommand('set_native_language', { lang }).catch(() => {});
@@ -5729,7 +5767,7 @@ function dateFormatTokens(format) {
 
 function dateMonthNames(kind) {
 	const names = [];
-	for (const locale of ['fr-FR', 'en-US']) {
+	for (const locale of new Set([formatLocale(), 'fr-FR', 'en-US'])) {
 		const formatter = new Intl.DateTimeFormat(locale, { month: kind });
 		for (let month = 0; month < 12; month += 1) {
 			names.push({ month: month + 1, name: formatter.format(new Date(2024, month, 1)) });
@@ -5952,7 +5990,7 @@ function applyDateMask(input, raw, format) {
 function isoToDate(iso, format) {
 	if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
 	const [yyyy, mm, dd] = iso.split('-');
-	const locale = currentLocale() === 'fr' ? 'fr-FR' : 'en-US';
+	const locale = formatLocale();
 	const date = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
 	return dateFormatTokens(format)
 		.map((entry) => {
@@ -6256,7 +6294,7 @@ function positionDateCalendar(anchor) {
 }
 
 function dateWeekdayLabels(weekStartsOn) {
-	const locale = currentLocale() === 'fr' ? 'fr-FR' : 'en-US';
+	const locale = formatLocale();
 	const labels = [];
 	for (let i = 0; i < 7; i += 1) {
 		const day = new Date(2024, 0, 1 + i);
@@ -6271,8 +6309,8 @@ function renderDateCalendar() {
 	const view = _dateCal.view instanceof Date ? _dateCal.view : new Date();
 	const year = view.getFullYear();
 	const month = view.getMonth();
-	const locale = currentLocale() === 'fr' ? 'fr-FR' : 'en-US';
-	const weekStartsOn = currentLocale() === 'fr' ? 1 : 0;
+	const locale = formatLocale();
+	const weekStartsOn = weekStartDay();
 	const selectedIso = dateToIso(_dateCal.input?.value || '', _dateCal.format);
 	const todayIso = toIsoDate(new Date());
 	const title = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(
@@ -16827,7 +16865,7 @@ async function getPrintPageSizePts(pageNumber) {
 
 function formatPrintMm(pts) {
 	const mm = (pts * 25.4) / 72;
-	return mm.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
+	return mm.toLocaleString(formatLocale(), { maximumFractionDigits: 2 });
 }
 
 /**
@@ -17658,7 +17696,7 @@ function formatPdfDate(raw) {
 		)
 	);
 	if (isNaN(date.getTime())) return raw;
-	return date.toLocaleString(currentLocale() === 'fr' ? 'fr-FR' : 'en-US');
+	return date.toLocaleString(formatLocale());
 }
 
 const RECENT_FILES_KEY = 'alto-recent-files';
@@ -17923,13 +17961,12 @@ function profileInitials() {
 function formatRecentDate(timestamp) {
 	if (!timestamp) return '';
 	const date = new Date(timestamp);
-	const fr = currentLocale() === 'fr';
 	const now = new Date();
 	const sameDay = date.toDateString() === now.toDateString();
 	if (sameDay) {
-		return date.toLocaleTimeString(fr ? 'fr-FR' : 'en-US', { hour: '2-digit', minute: '2-digit' });
+		return date.toLocaleTimeString(formatLocale(), { hour: '2-digit', minute: '2-digit' });
 	}
-	return date.toLocaleDateString(fr ? 'fr-FR' : 'en-US', { day: 'numeric', month: 'short' });
+	return date.toLocaleDateString(formatLocale(), { day: 'numeric', month: 'short' });
 }
 
 function refreshProfileAvatar() {
@@ -19154,7 +19191,7 @@ function formatHistoryTime(ts) {
 		date.getFullYear() === now.getFullYear() &&
 		date.getMonth() === now.getMonth() &&
 		date.getDate() === now.getDate();
-	const locale = currentLocale() === 'fr' ? 'fr-FR' : 'en-US';
+	const locale = formatLocale();
 	const time = date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 	if (sameDay) return time;
 	return `${date.toLocaleDateString(locale, { day: 'numeric', month: 'short' })} ${time}`;
