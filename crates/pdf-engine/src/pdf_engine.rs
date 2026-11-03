@@ -1009,8 +1009,60 @@ fn detect_segment_style(segment: &PdfPageTextSegment) -> (bool, bool, bool, Stri
     (false, false, false, String::new(), 0.0)
 }
 
-fn extract_segment_chars(segment: &PdfPageTextSegment, page_height: f64) -> Vec<PdfCharBox> {
-    let Ok(chars) = segment.chars() else {
+/// Caractères d'un segment, alignés sur son TEXTE. `segment.chars()` déduit la
+/// plage d'index des caractères les plus proches des bords gauche et droit
+/// (tolérance d'une demi-largeur) : sur un segment court finissant par une
+/// espace (« Q65␣ »), le bord droit retombe sur un glyphe intérieur et la fin
+/// du mot disparaît de l'analyse. Le bord gauche reste fiable : on suit alors
+/// le texte de la page depuis lui, sinon on garde la plage d'origine.
+fn segment_text_chars<'a>(
+    segment: &PdfPageTextSegment<'a>,
+    page_chars: &PdfPageTextChars<'a>,
+) -> Option<Vec<PdfPageTextChar<'a>>> {
+    let chars = segment.chars().ok()?;
+    let solid = |c: &char| !c.is_whitespace();
+    let expected: Vec<char> = segment.text().chars().filter(solid).collect();
+    let found: Vec<char> = chars.iter().filter_map(|ch| ch.unicode_char()).filter(solid).collect();
+    let in_segment = |chars: &PdfPageTextChars<'a>| {
+        (0..chars.len()).filter_map(|i| chars.get(i).ok()).collect::<Vec<_>>()
+    };
+    if found == expected {
+        return Some(in_segment(&chars));
+    }
+    let start = chars.first_char_index()?;
+    let trailing_ws = segment.text().chars().rev().take_while(|c| c.is_whitespace()).count();
+    let mut picked = Vec::new();
+    let mut matched = 0usize;
+    let mut index = start;
+    while matched < expected.len() {
+        let ch = page_chars.get(index).ok()?;
+        let value = ch.unicode_char()?;
+        if !value.is_whitespace() {
+            if value != expected[matched] {
+                return Some(in_segment(&chars));
+            }
+            matched += 1;
+        }
+        picked.push(ch);
+        index += 1;
+    }
+    for _ in 0..trailing_ws {
+        let Ok(ch) = page_chars.get(index) else { break };
+        if !matches!(ch.unicode_char(), Some(c) if c.is_whitespace() && c != '\r' && c != '\n') {
+            break;
+        }
+        picked.push(ch);
+        index += 1;
+    }
+    Some(picked)
+}
+
+fn extract_segment_chars(
+    segment: &PdfPageTextSegment,
+    page_chars: &PdfPageTextChars,
+    page_height: f64,
+) -> Vec<PdfCharBox> {
+    let Some(chars) = segment_text_chars(segment, page_chars) else {
         return Vec::new();
     };
 
@@ -1319,6 +1371,7 @@ fn analyze_with_pdfium(bytes: &[u8], page: u32) -> Result<PdfAnalysis, String> {
         }
     }
 
+    let page_chars = text.chars();
     let raw_segments: Vec<TextSegment> = text
         .segments()
         .iter()
@@ -1333,7 +1386,7 @@ fn analyze_with_pdfium(bytes: &[u8], page: u32) -> Result<PdfAnalysis, String> {
             let mut width = bounds.width().value as f64;
             let mut height = bounds.height().value as f64;
             let (bold, italic, serif, font_name, font_size) = detect_segment_style(&segment);
-            let chars = extract_segment_chars(&segment, page_height);
+            let chars = extract_segment_chars(&segment, &page_chars, page_height);
             if width <= 1.0 || height <= 1.0 {
                 // Boîte d'ENCRE dégénérée : un segment réduit à un tiret ou un
                 // point (ex : run scindé par une édition du flux) a une boîte
@@ -3081,6 +3134,67 @@ mod tests {
         let rgba = render_page_rgba_for_view(&ios_photo_button_form(), 1, 1.0, 200, 200).expect("rendu");
         let center = (100 * 200 + 100) * 4;
         assert!(rgba[center] < 64, "bouton repeint en blanc : {:?}", &rgba[center..center + 4]);
+    }
+
+    /// Mise en page « grille » (chaque mot à un Tm absolu) : un mot court suivi
+    /// d'espaces, comme après la suppression de « 100 » dans « 100Q65 ».
+    fn short_word_with_trailing_spaces() -> Vec<u8> {
+        use lopdf::{dictionary, Document, Object, Stream};
+        let mut doc = Document::with_version("1.7");
+        let pages_id = doc.new_object_id();
+        let page_id = doc.new_object_id();
+        let font = doc.add_object(dictionary! {
+            "Type" => "Font",
+            "Subtype" => "Type1",
+            "BaseFont" => "Courier",
+        });
+        let contents = doc.add_object(Stream::new(
+            dictionary! {},
+            b"BT /F1 20 Tf 1 0 0 1 40 100 Tm (Ref - ) Tj ET \
+              BT /F1 20 Tf 1 0 0 1 136 100 Tm (Q65                   ) Tj ET"
+                .to_vec(),
+        ));
+        doc.objects.insert(
+            page_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Page",
+                "Parent" => pages_id,
+                "MediaBox" => vec![0.into(), 0.into(), 700.into(), 200.into()],
+                "Contents" => contents,
+                "Resources" => dictionary! { "Font" => dictionary! { "F1" => font } },
+            }),
+        );
+        doc.objects.insert(
+            pages_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Pages",
+                "Kids" => vec![page_id.into()],
+                "Count" => 1,
+            }),
+        );
+        let catalog = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+        doc.trailer.set("Root", catalog);
+        let mut out = Vec::new();
+        doc.save_to(&mut out).expect("enregistrement");
+        out
+    }
+
+    #[test]
+    fn analysis_keeps_last_glyph_of_short_word_before_trailing_spaces() {
+        if pdfium_guard().is_err() {
+            eprintln!("PDFium indisponible : test ignoré.");
+            return;
+        }
+        let analysis = analyze_pdf_page(&short_word_with_trailing_spaces(), 1).expect("analyse");
+        let texts: Vec<&str> = analysis.blocks.iter().map(|b| b.text.as_str()).collect();
+        let block = analysis
+            .blocks
+            .iter()
+            .find(|b| b.text.contains("Q6"))
+            .unwrap_or_else(|| panic!("bloc Q65 absent : {texts:?}"));
+        assert!(block.text.ends_with("Q65"), "dernier glyphe perdu : {texts:?}");
+        let glyphs: String = block.chars.iter().map(|c| c.text.as_str()).collect();
+        assert!(glyphs.trim_end().ends_with("Q65"), "glyphes : {glyphs:?}");
     }
 
     fn char_box(text: &str, x: f64, y: f64, w: f64, h: f64) -> PdfCharBox {
