@@ -490,3 +490,62 @@ export function rescaleBlockToViewport(block, data, scaled) {
 	delete block._dragForceHtml;
 	delete block._compSuffixSnap;
 }
+
+/**
+ * Étapes d'une édition découpée en modifications MINIMALES (alignement par plus
+ * longue sous-séquence commune), appliquées de droite à gauche pour que les
+ * positions à gauche restent valides. Chaque étape est un texte complet ; la
+ * dernière vaut `target`. Vide si une seule modification suffit : le moteur
+ * refuse une édition à cheval sur deux objets texte (« 3542541 - 100Q65 » →
+ * « 3542 - 1Q65 »), mais accepte « retirer 00 » puis « retirer 541 ».
+ * @param {string} base
+ * @param {string} target
+ * @returns {string[]}
+ */
+export function textEditSteps(base, target) {
+	const a = [...base];
+	const b = [...target];
+	if (a.length * b.length > 250000) return [];
+	const width = b.length + 1;
+	const lcs = new Uint16Array((a.length + 1) * width);
+	for (let i = a.length - 1; i >= 0; i -= 1) {
+		for (let j = b.length - 1; j >= 0; j -= 1) {
+			lcs[i * width + j] =
+				a[i] === b[j]
+					? lcs[(i + 1) * width + j + 1] + 1
+					: Math.max(lcs[(i + 1) * width + j], lcs[i * width + j + 1]);
+		}
+	}
+	/** @type {{ start: number, end: number, text: string }[]} */
+	const hunks = [];
+	let i = 0;
+	let j = 0;
+	while (i < a.length || j < b.length) {
+		if (i < a.length && j < b.length && a[i] === b[j]) {
+			i += 1;
+			j += 1;
+			continue;
+		}
+		const start = i;
+		let text = '';
+		while (i < a.length || j < b.length) {
+			if (i < a.length && j < b.length && a[i] === b[j]) break;
+			if (j < b.length && (i === a.length || lcs[i * width + j + 1] >= lcs[(i + 1) * width + j])) {
+				text += b[j];
+				j += 1;
+			} else {
+				i += 1;
+			}
+		}
+		hunks.push({ start, end: i, text });
+	}
+	if (hunks.length < 2) return [];
+	const steps = [];
+	let current = a;
+	for (let k = hunks.length - 1; k >= 0; k -= 1) {
+		const { start, end, text } = hunks[k];
+		current = [...current.slice(0, start), ...text, ...current.slice(end)];
+		steps.push(current.join(''));
+	}
+	return steps;
+}

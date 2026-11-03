@@ -139,6 +139,24 @@
 		};
 	}
 
+	async function backspaceAt(element, offset) {
+		const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+		let remaining = offset;
+		let node = walker.nextNode();
+		while (node && remaining > node.textContent.length) {
+			remaining -= node.textContent.length;
+			node = walker.nextNode();
+		}
+		const caret = document.createRange();
+		caret.setStart(node, remaining);
+		caret.collapse(true);
+		getSelection().removeAllRanges();
+		getSelection().addRange(caret);
+		element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }));
+		await wait(1200);
+		return document.querySelector('.edit-block.editing') || element;
+	}
+
 	const scenarios = {
 		// Bloc natif déplacé puis zoomé, annulé, rétabli, puis double-cliqué :
 		// position relative stable, cadre serré sur le texte, pas d'écartement.
@@ -299,6 +317,59 @@
 				nativeCalls: { ...calls },
 				errors: [...errors]
 			},
+			unknownCommands: [...(window.__harnessUnknownCommands || [])]
+		};
+	};
+
+	// Une ligne en deux objets texte, éditée dans les deux, puis annulée : le
+	// rejeu depuis la page d'origine touche les deux objets à la fois.
+	scenarios.undoAcrossTextObjects = async () => {
+		const statuses = [];
+		const warnings = [];
+		const warn = console.warn;
+		console.warn = (...args) => {
+			warnings.push(args.map(String).join(' '));
+			warn(...args);
+		};
+		const observer = new MutationObserver(() => statuses.push(document.getElementById('status').textContent));
+		observer.observe(document.getElementById('status'), { childList: true, characterData: true, subtree: true });
+		await openFixture('grid.pdf');
+		const label = 'Facture';
+		await enterEdit(label);
+		let editing = await doubleClick(label);
+		const original = editing.textContent;
+		const at = (needle, shift) => editing.textContent.indexOf(needle) + shift;
+		for (let k = 0; k < 3; k += 1) editing = await backspaceAt(editing, at('3542541'.slice(0, 7 - k), 7 - k));
+		for (let k = 0; k < 2; k += 1) editing = await backspaceAt(editing, at(k ? '10Q65' : '100Q65', k ? 2 : 3));
+		editing = await backspaceAt(editing, at('3542 ', 4));
+		const typed = editing.textContent;
+		editing.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+		await wait(800);
+		button('undo-button').click();
+		await wait(3000);
+		const afterOneUndo = blockText(block(label));
+		for (let k = 0; k < 5; k += 1) {
+			button('undo-button').click();
+			await wait(2500);
+		}
+		const afterAllUndo = blockText(block(label));
+		observer.disconnect();
+		console.warn = warn;
+		const refused = [
+			...statuses.filter((text) => /refus|reject/i.test(text)),
+			...warnings.filter((text) => /native|natif|natives?/i.test(text))
+		];
+		const checks = {
+			typedBothObjects: typed === original.replace('3542541', '354').replace('100Q65', '1Q65'),
+			oneUndoReplaysBothObjects: afterOneUndo === original.replace('3542541', '3542').replace('100Q65', '1Q65'),
+			allUndoRestoresOriginal: afterAllUndo === original,
+			noRefusal: refused.length === 0,
+			noErrors: errors.length === 0
+		};
+		return {
+			ok: Object.values(checks).every(Boolean),
+			checks,
+			measures: { original, typed, afterOneUndo, afterAllUndo, refused, nativeCalls: { ...window.__harnessNativeCalls }, errors: [...errors] },
 			unknownCommands: [...(window.__harnessUnknownCommands || [])]
 		};
 	};

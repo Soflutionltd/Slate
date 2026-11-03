@@ -19,6 +19,14 @@ WIRE_LINES = [
     ("F1", 12, 150, 484, "EUR"),
 ]
 
+# Une ligne en deux objets texte (police à chasse fixe, 7,2 pt d'avance à 12 pt),
+# le premier finissant par une espace : un seul bloc à l'écran, deux objets
+# dans le flux.
+GRID_LINES = [
+    ("F3", 12, 72, 400, "Facture 109 - 3542541 "),
+    ("F3", 12, 230.4, 400, "100Q65"),
+]
+
 
 def build_pdf(lines):
     content = "".join(
@@ -28,10 +36,11 @@ def build_pdf(lines):
         b"<< /Type /Catalog /Pages 2 0 R >>",
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
         b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
-        b"/Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>",
+        b"/Resources << /Font << /F1 4 0 R /F2 5 0 R /F3 7 0 R >> >> /Contents 6 0 R >>",
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
         b"<< /Length %d >>\nstream\n" % len(content) + content + b"endstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>",
     ]
     out = b"%PDF-1.4\n"
     offsets = []
@@ -49,3 +58,4 @@ if __name__ == "__main__":
     target = Path(sys.argv[1] if len(sys.argv) > 1 else ".")
     target.mkdir(parents=True, exist_ok=True)
     (target / "wire.pdf").write_bytes(build_pdf(WIRE_LINES))
+    (target / "grid.pdf").write_bytes(build_pdf(GRID_LINES))

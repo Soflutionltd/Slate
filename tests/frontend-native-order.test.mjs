@@ -9,7 +9,8 @@ import {
 	wordBoundsAtTextOffset,
 	isHorizontalWhitespace,
 	lineIndexAtTextOffset,
-	rescaleBlockToViewport
+	rescaleBlockToViewport,
+	textEditSteps
 } from '../src-tauri/frontend-dist/block-state.js';
 import {
 	stripTransientBlockFields,
@@ -243,4 +244,16 @@ test('snapshot undo : aucun objet modifiable partagé avec le bloc vivant', () =
 	assert.deepEqual(snap.hiddenCharIndexes, [1]);
 	assert.equal(snap.fontMatch.fontSize, 12);
 	assert.equal(snap._mounted, undefined);
+});
+
+test('rejeu à cheval sur deux objets : une étape par modification, de droite à gauche', () => {
+	assert.deepEqual(textEditSteps('109 - 3542541 100Q65', '109 - 3542 1Q65'), [
+		'109 - 3542541 1Q65',
+		'109 - 3542 1Q65'
+	]);
+	assert.deepEqual(textEditSteps('109 - 3542 1Q65', '109 - 3542541 100Q65'), [
+		'109 - 3542 100Q65',
+		'109 - 3542541 100Q65'
+	]);
+	assert.deepEqual(textEditSteps('Total 3 480', 'Total 3 600'), []);
 });

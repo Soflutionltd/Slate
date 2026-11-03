@@ -18,7 +18,8 @@ import {
 	wordBoundsAtTextOffset,
 	stripWhitespace,
 	isHorizontalWhitespace,
-	rescaleBlockToViewport
+	rescaleBlockToViewport,
+	textEditSteps
 } from './block-state.js';
 import {
 	stripTransientBlockFields,
@@ -14965,8 +14966,31 @@ async function performNativeTextEditWithReindex(block) {
 		if (block._detached || block._nativeAttemptCommitted === true) throw error;
 		const reason = String(error?.message || error);
 		if (!NATIVE_INDEX_ERRORS.some((code) => reason.includes(code))) throw error;
-		if (!(await refreshNativeCharIndices(block))) throw error;
-		await performNativeTextEdit(block);
+		try {
+			if (!(await refreshNativeCharIndices(block))) throw error;
+			await performNativeTextEdit(block);
+		} catch (retryError) {
+			if (!String(retryError?.message || retryError).includes('multi_object_edit')) throw retryError;
+			await performNativeTextEditInSteps(block, retryError);
+		}
+	}
+}
+
+// Édition à cheval sur plusieurs objets texte (rejeu après Cmd+Z, collage) :
+// rejouée en modifications minimales, chacune dans un seul objet, comme la
+// frappe touche par touche.
+async function performNativeTextEditInSteps(block, error) {
+	const target = block.text || '';
+	const steps = textEditSteps(nativeAlignedEntries(block).baseText, target);
+	if (!steps.length) throw error;
+	for (const step of steps) {
+		if (block._detached) throw new Error('block_detached');
+		block.text = step;
+		try {
+			await performNativeTextEdit(block);
+		} finally {
+			block.text = target;
+		}
 	}
 }
 
