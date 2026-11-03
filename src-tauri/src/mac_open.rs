@@ -8,6 +8,10 @@
 //! Contournement (même stratégie que `mac_print`) :
 //! 1. Handler Apple Event direct `aevt`/`odoc` via `NSAppleEventManager`
 //! 2. Fallback delegate `application:openFile:` / `application:openFiles:`
+//!
+//! Même gestionnaire pour `aevt`/`quit` (« Quitter » du Dock, AppleScript,
+//! fermeture de session) : tao ne traite que `applicationWillTerminate`, l'app
+//! s'arrêtait sans proposer d'enregistrer les modifications en cours.
 
 use std::ffi::CStr;
 use std::io::Write;
@@ -118,6 +122,7 @@ fn attach_handlers(phase: &str) {
 unsafe fn install_apple_event_open_handler() {
 	const K_CORE_EVENT_CLASS: u32 = 0x6165_7674; // aevt
 	const K_AE_OPEN_DOCUMENTS: u32 = 0x6f64_6f63; // odoc
+	const K_AE_QUIT_APPLICATION: u32 = 0x7175_6974; // quit
 
 	let mgr_class = objc_getClass(c"NSAppleEventManager".as_ptr());
 	if mgr_class.is_null() {
@@ -150,6 +155,10 @@ unsafe fn install_apple_event_open_handler() {
 	let imp: Imp = std::mem::transmute(handle_open_apple_event_imp as *const ());
 	let added = class_addMethod(handler_class, handle_sel, imp, c"v@:@@".as_ptr());
 	log(&format!("AEM: class_addMethod(handleOpenAppleEvent) -> {added}"));
+	let quit_sel = sel_registerName(c"handleQuitAppleEvent:withReplyEvent:".as_ptr());
+	let quit_imp: Imp = std::mem::transmute(handle_quit_apple_event_imp as *const ());
+	let added_quit = class_addMethod(handler_class, quit_sel, quit_imp, c"v@:@@".as_ptr());
+	log(&format!("AEM: class_addMethod(handleQuitAppleEvent) -> {added_quit}"));
 
 	let set_sel = sel_registerName(
 		c"setEventHandler:andSelector:forEventClass:andEventID:".as_ptr(),
@@ -165,7 +174,17 @@ unsafe fn install_apple_event_open_handler() {
 		K_AE_OPEN_DOCUMENTS,
 	);
 	log("AEM: setEventHandler enregistré pour aevt/odoc");
+	set_handler(mgr, set_sel, handler_obj, quit_sel, K_CORE_EVENT_CLASS, K_AE_QUIT_APPLICATION);
+	log("AEM: setEventHandler enregistré pour aevt/quit");
 	let _ = handler_obj;
+}
+
+unsafe extern "C" fn handle_quit_apple_event_imp(_this: id, _cmd: SEL, _event: id, _reply: id) {
+	log("AEM: handleQuitAppleEvent appelé (quit)");
+	match APP.get() {
+		Some(app) => crate::request_quit(app),
+		None => std::process::exit(0),
+	}
 }
 
 unsafe extern "C" fn handle_open_apple_event_imp(

@@ -658,6 +658,17 @@ fn quit_application(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+/// Demande de fermeture (⌘Q, ou « Quitter » envoyé par macOS) : la page
+/// arbitre les modifications non enregistrées avant d'appeler `quit_application`.
+pub(crate) fn request_quit(app: &tauri::AppHandle) {
+    if let Some(window) = focused_webview(app) {
+        let _ = window.emit("alto-request-quit", ());
+    } else {
+        // Aucune fenêtre pour arbitrer les modifications : rien à perdre.
+        app.exit(0);
+    }
+}
+
 pub(crate) fn bring_window_to_front(window: &tauri::WebviewWindow) {
     let _ = window.show();
     let _ = window.unminimize();
@@ -2813,12 +2824,10 @@ fn main() {
             if event.id().as_ref() == "new-window" {
                 let _ = spawn_empty_window(app.clone());
             } else if let Some(event_name) = event_name {
-                if let Some(window) = focused_webview(app) {
+                if event_name == "alto-request-quit" {
+                    request_quit(app);
+                } else if let Some(window) = focused_webview(app) {
                     let _ = window.emit(event_name, ());
-                } else if event_name == "alto-request-quit" {
-                    // Aucune fenêtre pour arbitrer les modifications non
-                    // enregistrées : quitter directement (rien à perdre).
-                    app.exit(0);
                 }
             }
         })
