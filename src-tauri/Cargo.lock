@@ -3379,8 +3379,8 @@ dependencies = [
 
 [[package]]
 name = "pdfium-render"
-version = "0.9.3"
-source = "git+https://github.com/ajrcarey/pdfium-render?rev=0d7f99ad660317d5fd2e9df732db77764873a6d7#0d7f99ad660317d5fd2e9df732db77764873a6d7"
+version = "0.9.6"
+source = "git+https://github.com/ajrcarey/pdfium-render?rev=3c786ab9463fcfb503afb93b3386c5a9da4b72e3#3c786ab9463fcfb503afb93b3386c5a9da4b72e3"
 dependencies = [
  "bitflags 2.11.0",
  "bytemuck",
@@ -3391,7 +3391,7 @@ dependencies = [
  "image",
  "itertools",
  "js-sys",
- "libloading 0.8.9",
+ "libloading 0.7.4",
  "log",
  "maybe-owned",
  "once_cell",
