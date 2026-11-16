@@ -18,7 +18,7 @@ commands for file IO and an auto-updater pointed at GitHub Releases.
 
 ## Local build (debug)
 ```bash
-cd apps/desktop
+cd src-tauri
 cargo tauri build --debug
 # → target/debug/bundle/macos/Alto.app
 # → target/debug/bundle/dmg/Alto_<version>_aarch64.dmg

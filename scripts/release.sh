@@ -113,7 +113,7 @@ bash "$SCRIPT_DIR/ensure-ocr-helper.sh"
 
 # --bundles app : le .app (+ .app.tar.gz/.sig pour l'updater). Le DMG Tauri ouvre
 # une fenêtre Finder pendant le build : Slate.dmg est créé plus bas avec hdiutil.
-# Lancé depuis src-tauri : depuis apps/desktop, la CLI prend pour racine le premier
+# Lancé depuis src-tauri : depuis la racine du dépôt, la CLI prend pour racine le premier
 # package.json trouvé en descendant (ex. media/whats-new-*/) et y exécute
 # beforeBuildCommand.
 (cd src-tauri && cargo tauri build --target "$TARGET_TRIPLE" --bundles app)

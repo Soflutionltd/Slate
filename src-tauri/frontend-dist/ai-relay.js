@@ -1,4 +1,4 @@
-// Connexion de Slate au relais MCP distant (apps/mcp-relay) : les IA (ChatGPT,
+// Connexion de Slate au relais MCP distant (mcp-relay/ de ce dépôt) : les IA (ChatGPT,
 // Claude, Le Chat…) appellent le relais, qui transmet chaque appel d'outil à
 // Slate par cette WebSocket. Slate exécute dans le document ouvert et répond.
 
