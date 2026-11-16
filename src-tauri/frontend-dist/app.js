@@ -5879,6 +5879,7 @@ function detectActivePageFromScroll() {
 		highlightActivePage();
 		persistCurrentTabState();
 		updateUi(false);
+		scheduleEditDetectionAroundActivePage();
 	}
 }
 
@@ -6278,12 +6279,8 @@ async function renderPage(pageNumber) {
 		renderPageNotesForPage(pageNumber);
 		renderSignaturePlacementsForPage(pageNumber);
 
-		if (
-			state.editMode &&
-			pageNumber === state.page &&
-			pageNeedsEditDetection(state.page)
-		) {
-			void autoDetectEditableContent();
+		if (state.editMode && pageNeedsEditDetection(pageNumber)) {
+			void autoDetectEditableContent(pageNumber);
 		}
 	} catch (error) {
 		data.rendered = false;
@@ -8127,6 +8124,7 @@ function goToPage(pageNumber) {
 	highlightActivePage();
 	persistCurrentTabState();
 	updateUi(false);
+	scheduleEditDetectionAroundActivePage();
 	const data = getPageData(next);
 	if (!data) return;
 	if (state.settings.pageLayout === 'single') {
@@ -8265,24 +8263,33 @@ function renderNotes() {
 	});
 }
 
-async function scanEditableBlocks() {
+// Détection des blocs d'UNE page (active par défaut). La page, le document et
+// le zoom sont figés à l'entrée : l'utilisateur peut défiler, zoomer ou changer
+// d'onglet pendant l'analyse. Renvoie null si le résultat est périmé (rien
+// n'est alors écrit, le prochain rendu de la page relance la détection).
+async function scanEditableBlocks(pageNumber = state.page) {
 	if (!state.pdf || !state.fileBytes) return;
 
-	const page = await state.pdf.getPage(state.page);
-	const viewport = pageViewport(page);
-	let blocks = await pdfiumEditBlocks(viewport);
+	const pdf = state.pdf;
+	const zoom = state.zoom;
+	const page = await pdf.getPage(pageNumber);
+	const viewport = pageViewport(page, zoom);
+	let blocks = await pdfiumEditBlocks(pageNumber, viewport);
 
 	if (!blocks.length) {
-		blocks = await pdfJsEditBlocks(page, viewport);
+		blocks = await pdfJsEditBlocks(page, pageNumber, viewport);
 	}
 
-	detectBoldByInkDensity(blocks);
+	if (state.pdf !== pdf || state.zoom !== zoom) return null;
+	if (isEditingBlockOnPage(pageNumber)) return null;
+
+	const inkData = getPageData(pageNumber);
+	detectBoldByInkDensity(blocks, inkData);
 	// Polices décoratives / logos (gros corps) : les bounds PDFium sous-estiment
 	// l'encre réelle (débords italiques, empattements). On élargit le bloc à
 	// l'encre mesurée pour que la sélection ET le bitmap couvrent tout le logo.
 	// Seuil en points PDF (pas px zoomés) pour ne pas avaler un bandeau gris
 	// sous du corps 14 pt à zoom ≥ 150 %.
-	const inkData = getActivePageData() || getPageData(state.page);
 	for (const block of blocks) {
 		// Texte natif éditable : ne pas absorber l'encre voisine (icônes, bandeaux).
 		// L'encre glyphes pilote déjà le cadre de sélection.
@@ -8298,7 +8305,7 @@ async function scanEditableBlocks() {
 	// Les textes ajoutés / déjà modifiés ne sont pas dans le PDF source : les
 	// garder, sinon quitter Modifier puis relancer une détection les efface.
 	const keepOnPage = state.editBlocks.filter(
-		(block) => block.page === state.page && isPersistedPageContent(block)
+		(block) => block.page === pageNumber && isPersistedPageContent(block)
 	);
 	const incoming = blocks.filter((scanned) => {
 		return !keepOnPage.some((kept) => {
@@ -8313,15 +8320,30 @@ async function scanEditableBlocks() {
 			);
 		});
 	});
+	// La sélection ne tombe que si elle porte sur cette page (ses blocs sont
+	// remplacés) : détecter une page voisine ne touche pas la sélection en cours.
+	const selectedIds = new Set([state.selectedBlockId, ...(state.selectedBlockIds || [])]);
+	const selectionOnPage = state.editBlocks.some(
+		(block) => block.page === pageNumber && selectedIds.has(block.id)
+	);
 	state.editBlocks = state.editBlocks
-		.filter((block) => block.page !== state.page)
+		.filter((block) => block.page !== pageNumber)
 		.concat(keepOnPage, incoming);
-	editScannedPagesSet().add(state.page);
-	state.selectedBlockId = null;
-	state.selectedBlockIds = [];
-	renderEditBlocks();
-	updateSelectedEditField();
+	editScannedPagesSet().add(pageNumber);
+	if (selectionOnPage) {
+		state.selectedBlockId = null;
+		state.selectedBlockIds = [];
+	}
+	renderEditBlocksForPage(pageNumber);
+	if (selectionOnPage || pageNumber === state.page) updateSelectedEditField();
 	return blocks.length;
+}
+
+function isEditingBlockOnPage(pageNumber) {
+	if (!state.editingBlockId) return false;
+	return state.editBlocks.some(
+		(block) => block.id === state.editingBlockId && block.page === pageNumber
+	);
 }
 
 function measureBlockInkRatio(block, data) {
@@ -8417,9 +8439,7 @@ function expandBlockToInk(block, data) {
 	block.snapshotDataUrl = null;
 }
 
-function detectBoldByInkDensity(blocks) {
-	const data = getActivePageData() || getPageData(state.page);
-
+function detectBoldByInkDensity(blocks, data) {
 	const textBlocks = blocks.filter((b) => b.kind !== 'image' && b.text && b.width > 4 && b.height > 4);
 	const measures = [];
 	for (const block of textBlocks) {
@@ -8461,9 +8481,9 @@ async function analyzePageCached(page) {
 	}
 }
 
-async function pdfiumEditBlocks(viewport) {
+async function pdfiumEditBlocks(pageNumber, viewport) {
 	try {
-		const analysis = await analyzePageCached(state.page);
+		const analysis = await analyzePageCached(pageNumber);
 		const pageWidth = analysis?.pageWidth || viewport.width / state.zoom;
 		const pageHeight = analysis?.pageHeight || viewport.height / state.zoom;
 		const scaleX = viewport.width / pageWidth;
@@ -8492,9 +8512,9 @@ async function pdfiumEditBlocks(viewport) {
 					}))
 					: [];
 				return {
-					id: block.id || `pdfium-${state.page}-${index}`,
+					id: block.id || `pdfium-${pageNumber}-${index}`,
 					kind: block.kind || 'text',
-					page: state.page,
+					page: pageNumber,
 					text: block.text || (block.kind === 'image' ? 'Image' : ''),
 					originalText: block.text || '',
 					x,
@@ -8549,7 +8569,7 @@ async function pdfiumEditBlocks(viewport) {
 	}
 }
 
-async function pdfJsEditBlocks(page, viewport) {
+async function pdfJsEditBlocks(page, pageNumber, viewport) {
 	return (await safeGetTextContent(page)).items
 		.map((item, index) => {
 			const transform = multiplyPdfTransform(viewport.transform, item.transform);
@@ -8559,9 +8579,9 @@ async function pdfJsEditBlocks(page, viewport) {
 			const x = transform[4];
 			const y = transform[5] - height;
 			return {
-				id: `text-${state.page}-${index}`,
+				id: `text-${pageNumber}-${index}`,
 				kind: 'text',
-				page: state.page,
+				page: pageNumber,
 				text,
 				originalText: text,
 				x,
@@ -15961,6 +15981,8 @@ function finishInlineEdit(id, newText) {
 	if (state.editingBlockId !== id) return;
 	const element = elements.pagesStack.querySelector(`.edit-block.editing[data-block-id="${id}"]`);
 	state.editingBlockId = null;
+	// Une détection refusée pendant la frappe (page du bloc édité) est rejouée.
+	scheduleEditDetectionAroundActivePage();
 	removeNativeCaretBar();
 	element?.classList.remove('native-caret-active');
 	const editSnapshot = captureEditableSnapshot();
@@ -17638,9 +17660,7 @@ function toggleEditMode(force) {
 	closeDrawer();
 	renderEditBlocks();
 	updateUi();
-	if (state.editMode && state.pdf && pageNeedsEditDetection(state.page)) {
-		void autoDetectEditableContent();
-	}
+	requestEditDetectionAroundActivePage();
 }
 
 function exitEditMode() {
@@ -17694,27 +17714,86 @@ function pageNeedsEditDetection(pageNumber) {
 	return !editScannedPagesSet().has(pageNumber);
 }
 
-async function autoDetectEditableContent() {
-	if (!state.pdf) return;
-	if (_autoDetectInFlight) return _autoDetectInFlight;
-	const pageNumber = state.page;
-	_autoDetectInFlight = (async () => {
-		try {
-			if (state.editingBlockId) return;
-			const detected = await scanEditableBlocks();
-			if (detected) return;
-			if (state.page !== pageNumber || state.editingBlockId) return;
-			const attempted = autoOcrAttemptedSet();
-			if (attempted.has(pageNumber)) return;
-			const text = await extractPageText(pageNumber);
-			if (text) return;
-			attempted.add(pageNumber);
-			await runOcrForCurrentPage(false, { silent: true });
-		} finally {
-			_autoDetectInFlight = null;
-		}
-	})();
+// Pages en attente de détection. Une seule analyse tourne à la fois ; une
+// demande faite pendant qu'une autre est en vol est rejouée ensuite au lieu
+// d'être perdue (sinon la page suivante restait sans blocs, donc non cliquable).
+const _pendingDetectPages = new Set();
+// Au-delà, une page rendue en passant (défilement rapide) n'est pas analysée :
+// elle le sera quand l'utilisateur s'en approchera.
+const EDIT_DETECT_PAGE_RADIUS = 2;
+
+function autoDetectEditableContent(pageNumber = state.page) {
+	if (!state.pdf) return Promise.resolve();
+	_pendingDetectPages.add(pageNumber);
+	if (!_autoDetectInFlight) _autoDetectInFlight = drainEditDetection();
 	return _autoDetectInFlight;
+}
+
+async function drainEditDetection() {
+	try {
+		while (_pendingDetectPages.size) {
+			// Page active d'abord, puis la plus proche d'elle.
+			let pageNumber = null;
+			for (const candidate of _pendingDetectPages) {
+				if (
+					pageNumber === null ||
+					Math.abs(candidate - state.page) < Math.abs(pageNumber - state.page)
+				) {
+					pageNumber = candidate;
+				}
+			}
+			_pendingDetectPages.delete(pageNumber);
+			try {
+				await detectEditableContentForPage(pageNumber);
+			} catch (error) {
+				console.warn(`Edit detection failed on page ${pageNumber}.`, error);
+			}
+		}
+	} finally {
+		_autoDetectInFlight = null;
+	}
+}
+
+// Détection PDFium (rapide) pour toute page proche ; l'OCR (lent) reste réservé
+// à la page active, une seule fois par page.
+async function detectEditableContentForPage(pageNumber) {
+	if (!state.pdf || !state.editMode) return;
+	if (pageNumber < 1 || pageNumber > state.pdf.numPages) return;
+	if (Math.abs(pageNumber - state.page) > EDIT_DETECT_PAGE_RADIUS) return;
+	// La mesure d'encre (gras, logos) lit le canvas : la page doit être peinte.
+	if (!getPageData(pageNumber)?._hasBitmap) return;
+	if (!pageNeedsEditDetection(pageNumber)) return;
+	if (isEditingBlockOnPage(pageNumber)) return;
+	const detected = await scanEditableBlocks(pageNumber);
+	if (detected !== 0) return;
+	if (state.page !== pageNumber || state.editingBlockId) return;
+	const attempted = autoOcrAttemptedSet();
+	if (attempted.has(pageNumber)) return;
+	const text = await extractPageText(pageNumber);
+	if (text) return;
+	if (state.page !== pageNumber || state.editingBlockId) return;
+	attempted.add(pageNumber);
+	await runOcrForCurrentPage(false, { silent: true });
+}
+
+// Page active et ses voisines : appelé à l'entrée en mode Modifier, quand la
+// page active change (défilement, saut de page) et à la fin d'une édition.
+function requestEditDetectionAroundActivePage() {
+	if (!state.editMode || !state.pdf) return;
+	for (const pageNumber of [state.page, state.page + 1, state.page - 1]) {
+		if (pageNumber < 1 || pageNumber > state.pdf.numPages) continue;
+		if (!getPageData(pageNumber)?._hasBitmap) continue;
+		if (pageNeedsEditDetection(pageNumber)) void autoDetectEditableContent(pageNumber);
+	}
+}
+
+// Différé : pendant un défilement la page active change à chaque frame, on
+// n'analyse que la page sur laquelle l'utilisateur s'arrête.
+let _editDetectionTimer = 0;
+function scheduleEditDetectionAroundActivePage() {
+	clearTimeout(_editDetectionTimer);
+	if (!state.editMode) return;
+	_editDetectionTimer = setTimeout(requestEditDetectionAroundActivePage, 150);
 }
 
 function updateUi(renderPanels = true) {
@@ -23973,7 +24052,7 @@ elements.modifierMoreTools?.addEventListener('click', () => {
 			? 'Plus'
 			: 'More';
 });
-elements.scanEditBlocks.addEventListener('click', scanEditableBlocks);
+elements.scanEditBlocks.addEventListener('click', () => void scanEditableBlocks());
 elements.ocrCurrentPage.addEventListener('click', () => runOcrForCurrentPage(true));
 // ── Sélection au rectangle (marquee) ────────────────────────────────────────
 // En mode édition, un drag sur une zone vide d'une page dessine un rectangle bleu.
@@ -24813,7 +24892,7 @@ async function aiPreparePage(pageNumber) {
 	if (!state.editMode) toggleEditMode(true);
 	await renderPage(pageNumber);
 	if (_autoDetectInFlight) await _autoDetectInFlight;
-	if (pageNeedsEditDetection(pageNumber)) await autoDetectEditableContent();
+	if (pageNeedsEditDetection(pageNumber)) await autoDetectEditableContent(pageNumber);
 }
 
 function aiFindBlock(blockId) {
