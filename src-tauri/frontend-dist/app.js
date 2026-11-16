@@ -24140,10 +24140,40 @@ elements.ocrCurrentPage.addEventListener('click', () => runOcrForCurrentPage(tru
 let suppressNextPageClick = false;
 ensurePageTextContextMenu();
 
-elements.pagesStack.addEventListener('pointerdown', (event) => {
+// Calque d'édition visé par un drag de sélection : le fond d'une page, ou, pour
+// un drag parti du fond gris autour du document (comme sur le bureau du Finder),
+// la page la plus proche du pointeur. Jamais un bloc ni une barre de défilement.
+function marqueeLayerForPointer(event) {
+	const target = event.target;
+	if (target.classList?.contains('edit-layer')) return target;
+	if (target !== elements.dropZone && target !== elements.pagesStack) return null;
+	const stage = elements.dropZone;
+	const stageRect = stage.getBoundingClientRect();
+	if (
+		event.clientX >= stageRect.left + stage.clientLeft + stage.clientWidth ||
+		event.clientY >= stageRect.top + stage.clientTop + stage.clientHeight
+	) {
+		return null;
+	}
+	let nearest = null;
+	let nearestDistance = Infinity;
+	for (const layer of elements.pagesStack.querySelectorAll('.edit-layer.active')) {
+		const rect = layer.getBoundingClientRect();
+		const dx = Math.max(rect.left - event.clientX, event.clientX - rect.right, 0);
+		const dy = Math.max(rect.top - event.clientY, event.clientY - rect.bottom, 0);
+		const distance = dx * dx + dy * dy;
+		if (distance < nearestDistance) {
+			nearestDistance = distance;
+			nearest = layer;
+		}
+	}
+	return nearest;
+}
+
+elements.dropZone.addEventListener('pointerdown', (event) => {
 	if (!state.editMode || state.editTool === 'add-text' || event.button !== 0 || state.editingBlockId) return;
-	// Le drag doit démarrer sur le FOND d'une page (edit-layer), pas sur un bloc.
-	const editLayer = event.target.classList?.contains('edit-layer') ? event.target : null;
+	// Le drag doit démarrer sur un FOND (page ou pourtour du document), pas sur un bloc.
+	const editLayer = marqueeLayerForPointer(event);
 	if (!editLayer) return;
 
 	const pageNumber = Number(editLayer.dataset.page);
@@ -24215,7 +24245,12 @@ elements.pagesStack.addEventListener('pointerdown', (event) => {
 		const hits = blocksInRect(selLeft, selTop, selRight, selBottom);
 
 		// Empêche le clic de fin de drag de vider la sélection qu'on vient de faire.
+		// Parti du pourtour, le drag peut finir sans clic sur la pile de pages :
+		// le drapeau est alors levé au tour suivant, pas au prochain vrai clic.
 		suppressNextPageClick = true;
+		setTimeout(() => {
+			suppressNextPageClick = false;
+		}, 0);
 		if (!hits.length) {
 			clearBlockSelection();
 		} else {
