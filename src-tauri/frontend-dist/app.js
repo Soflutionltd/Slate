@@ -3382,7 +3382,7 @@ async function onNativeTabDragEnded(action) {
 	teardownTabPointerDrag();
 	if (!drag) return;
 	if (action === 'claimed' || action === 'merged' || action === 'detached') {
-		await closeTab(drag.tabId);
+		await closeTab(drag.tabId, { keepDocument: true });
 		if (!state.tabs.length) destroyAppWindow();
 		return;
 	}
@@ -3427,7 +3427,7 @@ async function detachTabToNewWindow(tabId, event) {
 		commitTabOrderFromDom();
 		return;
 	}
-	await closeTab(tabId);
+	await closeTab(tabId, { keepDocument: true });
 }
 
 function commitTabOrderFromDom() {
@@ -6139,9 +6139,12 @@ async function renderViewPageNative(pdf, pageNumber, scale, width, height) {
 	return null;
 }
 
-function dropViewDocument(tabId) {
+// `docId` : le document de l'onglet est abandonné (fermeture réelle) ; sa copie
+// d'édition native est oubliée avec lui, sinon rouvrir le fichier retrouverait
+// les modifications non enregistrées sous un document relu depuis le disque.
+function dropViewDocument(tabId, docId = null) {
 	if (!getInvoke()) return;
-	invokeCommand('drop_view_document', { tab: String(tabId) }).catch((error) => {
+	invokeCommand('drop_view_document', { tab: String(tabId), doc: docId }).catch((error) => {
 		console.warn('Native view document release failed.', error);
 	});
 }
@@ -23875,12 +23878,15 @@ function hideSaveChangesModal() {
 	elements.saveChangesModal.classList.add('hidden');
 }
 
-async function closeTab(tabId) {
+// `keepDocument` : l'onglet part vivre dans une autre fenêtre, qui partage la
+// même copie d'édition native ; elle ne doit pas être oubliée.
+async function closeTab(tabId, { keepDocument = false } = {}) {
 	const closingIndex = state.tabs.findIndex((tab) => tab.id === tabId);
 	if (closingIndex === -1) return;
 	const wasActive = state.activeTabId === tabId;
-	state.tabs.splice(closingIndex, 1);
-	dropViewDocument(tabId);
+	const [closed] = state.tabs.splice(closingIndex, 1);
+	// Même identifiant que currentDocId() pour cet onglet.
+	dropViewDocument(tabId, keepDocument ? null : closed.fingerprint || closed.fileName || 'doc');
 
 	if (!state.tabs.length) {
 		state.activeTabId = null;

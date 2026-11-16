@@ -124,6 +124,10 @@ impl Bridge {
             }
             "drop_view_document" => {
                 self.views.remove(&text(&args, "tab")?);
+                if let Some(doc) = args["doc"].as_str() {
+                    self.docs.remove(doc);
+                    self.baselines.remove(doc);
+                }
                 Ok(Reply::Json(Value::Null))
             }
             "render_view_page" => {

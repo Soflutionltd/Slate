@@ -765,10 +765,28 @@ fn cache_view_document(
     Ok(())
 }
 
+/// Libère le document affiché d'un onglet fermé. `doc` : id `DocCache` du
+/// document, donné quand l'onglet est fermé pour de bon (pas déplacé vers une
+/// autre fenêtre). Sa copie d'édition et ses points de restauration sont alors
+/// oubliés : ils portent les modifications non enregistrées de l'onglet, et
+/// rouvrir le fichier les ferait resurgir sous un document relu depuis le disque.
 #[tauri::command]
-fn drop_view_document(window: WebviewWindow, views: State<'_, ViewCache>, tab: String) -> Result<(), String> {
-    let mut map = views.0.lock().map_err(|_| "view cache lock poisoned".to_string())?;
-    map.remove(&(window.label().to_string(), tab));
+fn drop_view_document(
+    window: WebviewWindow,
+    views: State<'_, ViewCache>,
+    docs: State<'_, DocCache>,
+    baselines: State<'_, DocBaselines>,
+    tab: String,
+    doc: Option<String>,
+) -> Result<(), String> {
+    {
+        let mut map = views.0.lock().map_err(|_| "view cache lock poisoned".to_string())?;
+        map.remove(&(window.label().to_string(), tab));
+    }
+    if let Some(id) = doc {
+        docs.0.lock().map_err(|_| "cache lock poisoned".to_string())?.remove(&id);
+        baselines.0.lock().map_err(|_| "baseline lock poisoned".to_string())?.remove(&id);
+    }
     Ok(())
 }
 
