@@ -8619,16 +8619,20 @@ async function runOcrForCurrentPage(openPanel = false, options = {}) {
 	const silent = Boolean(options.silent);
 
 	try {
+		// Page et document figés à l'entrée : l'OCR est long, l'utilisateur peut
+		// défiler ou changer d'onglet avant la fin.
+		const pdf = state.pdf;
 		const data = getActivePageData();
 		const canvas = getActiveCanvas();
 		if (!data || !canvas) return 0;
+		const pageNumber = data.pageNumber;
 
 		let ocrResult = null;
 		if (state.fileBytes) {
 			try {
 				ocrResult = await invokeCommand('ocr_pdf_page', {
 					bytes: await stageBytes(state.fileBytes),
-					page: state.page,
+					page: pageNumber,
 					language: 'eng+fra'
 				});
 			} catch (nativeError) {
@@ -8652,20 +8656,20 @@ async function runOcrForCurrentPage(openPanel = false, options = {}) {
 			};
 		}
 
-		if (state.editingBlockId) return 0;
+		if (state.editingBlockId || state.pdf !== pdf) return 0;
 
 		const blocks = mapOcrBlocksToPage(ocrResult, data);
 		await refineOcrBlocksFromInk(blocks, data);
-		if (state.editingBlockId) return 0;
+		if (state.editingBlockId || state.pdf !== pdf) return 0;
 		renderOcrTextLayer(data, blocks);
 
 		// Les blocs OCR déjà modifiés par l'utilisateur sont du contenu document :
 		// on ne les jette jamais lors d'une nouvelle passe OCR.
 		const existing = state.editBlocks.filter(
 			(block) =>
-				!(block.page === state.page && block.source === 'ocr' && !isPersistedPageContent(block))
+				!(block.page === pageNumber && block.source === 'ocr' && !isPersistedPageContent(block))
 		);
-		annotateBlockIntelligence([...existing.filter((block) => block.page === state.page), ...blocks]);
+		annotateBlockIntelligence([...existing.filter((block) => block.page === pageNumber), ...blocks]);
 		const keepSelection = state.selectedBlockId;
 		const keepSelections = Array.isArray(state.selectedBlockIds) ? [...state.selectedBlockIds] : [];
 		state.editBlocks = mergeAnalysisSources(existing, blocks);
@@ -8710,9 +8714,9 @@ function mapOcrBlocksToPage(ocrResult, data) {
 			const pdfPageHeight = ocrResult?.pageHeight || data.pdfPageHeight || data.viewportHeight;
 			const ocrFontSize = Math.max(6, height * 0.78);
 			return {
-				id: `ocr-${state.page}-${index}-${Date.now()}`,
+				id: `ocr-${data.pageNumber}-${index}-${Date.now()}`,
 				kind: 'text',
-				page: state.page,
+				page: data.pageNumber,
 				text: block.text,
 				originalText: block.text,
 				x,
