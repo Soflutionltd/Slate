@@ -12,3 +12,7 @@ src-tauri/binaries/
 # PDFium extraction temp
 src-tauri/pdfium-extract/
 src-tauri/pdfium.tgz
+
+# Relais MCP distant (Cloudflare Worker)
+mcp-relay/node_modules/
+mcp-relay/.wrangler/

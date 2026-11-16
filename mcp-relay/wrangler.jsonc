@@ -1,0 +1,19 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "slate-mcp",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-10-01",
+	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+	"workers_dev": true,
+	"observability": { "enabled": true },
+	// Jetons et clients OAuth (@cloudflare/workers-oauth-provider). Sans `id`,
+	// Wrangler crée l'espace KV au premier déploiement.
+	"kv_namespaces": [{ "binding": "OAUTH_KV" }],
+	"durable_objects": {
+		"bindings": [
+			{ "name": "DEVICE_HUB", "class_name": "DeviceHub" },
+			{ "name": "PAIRING", "class_name": "PairingRegistry" }
+		]
+	},
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["DeviceHub", "PairingRegistry"] }]
+}
