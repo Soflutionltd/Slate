@@ -24192,6 +24192,13 @@ elements.dropZone.addEventListener('pointerdown', (event) => {
 	let marquee = null;
 	let dragging = false;
 
+	// Le drag ne trace que le rectangle : sans ça, le navigateur lance en même
+	// temps sa sélection de texte native, qui bleuit toute la page et laisse des
+	// surlignages fantômes à la place des blocs ensuite supprimés.
+	window.getSelection()?.removeAllRanges();
+	const blockNativeSelection = (selectEvent) => selectEvent.preventDefault();
+	document.addEventListener('selectstart', blockNativeSelection);
+
 	// Blocs (non masqués) de la page dont la boîte intersecte le rectangle courant.
 	const blocksInRect = (left, top, right, bottom) =>
 		state.editBlocks.filter((block) => {
@@ -24231,9 +24238,23 @@ elements.dropZone.addEventListener('pointerdown', (event) => {
 		});
 	};
 
-	const onUp = (upEvent) => {
+	const endGesture = () => {
 		window.removeEventListener('pointermove', onMove);
 		window.removeEventListener('pointerup', onUp);
+		window.removeEventListener('pointercancel', onCancel);
+		document.removeEventListener('selectstart', blockNativeSelection);
+	};
+
+	// Geste interrompu par le système : on abandonne le rectangle sans rien sélectionner.
+	const onCancel = () => {
+		endGesture();
+		if (!dragging) return;
+		if (marquee) marquee.remove();
+		renderEditBlocks();
+	};
+
+	const onUp = (upEvent) => {
+		endGesture();
 		if (!dragging) return;
 		const cur = toLocal(upEvent);
 		const selLeft = Math.min(start.x, cur.x);
@@ -24264,6 +24285,7 @@ elements.dropZone.addEventListener('pointerdown', (event) => {
 
 	window.addEventListener('pointermove', onMove);
 	window.addEventListener('pointerup', onUp);
+	window.addEventListener('pointercancel', onCancel);
 });
 
 elements.pagesStack.addEventListener('click', (event) => {
