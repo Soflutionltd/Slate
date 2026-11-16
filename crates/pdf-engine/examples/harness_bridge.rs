@@ -82,6 +82,16 @@ impl Bridge {
                 let token = self.stage(generated.bytes);
                 Ok(Reply::Json(json!({ "bytes": token, "pages": generated.pages, "warnings": generated.warnings })))
             }
+            "delete_pages" => {
+                let bytes = self.doc_bytes(&args["bytes"])?;
+                let pages = args["pageNumbers"]
+                    .as_array()
+                    .ok_or("pageNumbers_required")?
+                    .iter()
+                    .map(|page| page.as_u64().and_then(|n| u32::try_from(n).ok()).ok_or("invalid_page".to_string()))
+                    .collect::<Result<Vec<u32>, String>>()?;
+                Ok(Reply::Bytes(alto_pdf_engine::pdf_ops::delete_pages(bytes, pages)?))
+            }
             "take_staged_bytes" => {
                 let token = text(&args, "token")?;
                 let bytes = self.doc_bytes(&json!(token))?;

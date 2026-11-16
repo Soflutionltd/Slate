@@ -20,7 +20,8 @@
 		'render_pdf_page_cached',
 		'render_pdf_thumbnail_cached',
 		'get_cached_document',
-		'extract_embedded_fonts_cached'
+		'extract_embedded_fonts_cached',
+		'delete_pages'
 	]);
 	const NEUTRAL = {
 		read_open_session: null,
