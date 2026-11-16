@@ -1443,6 +1443,27 @@ async fn delete_pages(
     pdf_ops::delete_pages(bytes.0, page_numbers).map(tauri::ipc::Response::new)
 }
 
+/// Supprime des formes vectorielles (bandeaux, cadres, filets) d'une page.
+/// `shapes` : index d'objet et boîte attendue de chaque forme, issus de
+/// l'analyse de la page. Le point de restauration natif de la page est oublié :
+/// il contient encore ces formes, le restaurer plus tard les ferait réapparaître.
+#[tauri::command]
+async fn delete_shapes(
+    baselines: State<'_, DocBaselines>,
+    id: String,
+    bytes: DocBytes,
+    page: u32,
+    shapes: Vec<pdf_edit::ShapeTarget>,
+) -> Result<tauri::ipc::Response, String> {
+    let updated = pdf_edit::delete_shapes(&bytes.0, page, &shapes)?;
+    if let Ok(mut docs) = baselines.0.lock() {
+        if let Some(pages) = docs.get_mut(&id) {
+            pages.remove(&page);
+        }
+    }
+    Ok(tauri::ipc::Response::new(updated))
+}
+
 #[tauri::command]
 async fn extract_pages(
     bytes: DocBytes,
@@ -2894,6 +2915,7 @@ fn main() {
             mcp_binary_path,
             rotate_pages,
             delete_pages,
+            delete_shapes,
             extract_pages,
             reorder_pages,
             document_properties,

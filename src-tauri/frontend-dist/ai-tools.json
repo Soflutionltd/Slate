@@ -182,7 +182,7 @@
 		{
 			"name": "get_page_layout",
 			"title": "Get page layout",
-			"description": "List the editable blocks of a page (text and images) with their id, text, position and size in points, font and size. Use the ids with edit_text_block, move_block and delete_block.",
+			"description": "List the editable blocks of a page (text, images and vector shapes such as bars, frames and rules) with their id, type, text, position and size in points, font and size. Use the ids with edit_text_block, move_block and delete_block. Shapes can only be deleted.",
 			"risk": "read",
 			"input_schema": {
 				"type": "object",
@@ -321,7 +321,7 @@
 		{
 			"name": "move_block",
 			"title": "Move a block",
-			"description": "Move a block returned by get_page_layout so that its top-left corner lands at x, y (points).",
+			"description": "Move a text or image block returned by get_page_layout so that its top-left corner lands at x, y (points). Shapes cannot be moved.",
 			"risk": "edit",
 			"input_schema": {
 				"type": "object",
@@ -353,7 +353,7 @@
 		{
 			"name": "delete_block",
 			"title": "Delete a block",
-			"description": "Remove a text or image block returned by get_page_layout. The user can undo it in Slate.",
+			"description": "Remove a text, image or shape block returned by get_page_layout. The user can undo it in Slate. Deleting a shape renumbers the shape ids of its page: call get_page_layout again before deleting another one.",
 			"risk": "destructive",
 			"input_schema": {
 				"type": "object",

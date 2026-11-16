@@ -804,6 +804,7 @@ const translations = {
 		histBlockMove: 'Block moved',
 		histBlockResize: 'Block resized',
 		histBlockDelete: 'Block deleted',
+		shapeBlock: 'Shape',
 		histBlockAdd: 'Text added',
 		histImageAdd: 'Image added',
 		histFormat: 'Formatting changed',
@@ -1247,6 +1248,7 @@ const translations = {
 		histBlockMove: 'Bloc déplacé',
 		histBlockResize: 'Bloc redimensionné',
 		histBlockDelete: 'Bloc supprimé',
+		shapeBlock: 'Forme',
 		histBlockAdd: 'Texte ajouté',
 		histImageAdd: 'Image ajoutée',
 		histFormat: 'Mise en forme modifiée',
@@ -7550,7 +7552,9 @@ function rotatePageOverlays(pageNumber, angle, aspect) {
 // les re-primait pas explicitement ici.
 // `undoLabel` : l'opération devient une étape de l'historique (le document
 // d'avant est gardé) au lieu de vider l'historique.
-async function replaceDocumentStructure(bytes, { focusPage, mapPage, rotated, undoLabel } = {}) {
+// `repaintPages` : la pagination est inchangée, seules ces pages ont changé de
+// contenu ; elles sont re-rendues à leur place, sans remonter la pile.
+async function replaceDocumentStructure(bytes, { focusPage, mapPage, rotated, undoLabel, repaintPages } = {}) {
 	const tab = currentTab();
 	if (!tab) return;
 	const undoSnap = undoLabel ? { ...captureEditableSnapshot(), doc: captureDocumentState() } : null;
@@ -7564,6 +7568,8 @@ async function replaceDocumentStructure(bytes, { focusPage, mapPage, rotated, un
 		rotated && state.pdf && pdf.numPages === state.pdf.numPages && getPageData(rotated.page)
 			? rotated.page
 			: null;
+	const inPlacePages =
+		Array.isArray(repaintPages) && state.pdf && pdf.numPages === state.pdf.numPages ? repaintPages : null;
 	const remap = typeof mapPage === 'function' ? mapPage : (page) => page;
 	const followPages = (items) =>
 		items.flatMap((item) => {
@@ -7609,6 +7615,17 @@ async function replaceDocumentStructure(bytes, { focusPage, mapPage, rotated, un
 		markDirty();
 		// La vignette est rafraîchie par l'appelant (handleRotatePage), qui seul
 		// sait quel quart de tour elle doit cesser de simuler.
+		return;
+	}
+
+	if (inPlacePages) {
+		for (const page of inPlacePages) {
+			_thumbnailCache.delete(`${state.fingerprint || 'unknown'}:${page}`);
+			await rerenderPageQuietly(page);
+			void rebindRenderedFormLayers(page);
+		}
+		markDirty();
+		refreshPagesDrawerIfOpen();
 		return;
 	}
 
@@ -8350,8 +8367,10 @@ async function scanEditableBlocks(pageNumber = state.page) {
 	const viewport = pageViewport(page, zoom);
 	let blocks = await pdfiumEditBlocks(pageNumber, viewport);
 
-	if (!blocks.length) {
-		blocks = await pdfJsEditBlocks(page, pageNumber, viewport);
+	// Des formes seules (cadre d'un scan, texte converti en tracés) ne sont pas du
+	// contenu détecté : le repli PDF.js, puis l'OCR automatique, doivent jouer.
+	if (!blocks.some((block) => !block.shape)) {
+		blocks = (await pdfJsEditBlocks(page, pageNumber, viewport)).concat(blocks);
 	}
 
 	if (state.pdf !== pdf || state.zoom !== zoom) return null;
@@ -8410,7 +8429,7 @@ async function scanEditableBlocks(pageNumber = state.page) {
 	}
 	renderEditBlocksForPage(pageNumber);
 	if (selectionOnPage || pageNumber === state.page) updateSelectedEditField();
-	return blocks.length;
+	return blocks.filter((block) => !block.shape).length;
 }
 
 function isEditingBlockOnPage(pageNumber) {
@@ -8585,12 +8604,19 @@ async function pdfiumEditBlocks(pageNumber, viewport) {
 						pageCharIndex: Number.isInteger(ch.pageCharIndex) ? ch.pageCharIndex : -1
 					}))
 					: [];
+				// Forme vectorielle (bandeau, cadre, filet) : manipulée comme une image
+				// (ni texte, ni police, ni édition), marquée `shape`. Elle ne se déplace
+				// pas : elle se sélectionne et se supprime, réellement, dans le PDF.
+				// `shapeIndex` = index de l'objet dans la page, attendu par le moteur.
+				const isShape = block.kind === 'shape';
+				const shapeLabel = isShape ? t('shapeBlock') : '';
 				return {
 					id: block.id || `pdfium-${pageNumber}-${index}`,
-					kind: block.kind || 'text',
+					kind: isShape ? 'image' : block.kind || 'text',
+					...(isShape ? { shape: true, shapeIndex: Number(String(block.id).split('-').pop()) } : {}),
 					page: pageNumber,
-					text: block.text || (block.kind === 'image' ? 'Image' : ''),
-					originalText: block.text || '',
+					text: shapeLabel || block.text || (block.kind === 'image' ? 'Image' : ''),
+					originalText: shapeLabel || block.text || '',
 					x,
 					y,
 					originalX: x,
@@ -8619,10 +8645,15 @@ async function pdfiumEditBlocks(pageNumber, viewport) {
 					diagnostics: Array.isArray(block.diagnostics) ? [...block.diagnostics] : []
 				};
 			})
-			.filter((block) => block.width > 2 && block.height > 2 && (block.text || block.kind !== 'text'))
+			// Un filet est plus fin que 2 px : pour une forme, seul le grand côté compte.
+			.filter((block) =>
+				block.shape
+					? Math.max(block.width, block.height) > 2 && Number.isInteger(block.shapeIndex)
+					: block.width > 2 && block.height > 2 && (block.text || block.kind !== 'text')
+			)
 			.filter((block) => block.kind === 'image' || !looksLikeGarbledExtraction(block.text))
 			.filter((block, _index, all) => {
-				if (block.kind !== 'image') return true;
+				if (block.kind !== 'image' || block.shape) return true;
 				// Image qui recouvre du texte = fond / bandeau, pas un logo.
 				// La garder pose un cadre rouge par-dessus les caractères.
 				return !all.some((other) => {
@@ -11126,6 +11157,8 @@ function mergeAnalysisSources(existingBlocks, incomingBlocks) {
 			const covered = merged.some(
 				(candidate) =>
 					candidate.page === block.page &&
+					// Un bandeau ou un cadre contient le texte reconnu sans le remplacer.
+					!candidate.shape &&
 					(candidate.source !== 'ocr' || isPersistedPageContent(candidate)) &&
 					blockOverlapRatio(candidate, block) > 0.2
 			);
@@ -12566,7 +12599,7 @@ function renderEditBlocksForPage(pageNumber) {
 			// édition il ne rend aucun contenu, donc le fond blanc de `.dirty`
 			// peindrait un carré vide sur le PDF. On le laisse transparent.
 			const glyphOnlyIdle = localGlyphEdited && !isEditing && !isBlockTextEdited(block) && !moved;
-			element.className = `edit-block ${block.kind || 'text'}${isSelected ? ' selected' : ''}${dirty && !glyphOnlyIdle ? ' dirty' : ''}${isEditing ? ' editing' : ''}${glyphComposite ? ' glyph-composite' : ''}${isAddedTextBlock(block) ? ' added' : ''}`;
+			element.className = `edit-block ${block.kind || 'text'}${block.shape ? ' shape' : ''}${isSelected ? ' selected' : ''}${dirty && !glyphOnlyIdle ? ' dirty' : ''}${isEditing ? ' editing' : ''}${glyphComposite ? ' glyph-composite' : ''}${isAddedTextBlock(block) ? ' added' : ''}`;
 			if (isEditing && Array.isArray(block.pdfChars) && block.pdfChars.length && !isBlockTextEdited(block)) {
 				element.classList.add('pdf-glyph-editing');
 				// Caret natif dessiné actif : le re-render vient d'écraser className,
@@ -13014,6 +13047,18 @@ function renderEditBlocksForPage(pageNumber) {
 						if (backdrop) backdrop.style.top = `${EDIT_BLOCK_PAD_Y + inkOffset}px`;
 					}
 				}
+			}
+
+			// Forme : le cadre épouse le tracé (pas le minimum 18 × 14 d'un bloc
+			// texte), avec au moins 6 px d'épaisseur centrés sur un filet fin, pour
+			// qu'il reste cliquable.
+			if (block.shape) {
+				const hitWidth = Math.max(block.width, 6);
+				const hitHeight = Math.max(block.height, 6);
+				element.style.left = `${Math.round(block.x - (hitWidth - block.width) / 2)}px`;
+				element.style.top = `${Math.round(block.y - (hitHeight - block.height) / 2)}px`;
+				element.style.width = `${hitWidth}px`;
+				element.style.height = `${hitHeight}px`;
 			}
 
 			// Images + logos non éditables : cadre CARRÉ dès le survol (classe posée
@@ -14062,7 +14107,7 @@ function convertNativeAnalysisBlocks(analysis, data) {
 	const scaleX = data.viewportWidth / pageWidth;
 	const scaleY = data.viewportHeight / pageHeight;
 	return (Array.isArray(analysis?.blocks) ? analysis.blocks : [])
-		.filter((raw) => raw.kind !== 'image')
+		.filter((raw) => raw.kind !== 'image' && raw.kind !== 'shape')
 		.map((raw) => ({
 			raw,
 			x: raw.x * scaleX,
@@ -16714,7 +16759,7 @@ function translateDraggedBlocks(page, blocks) {
 // page. Retourne true si au moins un bloc a bougé. NE commit PAS.
 // opts.visualOnly : translate DOM sans reconstruire le layer (flèches / drag).
 function moveBlocks(ids, dx, dy, opts = {}) {
-	const blocks = editBlocksByIds(ids).filter((block) => !block.hidden);
+	const blocks = editBlocksByIds(ids).filter((block) => !block.hidden && !block.shape);
 	if (!blocks.length) return false;
 	let moved = false;
 	const pages = new Set();
@@ -16742,7 +16787,7 @@ function moveBlocks(ids, dx, dy, opts = {}) {
 // Duplique des blocs (nouvel id + léger décalage), sélectionne les copies et
 // pousse un snapshot. Retourne les copies dans l'ordre des ids fournis.
 function duplicateBlocks(ids) {
-	const blocks = editBlocksByIds(ids);
+	const blocks = editBlocksByIds(ids).filter((block) => !block.shape);
 	if (!blocks.length) return [];
 	const snap = captureEditableSnapshot();
 	const stamp = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -16765,10 +16810,75 @@ function duplicateBlocks(ids) {
 	return copies;
 }
 
-// Masque (supprime visuellement) des blocs et pousse un snapshot.
+// Une suppression de formes modifie le document : tant qu'elle court, les blocs
+// à l'écran décrivent encore l'ancien contenu, une seconde suppression viserait
+// de mauvais objets.
+let _shapeDeleteRunning = false;
+
+// Supprime des blocs dont au moins une forme. Une forme n'est pas masquée comme
+// un texte : le moteur la retire du PDF, puis sa page est re-rendue et
+// ré-analysée (les index d'objets ont glissé). Le document d'avant est gardé
+// dans l'historique : UNE étape, que Précédent / Suivant rejouent, pour les
+// formes comme pour les autres blocs supprimés avec elles.
+async function deleteBlocksWithShapes(blocks) {
+	if (_shapeDeleteRunning) return false;
+	_shapeDeleteRunning = true;
+	try {
+		const shapesByPage = new Map();
+		for (const block of blocks) {
+			if (!block.shape) continue;
+			// Boîte en points PDF : le moteur vérifie qu'il retire bien ce tracé.
+			const toPoints = (block.pdfPageWidth || block.pageWidth) / Math.max(1, block.pageWidth);
+			const target = {
+				index: block.shapeIndex,
+				x: block.x * toPoints,
+				y: block.y * toPoints,
+				width: block.width * toPoints,
+				height: block.height * toPoints
+			};
+			if (!shapesByPage.has(block.page)) shapesByPage.set(block.page, []);
+			shapesByPage.get(block.page).push(target);
+		}
+		const otherIds = new Set(blocks.filter((block) => !block.shape).map((block) => block.id));
+		const pages = [...shapesByPage.keys()];
+
+		let source = await structureOpSourceBytes();
+		let updated = null;
+		for (const page of pages) {
+			if (updated) source = await stageBytes(updated);
+			updated = await invokeBytes('delete_shapes', {
+				id: currentDocId(),
+				bytes: source,
+				page,
+				shapes: shapesByPage.get(page)
+			});
+		}
+		await replaceDocumentStructure(updated, { repaintPages: pages, undoLabel: 'histBlockDelete' });
+		for (const block of state.editBlocks) {
+			if (otherIds.has(block.id)) block.hidden = true;
+		}
+		// Les formes restantes de ces pages portent des index périmés : la
+		// ré-analyse les remplace.
+		state.editBlocks = state.editBlocks.filter((block) => !(block.shape && shapesByPage.has(block.page)));
+		for (const page of pages) await scanEditableBlocks(page);
+		renderEditBlocks();
+		updateSelectedEditField();
+		return true;
+	} catch (error) {
+		console.error(error);
+		setStatus(error instanceof Error ? error.message : String(error), 'error');
+		return false;
+	} finally {
+		_shapeDeleteRunning = false;
+	}
+}
+
+// Masque (supprime visuellement) des blocs et pousse un snapshot. Avec une
+// forme dans le lot, la suppression est asynchrone (promesse du résultat).
 function hideBlocks(ids) {
 	const blocks = editBlocksByIds(ids);
 	if (!blocks.length) return false;
+	if (blocks.some((block) => block.shape)) return deleteBlocksWithShapes(blocks);
 	const snap = captureEditableSnapshot();
 	for (const block of blocks) block.hidden = true;
 	clearBlockSelection();
@@ -16812,13 +16922,20 @@ function startBlockDrag(event, id) {
 		return;
 	}
 
+	// Une forme ne se déplace pas : le clic la sélectionne, et un drag parti
+	// d'elle trace le rectangle de sélection (elle tient lieu de fond de page).
+	if (block.shape) return;
+
 	// Alt+drag : on duplique d'abord (toute la sélection si le bloc en fait
 	// partie, sinon ce seul bloc), puis on drague les copies fraîchement créées.
 	if (event.altKey) {
-		const baseIds =
+		// Les formes ne se dupliquent pas : les écarter ici garde l'ordre des
+		// copies aligné sur celui des blocs d'origine.
+		const baseIds = (
 			isBlockSelected(block) && (state.selectedBlockIds?.length || 0)
 				? state.selectedBlockIds.slice()
-				: [id];
+				: [id]
+		).filter((baseId) => !state.editBlocks.some((candidate) => candidate.id === baseId && candidate.shape));
 		const copies = duplicateBlocks(baseIds);
 		if (!copies.length) return;
 		const idx = baseIds.indexOf(id);
@@ -16831,7 +16948,7 @@ function startBlockDrag(event, id) {
 	const inSelection = isBlockSelected(block) && (state.selectedBlockIds?.length || 0) > 1;
 	const groupInit = inSelection
 		? state.editBlocks
-				.filter((b) => state.selectedBlockIds.includes(b.id) && b.id !== id && !b.hidden)
+				.filter((b) => state.selectedBlockIds.includes(b.id) && b.id !== id && !b.hidden && !b.shape)
 				.map((b) => ({ block: b, x: b.x, y: b.y }))
 		: [];
 
@@ -16942,7 +17059,7 @@ function startBlockDrag(event, id) {
 // Un bloc est redimensionnable s'il s'agit d'une image, ou d'un logo (texte dont la
 // police n'est pas installée → non éditable, manipulé comme un visuel).
 function isResizableBlock(block) {
-	if (!block) return false;
+	if (!block || block.shape) return false;
 	const stateName = blockState(block);
 	return stateName === BlockState.IMAGE || stateName === BlockState.LOGO;
 }
@@ -17237,6 +17354,7 @@ function computeAlignmentGuides(block, proposedX, proposedY) {
 		(candidate) =>
 			candidate.page === block.page &&
 			!candidate.hidden &&
+			!candidate.shape &&
 			candidate.id !== block.id &&
 			candidate.width >= minWidth &&
 			candidate.height >= minHeight
@@ -21556,8 +21674,10 @@ function pageHasEdits(pageNumber) {
 }
 
 function exportStrategyForPage(pageNumber) {
+	// Les formes ne portent jamais d'édition (leur suppression est déjà faite
+	// dans le document) : elles ne pèsent pas sur la stratégie de la page.
 	const blocks = state.editBlocks.filter(
-		(block) => block.page === pageNumber && !isEmptyAddedPlaceholder(block)
+		(block) => block.page === pageNumber && !block.shape && !isEmptyAddedPlaceholder(block)
 	);
 	const signatures = (state.signaturePlacements || []).filter((placement) => placement.page === pageNumber);
 	if (!blocks.some((block) => block.hidden || block.added || isBlockDirty(block)) && signatures.length === 0) {
@@ -24146,6 +24266,8 @@ ensurePageTextContextMenu();
 function marqueeLayerForPointer(event) {
 	const target = event.target;
 	if (target.classList?.contains('edit-layer')) return target;
+	// Une forme (bandeau, cadre) tient lieu de fond : le drag part d'elle.
+	if (target.classList?.contains('shape')) return target.closest('.edit-layer.active');
 	if (target !== elements.dropZone && target !== elements.pagesStack) return null;
 	const stage = elements.dropZone;
 	const stageRect = stage.getBoundingClientRect();
@@ -24205,6 +24327,13 @@ elements.dropZone.addEventListener('pointerdown', (event) => {
 			if (block.page !== pageNumber || block.hidden) return false;
 			const bw = Math.max(block.width, 1);
 			const bh = Math.max(block.height, 1);
+			if (block.shape) {
+				// Une forme n'est prise que si le rectangle en couvre au moins la
+				// moitié : frôler un cadre ou une bordure de tableau ne l'embarque pas.
+				const coveredWidth = Math.min(block.x + bw, right) - Math.max(block.x, left);
+				const coveredHeight = Math.min(block.y + bh, bottom) - Math.max(block.y, top);
+				return coveredWidth > 0 && coveredHeight > 0 && coveredWidth * coveredHeight >= bw * bh * 0.5;
+			}
 			return block.x < right && block.x + bw > left && block.y < bottom && block.y + bh > top;
 		});
 
@@ -24268,6 +24397,8 @@ elements.dropZone.addEventListener('pointerdown', (event) => {
 		// Empêche le clic de fin de drag de vider la sélection qu'on vient de faire.
 		// Parti du pourtour, le drag peut finir sans clic sur la pile de pages :
 		// le drapeau est alors levé au tour suivant, pas au prochain vrai clic.
+		// Parti d'une forme, il finit par un clic sur elle : même protection.
+		suppressNextIdleClick();
 		suppressNextPageClick = true;
 		setTimeout(() => {
 			suppressNextPageClick = false;
@@ -24328,7 +24459,8 @@ elements.pagesStack.addEventListener('click', (event) => {
 		let nearest = null;
 		let nearestDist = Infinity;
 		for (const block of state.editBlocks) {
-			if (block.page !== pageNumber || block.hidden) continue;
+			// Une forme ne capte que les clics posés sur elle, jamais ceux d'à côté.
+			if (block.page !== pageNumber || block.hidden || block.shape) continue;
 			const bw = Math.max(block.width, 1);
 			const bh = Math.max(block.height, 1);
 			const dx = Math.max(block.x - px, px - (block.x + bw), 0);
@@ -24481,7 +24613,9 @@ function nudgeSelection(dx, dy) {
 	// Bloc(s) sélectionné(s).
 	const ids = new Set(state.selectedBlockIds || []);
 	if (state.selectedBlockId) ids.add(state.selectedBlockId);
-	const hasBlocks = state.editBlocks.some((block) => ids.has(block.id) && !block.hidden);
+	// Une forme ne se déplace pas : seule, elle ne lance pas de déplacement (ni
+	// l'instantané d'annulation qui va avec).
+	const hasBlocks = state.editBlocks.some((block) => ids.has(block.id) && !block.hidden && !block.shape);
 	if (hasBlocks) {
 		if (!_nudgeSnapshot) {
 			_nudgeSnapshot = captureEditableSnapshot();
@@ -25047,7 +25181,7 @@ function aiBlockSummary(block) {
 	const isImage = block.kind === 'image';
 	return {
 		id: block.id,
-		type: isImage ? 'image' : 'text',
+		type: block.shape ? 'shape' : isImage ? 'image' : 'text',
 		...(isImage ? {} : { text: block.text || '' }),
 		x: aiToPoints(block.x),
 		y: aiToPoints(block.y),
@@ -25309,6 +25443,7 @@ const aiToolHandlers = {
 	async move_block({ document_id: documentId, block_id: blockId, x, y }) {
 		const tab = await aiFocusDocument(documentId);
 		const block = aiFindBlock(blockId);
+		if (block.shape) throw new Error(`Block "${block.id}" is a shape: it can be deleted, not moved.`);
 		await aiRevealBlock(block);
 		const scale = aiPointScale();
 		const snapshot = captureEditableSnapshot();
@@ -25323,7 +25458,7 @@ const aiToolHandlers = {
 		const tab = await aiFocusDocument(documentId);
 		const block = aiFindBlock(blockId);
 		await aiRevealBlock(block);
-		hideBlocks([block.id]);
+		if (!(await hideBlocks([block.id]))) throw new Error(`Block "${block.id}" could not be deleted.`);
 		return { document_id: tab.id, deleted: block.id };
 	},
 

@@ -21,7 +21,8 @@
 		'render_pdf_thumbnail_cached',
 		'get_cached_document',
 		'extract_embedded_fonts_cached',
-		'delete_pages'
+		'delete_pages',
+		'delete_shapes'
 	]);
 	const NEUTRAL = {
 		read_open_session: null,

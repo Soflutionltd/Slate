@@ -92,6 +92,18 @@ impl Bridge {
                     .collect::<Result<Vec<u32>, String>>()?;
                 Ok(Reply::Bytes(alto_pdf_engine::pdf_ops::delete_pages(bytes, pages)?))
             }
+            "delete_shapes" => {
+                let id = text(&args, "id")?;
+                let page = number(&args, "page")? as u32;
+                let bytes = self.doc_bytes(&args["bytes"])?;
+                let shapes: Vec<pdf_edit::ShapeTarget> =
+                    serde_json::from_value(args["shapes"].clone()).map_err(|e| e.to_string())?;
+                let updated = pdf_edit::delete_shapes(&bytes, page, &shapes)?;
+                if let Some(pages) = self.baselines.get_mut(&id) {
+                    pages.remove(&page);
+                }
+                Ok(Reply::Bytes(updated))
+            }
             "take_staged_bytes" => {
                 let token = text(&args, "token")?;
                 let bytes = self.doc_bytes(&json!(token))?;

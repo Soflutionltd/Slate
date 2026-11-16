@@ -374,5 +374,51 @@
 		};
 	};
 
+	// Suppression d'une forme (bandeau gris sous un titre) : elle sort du PDF via
+	// le moteur, le texte posé dessus reste, Précédent la ramène, Suivant la
+	// retire de nouveau.
+	scenarios.deleteShapeUndoRedo = async () => {
+		await openFixture('banner.pdf');
+		await enterEdit('Microbiologie');
+		const shapes = () => [...document.querySelectorAll('.edit-block.shape')];
+		const texts = () =>
+			[...document.querySelectorAll('.edit-block.text')].map(blockText).filter(Boolean).sort().join('|');
+		const settled = async (count) => {
+			await until(() => shapes().length === count);
+			await wait(400);
+		};
+		await until(() => shapes().length === 2);
+		const textsBefore = texts();
+		const banner = shapes().sort((a, b) => b.offsetHeight - a.offsetHeight)[0];
+		banner.click();
+		await wait(200);
+		const selectedShape = Boolean(document.querySelector('.edit-block.shape.selected'));
+		document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true }));
+		await settled(1);
+		const afterDelete = { shapes: shapes().length, texts: texts(), thinLeft: shapes()[0].offsetHeight <= 8 };
+		button('undo-button').click();
+		await settled(2);
+		const afterUndo = { shapes: shapes().length, texts: texts() };
+		button('redo-button').click();
+		await settled(1);
+		const afterRedo = { shapes: shapes().length, texts: texts() };
+		const calls = window.__harnessNativeCalls;
+		const checks = {
+			selectedShape,
+			engineRemovedShape: calls.delete_shapes === 1,
+			bannerGoneRuleKept: afterDelete.shapes === 1 && afterDelete.thinLeft,
+			textUntouched: afterDelete.texts === textsBefore,
+			undoRestoresShape: afterUndo.shapes === 2 && afterUndo.texts === textsBefore,
+			redoRemovesShapeAgain: afterRedo.shapes === 1 && afterRedo.texts === textsBefore,
+			noErrors: errors.length === 0
+		};
+		return {
+			ok: Object.values(checks).every(Boolean),
+			checks,
+			measures: { textsBefore, afterDelete, afterUndo, afterRedo, nativeCalls: { ...calls }, errors: [...errors] },
+			unknownCommands: [...(window.__harnessUnknownCommands || [])]
+		};
+	};
+
 	window.__harness = { scenarios, openFixture, block, button, relative, wait };
 })();

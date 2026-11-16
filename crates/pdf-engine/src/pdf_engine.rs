@@ -1661,6 +1661,85 @@ fn analyze_with_pdfium(bytes: &[u8], page: u32) -> Result<PdfAnalysis, String> {
         !rect_overlaps_text(&text_boxes, block.x, block.y, block.width, block.height, 0.2)
     });
 
+    // Formes vectorielles (bandeaux, cadres, filets) : un bloc par tracé VISIBLE,
+    // pour pouvoir le sélectionner et le supprimer. Écartés : les fonds pleine
+    // page, les tracés invisibles (blancs, transparents, masques de découpe) et
+    // ceux déjà englobés dans un bloc image (éléments d'un logo).
+    let image_boxes: Vec<(f64, f64, f64, f64)> = blocks
+        .iter()
+        .filter(|b| b.kind == "image")
+        .map(|b| (b.x, b.y, b.width, b.height))
+        .collect();
+    let is_visible_color = |color: PdfColor| {
+        color.alpha() > 0 && (color.red() < 250 || color.green() < 250 || color.blue() < 250)
+    };
+    // Au-delà, la page est une illustration vectorielle (plan, graphique dense) :
+    // un bloc par tracé noierait l'éditeur sans rien apporter.
+    const MAX_SHAPES_PER_PAGE: usize = 300;
+    let mut shape_blocks: Vec<PdfEditBlock> = Vec::new();
+    for (index, object) in page.objects().iter().enumerate() {
+        let Some(path) = object.as_path_object() else {
+            continue;
+        };
+        let Ok(bounds) = object.bounds() else {
+            continue;
+        };
+        let x = bounds.left().value as f64;
+        let y = page_height - bounds.top().value as f64;
+        let width = bounds.width().value as f64;
+        let height = bounds.height().value as f64;
+        if width.max(height) < 4.0 {
+            continue;
+        }
+        if width >= page_width * 0.85 && height >= page_height * 0.85 {
+            continue;
+        }
+        let filled = path
+            .fill_mode()
+            .map(|mode| mode != PdfPathFillMode::None)
+            .unwrap_or(false)
+            && object.fill_color().map(is_visible_color).unwrap_or(false);
+        let stroked = path.is_stroked().unwrap_or(false)
+            && object.stroke_color().map(is_visible_color).unwrap_or(false);
+        if !filled && !stroked {
+            continue;
+        }
+        let area = (width * height).max(0.01);
+        let inside_image = image_boxes.iter().any(|&(ix, iy, iw, ih)| {
+            let inter_w = (x + width).min(ix + iw) - x.max(ix);
+            let inter_h = (y + height).min(iy + ih) - y.max(iy);
+            inter_w > 0.0 && inter_h > 0.0 && inter_w * inter_h >= area * 0.6
+        });
+        if inside_image {
+            continue;
+        }
+        shape_blocks.push(PdfEditBlock {
+            id: format!("pdfium-shape-{}-{index}", page_index + 1),
+            kind: "shape".to_string(),
+            page: page_index as u32 + 1,
+            text: String::new(),
+            x,
+            y,
+            width,
+            height,
+            font_size: 0.0,
+            bold: false,
+            italic: false,
+            serif: false,
+            font_name: String::new(),
+            justified: false,
+            chars: Vec::new(),
+            source: "pdfium".to_string(),
+            confidence: 90.0,
+            field_kind: None,
+            critical: false,
+            diagnostics: Vec::new(),
+        });
+    }
+    if shape_blocks.len() <= MAX_SHAPES_PER_PAGE {
+        blocks.append(&mut shape_blocks);
+    }
+
     annotate_document_intelligence(&mut blocks);
 
     Ok(PdfAnalysis {

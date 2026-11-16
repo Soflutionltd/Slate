@@ -411,3 +411,130 @@ fn view_render_is_exact_rgba_without_html_form_fields() {
     assert!(pdf_engine::render_page_rgba_for_view(&pdf, 1, 0.0, 10, 10).is_err());
     assert!(pdf_engine::render_page_rgba_for_view(&pdf, 2, 2.0, 10, 10).is_err());
 }
+
+// ---------------------------------------------------------------------------
+// Formes vectorielles : détection et suppression
+// ---------------------------------------------------------------------------
+
+/// Page A4 avec un bandeau gris sous un titre, un filet fin et une ligne de
+/// texte : le cas « barre de section » d'un compte rendu.
+fn build_banner_pdf() -> Vec<u8> {
+    let mut doc = Document::with_version("1.5");
+    let font_id = doc.add_object(dictionary! {
+        "Type" => "Font",
+        "Subtype" => "Type1",
+        "BaseFont" => "Helvetica",
+    });
+    let resources_id = doc.add_object(dictionary! {
+        "Font" => dictionary! { "F1" => font_id },
+    });
+    let content = b"0.85 g\n72 700 451 20 re\nf\n0 g\n0.4 G\n0.75 w\n72 650 m\n372 650 l\nS\n\
+BT /F1 12 Tf 250 706 Td (Microbiologie) Tj ET\n\
+BT /F1 12 Tf 72 620 Td (Resultat negatif) Tj ET\n";
+    let content_id = doc.add_object(Stream::new(dictionary! {}, content.to_vec()));
+    let pages_id = doc.new_object_id();
+    let page_id = doc.add_object(dictionary! {
+        "Type" => "Page",
+        "Parent" => pages_id,
+        "Contents" => content_id,
+        "MediaBox" => vec![
+            Object::Integer(0),
+            Object::Integer(0),
+            Object::Integer(595),
+            Object::Integer(842),
+        ],
+        "Resources" => resources_id,
+    });
+    doc.objects.insert(
+        pages_id,
+        Object::Dictionary(dictionary! {
+            "Type" => "Pages",
+            "Kids" => vec![Object::from(page_id)],
+            "Count" => 1,
+        }),
+    );
+    let catalog_id = doc.add_object(dictionary! {
+        "Type" => "Catalog",
+        "Pages" => pages_id,
+    });
+    doc.trailer.set("Root", catalog_id);
+    let mut buf = Vec::new();
+    doc.save_to(&mut Cursor::new(&mut buf)).expect("save pdf");
+    buf
+}
+
+/// Formes de la page 1, telles que l'éditeur les reçoit puis les renvoie au moteur.
+fn page_shapes(bytes: &[u8]) -> Vec<pdf_edit::ShapeTarget> {
+    pdf_engine::analyze_pdf_page(bytes, 1)
+        .expect("analyze page")
+        .blocks
+        .iter()
+        .filter(|block| block.kind == "shape")
+        .map(|block| pdf_edit::ShapeTarget {
+            index: block.id.rsplit('-').next().unwrap().parse().unwrap(),
+            x: block.x,
+            y: block.y,
+            width: block.width,
+            height: block.height,
+        })
+        .collect()
+}
+
+#[test]
+fn analysis_reports_visible_shapes_as_blocks() {
+    let pdf = build_banner_pdf();
+    let shapes = page_shapes(&pdf);
+    assert_eq!(shapes.len(), 2, "bandeau + filet attendus : {shapes:?}");
+    let banner = shapes.iter().find(|s| s.height > 10.0).expect("bandeau");
+    assert!((banner.width - 451.0).abs() < 1.0 && (banner.height - 20.0).abs() < 1.0);
+    // Origine en haut à gauche : 842 - (700 + 20).
+    assert!((banner.x - 72.0).abs() < 1.0 && (banner.y - 122.0).abs() < 1.0);
+    let rule = shapes.iter().find(|s| s.height <= 2.0).expect("filet");
+    // PDFium compte l'épaisseur du trait (0,75 pt) à chaque extrémité.
+    assert!((rule.width - 301.5).abs() < 0.5, "largeur du filet : {}", rule.width);
+}
+
+#[test]
+fn delete_shapes_removes_only_the_targeted_shape() {
+    let pdf = build_banner_pdf();
+    let shapes = page_shapes(&pdf);
+    let banner = shapes.iter().find(|s| s.height > 10.0).unwrap().clone();
+
+    let out = pdf_edit::delete_shapes(&pdf, 1, &[banner]).expect("delete banner");
+
+    let left = page_shapes(&out);
+    assert_eq!(left.len(), 1, "seul le filet doit rester : {left:?}");
+    assert!(left[0].height <= 2.0);
+    let text = page_text(&out, 1);
+    assert!(text.contains("Microbiologie") && text.contains("Resultat negatif"), "texte intact : {text}");
+}
+
+#[test]
+fn delete_shapes_finds_the_shape_by_bounds_when_the_index_is_stale() {
+    let pdf = build_banner_pdf();
+    let shapes = page_shapes(&pdf);
+    let banner = shapes.iter().find(|s| s.height > 10.0).unwrap().clone();
+    let rule = shapes.iter().find(|s| s.height <= 2.0).unwrap().clone();
+    // Index du filet, boîte du bandeau : c'est le bandeau qui doit partir.
+    let stale = pdf_edit::ShapeTarget { index: rule.index, ..banner };
+
+    let out = pdf_edit::delete_shapes(&pdf, 1, &[stale]).expect("delete by bounds");
+
+    let left = page_shapes(&out);
+    assert_eq!(left.len(), 1);
+    assert!(left[0].height <= 2.0, "le filet doit rester : {left:?}");
+}
+
+#[test]
+fn delete_shapes_refuses_an_unknown_shape_and_a_text_object() {
+    let pdf = build_banner_pdf();
+    let nowhere = pdf_edit::ShapeTarget { index: 0, x: 300.0, y: 400.0, width: 50.0, height: 50.0 };
+    assert!(pdf_edit::delete_shapes(&pdf, 1, &[nowhere]).is_err());
+
+    // Boîte d'un bloc texte : ce n'est pas un tracé, rien ne doit être retiré.
+    let analysis = pdf_engine::analyze_pdf_page(&pdf, 1).expect("analyze page");
+    let text = analysis.blocks.iter().find(|b| b.kind == "text").expect("text block");
+    let as_shape = pdf_edit::ShapeTarget { index: 2, x: text.x, y: text.y, width: text.width, height: text.height };
+    assert!(pdf_edit::delete_shapes(&pdf, 1, &[as_shape]).is_err());
+    assert!(pdf_edit::delete_shapes(&pdf, 1, &[]).is_err());
+}

@@ -2,7 +2,7 @@
 //! Le module Pdfium WASM externe doit être initialisé côté JS avant tout appel
 //! (voir `pdf-bridge.js`).
 
-use alto_pdf_engine::{pdf_compress, pdf_engine, pdf_forms, pdf_ops, pdf_tools};
+use alto_pdf_engine::{pdf_compress, pdf_edit, pdf_engine, pdf_forms, pdf_ops, pdf_tools};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
@@ -80,6 +80,13 @@ pub fn delete_pages(bytes: &[u8], page_numbers: JsValue) -> Result<Vec<u8>, JsEr
     let page_numbers: Vec<u32> =
         serde_wasm_bindgen::from_value(page_numbers).map_err(|e| to_js_err(e.to_string()))?;
     pdf_ops::delete_pages(bytes.to_vec(), page_numbers).map_err(to_js_err)
+}
+
+#[wasm_bindgen]
+pub fn delete_shapes(bytes: &[u8], page: u32, shapes: JsValue) -> Result<Vec<u8>, JsError> {
+    let shapes: Vec<pdf_edit::ShapeTarget> =
+        serde_wasm_bindgen::from_value(shapes).map_err(|e| to_js_err(e.to_string()))?;
+    pdf_edit::delete_shapes(bytes, page, &shapes).map_err(to_js_err)
 }
 
 #[wasm_bindgen]

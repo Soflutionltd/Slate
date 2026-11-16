@@ -282,6 +282,10 @@
 			const api = await ensureWasm();
 			return api.delete_pages(toUint8Array(bytes), pageNumbers);
 		},
+		async delete_shapes({ bytes, page, shapes }) {
+			const api = await ensureWasm();
+			return api.delete_shapes(toUint8Array(bytes), page, shapes);
+		},
 		async extract_pages({ bytes, pageNumbers }) {
 			const api = await ensureWasm();
 			return api.extract_pages(toUint8Array(bytes), pageNumbers);

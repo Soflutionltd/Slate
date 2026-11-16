@@ -1250,6 +1250,110 @@ pub fn delete_image(bytes: &[u8], image_id: &str) -> Result<Vec<u8>, String> {
     crate::pdf_ops::compress_pdf(intermediate.clone()).or(Ok(intermediate))
 }
 
+/// Forme vectorielle visée par une suppression : index d'objet donné par
+/// l'analyse de la page (`pdfium-shape-<page>-<index>`) et boîte attendue, en
+/// points, origine en haut à gauche.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct ShapeTarget {
+    pub index: usize,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+/// Écart toléré (points) entre la boîte attendue d'une forme et celle du tracé.
+const SHAPE_BOUNDS_TOLERANCE: f64 = 1.0;
+
+/// Supprime des formes vectorielles (bandeaux, cadres, filets) d'une page.
+/// Chaque forme est vérifiée par sa boîte : une édition de texte faite entre
+/// l'analyse et la suppression peut décaler les index d'objets, et retirer le
+/// tracé d'à côté serait invisible pour l'utilisateur. Si l'index ne désigne
+/// plus ce tracé, il est retrouvé par sa boîte ; introuvable, rien n'est modifié.
+pub fn delete_shapes(
+    bytes: &[u8],
+    page_number: u32,
+    shapes: &[ShapeTarget],
+) -> Result<Vec<u8>, String> {
+    if shapes.is_empty() {
+        return Err("Provide at least one shape to delete.".to_string());
+    }
+    let intermediate;
+    {
+        let guard = pdfium_guard()?;
+        let pdfium = &*guard;
+        let document = pdfium
+            .load_pdf_from_byte_slice(bytes, None)
+            .map_err(|e| e.to_string())?;
+        check_page(page_number, document.pages().len() as u32)?;
+        let mut page = document
+            .pages()
+            .get((page_number - 1) as i32)
+            .map_err(|e| e.to_string())?;
+        let page_height = page.height().value as f64;
+
+        // Écart entre la boîte du tracé `index` et la boîte attendue ; None si
+        // l'objet n'est pas un tracé.
+        let path_boxes: Vec<Option<(f64, f64, f64, f64)>> = page
+            .objects()
+            .iter()
+            .map(|object| {
+                if object.object_type() != PdfPageObjectType::Path {
+                    return None;
+                }
+                object_bbox_top_left(&object, page_height)
+            })
+            .collect();
+        let distance = |candidate: (f64, f64, f64, f64), shape: &ShapeTarget| {
+            (candidate.0 - shape.x)
+                .abs()
+                .max((candidate.1 - shape.y).abs())
+                .max((candidate.2 - (shape.x + shape.width)).abs())
+                .max((candidate.3 - (shape.y + shape.height)).abs())
+        };
+
+        let mut indices: Vec<usize> = Vec::with_capacity(shapes.len());
+        for shape in shapes {
+            let at_index = path_boxes
+                .get(shape.index)
+                .copied()
+                .flatten()
+                .filter(|candidate| distance(*candidate, shape) <= SHAPE_BOUNDS_TOLERANCE);
+            let resolved = if at_index.is_some() {
+                Some(shape.index)
+            } else {
+                path_boxes
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| !indices.contains(index))
+                    .filter_map(|(index, candidate)| {
+                        candidate.map(|candidate| (index, distance(candidate, shape)))
+                    })
+                    .filter(|(_, gap)| *gap <= SHAPE_BOUNDS_TOLERANCE)
+                    .min_by(|a, b| a.1.total_cmp(&b.1))
+                    .map(|(index, _)| index)
+            };
+            let Some(index) = resolved else {
+                return Err(format!(
+                    "Shape not found on page {page_number} (object {}). Reload the page.",
+                    shape.index
+                ));
+            };
+            if !indices.contains(&index) {
+                indices.push(index);
+            }
+        }
+        indices.sort_unstable();
+        for &index in indices.iter().rev() {
+            remove_page_object(&mut page, index)?;
+        }
+        page.regenerate_content().map_err(|e| e.to_string())?;
+        intermediate = document.save_to_bytes().map_err(|e| e.to_string())?;
+    }
+    // Purge des objets orphelins (équivalent garbage collection + deflate).
+    crate::pdf_ops::compress_pdf(intermediate.clone()).or(Ok(intermediate))
+}
+
 // ---------------------------------------------------------------------------
 // 7) pdf_redact
 // ---------------------------------------------------------------------------

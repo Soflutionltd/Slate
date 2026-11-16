@@ -28,9 +28,20 @@ GRID_LINES = [
 ]
 
 
-def build_pdf(lines):
-    content = "".join(
-        f"BT /{font} {size} Tf {x} {y} Td ({text}) Tj ET\n" for font, size, x, y, text in lines
+# Bandeau gris sous un titre, puis un filet fin : les formes vectorielles
+# qu'on sélectionne et supprime dans l'éditeur.
+BANNER_LINES = [
+    ("F2", 12, 270, 606, "Microbiologie"),
+    ("F1", 11, 72, 560, "Recherche de pathogenes"),
+    ("F1", 11, 72, 520, "Resultat negatif"),
+]
+BANNER_SHAPES = "0.85 g\n72 600 468 20 re\nf\n0 g\n0.4 G\n0.75 w\n72 545 m\n372 545 l\nS\n"
+
+
+def build_pdf(lines, shapes=""):
+    content = (
+        shapes
+        + "".join(f"BT /{font} {size} Tf {x} {y} Td ({text}) Tj ET\n" for font, size, x, y, text in lines)
     ).encode()
     objects = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
@@ -59,3 +70,4 @@ if __name__ == "__main__":
     target.mkdir(parents=True, exist_ok=True)
     (target / "wire.pdf").write_bytes(build_pdf(WIRE_LINES))
     (target / "grid.pdf").write_bytes(build_pdf(GRID_LINES))
+    (target / "banner.pdf").write_bytes(build_pdf(BANNER_LINES, BANNER_SHAPES))

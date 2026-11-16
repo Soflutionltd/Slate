@@ -3869,6 +3869,14 @@ body.has-precise-edit-selection .edit-block.editing.editing-pristine::selection 
 	background: transparent;
 }
 
+/* Forme vectorielle (bandeau, cadre, filet) : un contour seul se confond avec
+   le tracé, la sélection est donc teintée comme le rectangle de sélection. */
+.edit-block.shape.selected {
+	background: rgba(34, 113, 177, 0.16);
+	outline: 1.5px solid #2271b1;
+	outline-offset: 0;
+}
+
 .app-shell.editing .reader-toolbar {
 	background: linear-gradient(90deg, rgba(255, 240, 238, 0.92), rgba(255, 255, 255, 0.78));
 }
