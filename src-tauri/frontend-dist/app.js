@@ -810,6 +810,8 @@ const translations = {
 		histDuplicate: 'Block duplicated',
 		histSignature: 'Signature',
 		histPage: 'Page modified',
+		histPageDelete: 'Page deleted',
+		historyDocMissing: 'This step of the history can no longer be restored.',
 		options: 'Options',
 		apply: 'Apply',
 		processing: 'Processing…',
@@ -1251,6 +1253,8 @@ const translations = {
 		histDuplicate: 'Bloc dupliqué',
 		histSignature: 'Signature',
 		histPage: 'Page modifiée',
+		histPageDelete: 'Page supprimée',
+		historyDocMissing: 'Cette étape de l’historique ne peut plus être restaurée.',
 		options: 'Options',
 		apply: 'Appliquer',
 		processing: 'Traitement…',
@@ -2454,6 +2458,15 @@ function compactHistorySnap(snap) {
 	};
 }
 
+// Étapes décrivant le document affiché. Sur les deux piles, l'étape de
+// structure la plus proche du haut et tout ce qui est en dessous visent un autre
+// document, qui n'existe qu'en mémoire : seul le dessus va sur disque (au
+// rechargement, c'est le document affiché qui est ouvert).
+function liveDocumentHistory(stack) {
+	if (!Array.isArray(stack)) return [];
+	return stack.slice(stack.findLastIndex((entry) => entry.snap?.doc) + 1);
+}
+
 function compactHistoryStack(stack) {
 	if (!Array.isArray(stack) || !stack.length) return [];
 	const start = Math.max(0, stack.length - HISTORY_DISK_MAX_ENTRIES);
@@ -2556,8 +2569,8 @@ function applyLiveEditSnap(tab, snap) {
 }
 
 function buildPersistedHistoryPayload(tab) {
-	const undoStack = compactHistoryStack(tab.undoStack);
-	const redoStack = compactHistoryStack(tab.redoStack);
+	const undoStack = compactHistoryStack(liveDocumentHistory(tab.undoStack));
+	const redoStack = compactHistoryStack(liveDocumentHistory(tab.redoStack));
 	const current = liveEditSnapFromTab(tab);
 	if (!undoStack.length && !redoStack.length && !current) return null;
 	let payload = {
@@ -4256,6 +4269,8 @@ function approxSnapshotBytes(snap) {
 		if (Array.isArray(b.pdfChars)) bytes += b.pdfChars.length * 160;
 	}
 	bytes += (snap.signaturePlacements || []).length * 400;
+	// Étape de structure (suppression de page) : le document entier d'avant.
+	if (snap.doc?.bytes) bytes += snap.doc.bytes.length;
 	return bytes;
 }
 
@@ -4322,59 +4337,111 @@ function applyEditableSnapshot(snap) {
 	return Promise.resolve();
 }
 
+// Document affiché (octets, notes, pages éditées en natif) : ce qu'une étape
+// de structure garde pour pouvoir revenir en arrière par-dessus elle.
+function captureDocumentState() {
+	return {
+		bytes: state.fileBytes,
+		annotations: state.annotations.map((annotation) => ({ ...annotation })),
+		touchedPages: [...nativeTouchedPagesSet()]
+	};
+}
+
+async function liveDocumentState() {
+	if (state.nativeTextDirty) await syncNativeDocumentBytes({ render: false });
+	return captureDocumentState();
+}
+
+// Remet un document gardé par l'historique (page supprimée qui réapparaît, ou
+// suppression rejouée). Même chemin d'affichage qu'une opération de structure,
+// sans toucher à l'historique.
+async function restoreDocumentState(doc, page) {
+	const tab = currentTab();
+	if (!tab || !(doc?.bytes instanceof Uint8Array)) throw new Error(t('historyDocMissing'));
+	const pdf = await pdfjsLib.getDocument(pdfDocumentOptions({ data: doc.bytes })).promise;
+	rememberPdfViewSource(pdf, doc.bytes);
+	state.fileBytes = doc.bytes;
+	state.pdf = pdf;
+	state.annotations = doc.annotations.map((annotation) => ({ ...annotation }));
+	state.nativeTextDirty = false;
+	nativeEditedPagesSet().clear();
+	tab.nativeTouchedPages = new Set(doc.touchedPages);
+	tab.fileBytes = doc.bytes;
+	tab.pdf = pdf;
+	try {
+		await invokeCommand('cache_document', { id: currentDocId(), bytes: await stageBytes(doc.bytes) });
+	} catch (_err) {
+		// Fenêtre sans natif : le cache se re-primera au prochain cache_miss.
+	}
+	_thumbnailCache.clear();
+	state.page = Math.min(Math.max(1, Number(page) || state.page), pdf.numPages);
+	await mountPagesStack();
+	goToPage(state.page);
+	refreshPagesDrawerIfOpen();
+}
+
+// Une étape de structure porte `snap.doc` : le document d'AVANT l'opération.
+// La franchir dans un sens ou dans l'autre change de document ; l'étape
+// poussée sur l'autre pile garde alors le document qu'on quitte.
+async function historyJump(fromStack, toStack, steps) {
+	const tab = currentTab();
+	if (!tab || !Array.isArray(tab[fromStack]) || !tab[fromStack].length) return;
+	if (!Array.isArray(tab[toStack])) tab[toStack] = [];
+	const crossesStructure = tab[fromStack].slice(-steps).some((entry) => entry.snap?.doc);
+	let worldDoc = crossesStructure ? await liveDocumentState() : null;
+	let changedDoc = false;
+	let current = captureEditableSnapshot();
+	for (let s = 0; s < steps; s += 1) {
+		const entry = tab[fromStack].pop();
+		if (!entry) break;
+		let kept = current;
+		if (entry.snap.doc) {
+			kept = { ...current, doc: worldDoc };
+			worldDoc = entry.snap.doc;
+			changedDoc = true;
+		}
+		tab[toStack].push({ snap: kept, label: entry.label, time: entry.time, bytes: approxSnapshotBytes(kept) });
+		current = entry.snap;
+	}
+	if (changedDoc) await restoreDocumentState(worldDoc, current.page);
+	await applyEditableSnapshot(current);
+	updateUndoRedoButtons();
+	refreshHistoryPanelIfVisible();
+	schedulePersistedEditHistory();
+}
+
+// Un saut à la fois : franchir une suppression de page recharge le document,
+// un second ⌘Z pendant ce temps lirait des piles à moitié mises à jour.
+let _historyJumpChain = Promise.resolve();
+function queueHistoryJump(fromStack, toStack, steps) {
+	const run = () => historyJump(fromStack, toStack, steps);
+	const next = _historyJumpChain.then(run, run);
+	_historyJumpChain = next.catch(() => {});
+	return next;
+}
+
 // Recule de `steps` étapes dans l'historique en n'appliquant l'état (rendu +
 // réconciliation native) qu'UNE seule fois — le clic dans le panneau
 // Historique peut sauter des dizaines d'étapes d'un coup.
-async function historyJumpBack(steps) {
-	const tab = currentTab();
-	if (!tab || !Array.isArray(tab.undoStack) || !tab.undoStack.length) return;
-	if (!Array.isArray(tab.redoStack)) tab.redoStack = [];
-	let current = captureEditableSnapshot();
-	for (let s = 0; s < steps; s += 1) {
-		const entry = tab.undoStack.pop();
-		if (!entry) break;
-		tab.redoStack.push({
-			snap: current,
-			label: entry.label,
-			time: entry.time,
-			bytes: entry.bytes
-		});
-		current = entry.snap;
-	}
-	await applyEditableSnapshot(current);
-	updateUndoRedoButtons();
-	refreshHistoryPanelIfVisible();
-	schedulePersistedEditHistory();
+function historyJumpBack(steps) {
+	return queueHistoryJump('undoStack', 'redoStack', steps);
 }
 
-async function historyJumpForward(steps) {
-	const tab = currentTab();
-	if (!tab || !Array.isArray(tab.redoStack) || !tab.redoStack.length) return;
-	if (!Array.isArray(tab.undoStack)) tab.undoStack = [];
-	let current = captureEditableSnapshot();
-	for (let s = 0; s < steps; s += 1) {
-		const entry = tab.redoStack.pop();
-		if (!entry) break;
-		tab.undoStack.push({
-			snap: current,
-			label: entry.label,
-			time: entry.time,
-			bytes: entry.bytes
-		});
-		current = entry.snap;
-	}
-	await applyEditableSnapshot(current);
-	updateUndoRedoButtons();
-	refreshHistoryPanelIfVisible();
-	schedulePersistedEditHistory();
+function historyJumpForward(steps) {
+	return queueHistoryJump('redoStack', 'undoStack', steps);
+}
+
+function reportHistoryJumpError(error) {
+	console.error(error);
+	setStatus(error instanceof Error ? error.message : String(error), 'error');
 }
 
 function undoEdit() {
-	void historyJumpBack(1);
+	historyJumpBack(1).catch(reportHistoryJumpError);
 }
 
 function redoEdit() {
-	void historyJumpForward(1);
+	historyJumpForward(1).catch(reportHistoryJumpError);
 }
 
 function updateUndoRedoButtons() {
@@ -7481,9 +7548,12 @@ function rotatePageOverlays(pageNumber, angle, aspect) {
 // lopdf conserve le /ID du PDF, donc le fingerprint ne change pas : le cache
 // PDFium natif et les miniatures répondraient avec l'ANCIEN document si on ne
 // les re-primait pas explicitement ici.
-async function replaceDocumentStructure(bytes, { focusPage, mapPage, rotated } = {}) {
+// `undoLabel` : l'opération devient une étape de l'historique (le document
+// d'avant est gardé) au lieu de vider l'historique.
+async function replaceDocumentStructure(bytes, { focusPage, mapPage, rotated, undoLabel } = {}) {
 	const tab = currentTab();
 	if (!tab) return;
+	const undoSnap = undoLabel ? { ...captureEditableSnapshot(), doc: captureDocumentState() } : null;
 	const normalized = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
 	const loadingTask = pdfjsLib.getDocument(pdfDocumentOptions({ data: normalized }));
 	const pdf = await loadingTask.promise;
@@ -7517,10 +7587,14 @@ async function replaceDocumentStructure(bytes, { focusPage, mapPage, rotated } =
 	nativeEditedPagesSet().clear();
 	tab.fileBytes = normalized;
 	tab.pdf = pdf;
-	// L'historique référence l'ancienne structure de pages : il n'est plus rejouable.
-	tab.undoStack = [];
-	tab.redoStack = [];
-	updateUndoRedoButtons();
+	if (undoSnap) {
+		commitSnapshot(undoSnap, undoLabel);
+	} else {
+		// L'historique référence l'ancienne structure de pages : il n'est plus rejouable.
+		tab.undoStack = [];
+		tab.redoStack = [];
+		updateUndoRedoButtons();
+	}
 
 	try {
 		await invokeCommand('cache_document', { id: currentDocId(), bytes: await stageBytes(normalized) });
@@ -21349,7 +21423,8 @@ async function handleDeletePage(pageNumber) {
 			mapPage: (page) => {
 				if (page === targetPage) return null;
 				return page > targetPage ? page - 1 : page;
-			}
+			},
+			undoLabel: 'histPageDelete'
 		});
 		setStatus(t('deleteDone'));
 	} catch (error) {
@@ -22245,7 +22320,7 @@ function renderHistoryPanel() {
 			label: `${t(entry.label)} — ${t('historyUndone').toLowerCase()}`,
 			time: formatHistoryTime(entry.time),
 			undone: true,
-			onClick: () => historyJumpForward(steps)
+			onClick: () => historyJumpForward(steps).catch(reportHistoryJumpError)
 		});
 	}
 	// Actions effectuées, la plus récente en haut. L'entrée du haut correspond
@@ -22258,7 +22333,7 @@ function renderHistoryPanel() {
 			label: t(entry.label),
 			time: formatHistoryTime(entry.time),
 			current: steps === 0,
-			onClick: steps > 0 ? () => historyJumpBack(steps) : null
+			onClick: steps > 0 ? () => historyJumpBack(steps).catch(reportHistoryJumpError) : null
 		});
 	}
 	// État d'origine : uniquement si aucune éviction n'a tronqué l'historique
@@ -22268,7 +22343,7 @@ function renderHistoryPanel() {
 			label: t('historyOriginal'),
 			time: '',
 			current: !undoStack.length,
-			onClick: undoStack.length ? () => historyJumpBack(undoStack.length) : null
+			onClick: undoStack.length ? () => historyJumpBack(undoStack.length).catch(reportHistoryJumpError) : null
 		});
 	}
 }
@@ -25388,7 +25463,8 @@ const aiToolHandlers = {
 			{ pageNumbers: targets },
 			{
 				focusPage: Math.min(targets[0], state.pdf.numPages - targets.length),
-				mapPage: (page) => (removed.has(page) ? null : page - targets.filter((target) => target < page).length)
+				mapPage: (page) => (removed.has(page) ? null : page - targets.filter((target) => target < page).length),
+				undoLabel: 'histPageDelete'
 			}
 		);
 		return { document_id: tab.id, deleted: targets, pages: state.pdf.numPages };
@@ -25489,8 +25565,14 @@ const aiToolHandlers = {
 		}
 		const steps = tab.undoStack.length - start;
 		if (steps > 1) {
+			const firstDoc = tab.undoStack.slice(start).find((entry) => entry.snap?.doc)?.snap.doc;
 			tab.undoStack.splice(start + 1);
-			tab.undoStack[start].label = 'histAiTurn';
+			const kept = tab.undoStack[start];
+			if (firstDoc && !kept.snap.doc) {
+				kept.snap = { ...kept.snap, doc: firstDoc };
+				kept.bytes = approxSnapshotBytes(kept.snap);
+			}
+			kept.label = 'histAiTurn';
 			updateUndoRedoButtons();
 			refreshHistoryPanelIfVisible();
 			schedulePersistedEditHistory();

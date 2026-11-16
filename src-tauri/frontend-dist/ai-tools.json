@@ -603,7 +603,7 @@
 		{
 			"name": "delete_pages",
 			"title": "Delete pages",
-			"description": "Delete pages from the document. Needs the user's confirmation in Slate and clears the undo history.",
+			"description": "Delete pages from the document. Needs the user's confirmation in Slate. The deletion can be undone with the undo tool.",
 			"risk": "destructive",
 			"confirm": true,
 			"input_schema": {
