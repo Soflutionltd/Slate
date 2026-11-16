@@ -1,0 +1,30 @@
+[package]
+name = "slate-pdf-wasm"
+version = "0.1.0"
+edition = "2021"
+description = "Slate PDF engine WASM bindings — browser-facing API (PDFium + alto-pdf-engine)"
+license = "AGPL-3.0-or-later"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+alto-pdf-engine = { path = "../pdf-engine" }
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde-wasm-bindgen = "0.6"
+getrandom = { version = "0.4", features = ["wasm_js"] }
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
+[patch.crates-io]
+# lopdf 0.44.0 avec decode_frame protégé contre un /Columns piégé (non corrigé en amont).
+lopdf = { path = "../../vendor/lopdf" }
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true

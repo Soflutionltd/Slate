@@ -16,3 +16,6 @@ src-tauri/pdfium.tgz
 # Relais MCP distant (Cloudflare Worker)
 mcp-relay/node_modules/
 mcp-relay/.wrangler/
+
+# Sortie wasm-pack de pdf-wasm (copiée dans SofDocs/apps/web/static/wasm)
+crates/pdf-wasm/pkg/
