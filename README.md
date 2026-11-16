@@ -33,13 +33,13 @@ cargo tauri build --debug
 
 ## Release
 ```bash
-./release.sh
+./scripts/release.sh
 ```
-This produces `Alto.app.tar.gz`, `Alto.app.tar.gz.sig`, the DMG and a
-`latest.json` manifest. Upload these three files to a GitHub release tagged
-`v<version>` on `Soflution1/sofdocs-desktop`. The auto-updater configured in
-`tauri.conf.json` will pick it up automatically on next launch of any installed
-Alto app.
+This builds the signed and notarized universal bundle, generates the
+`latest.json` manifest and publishes the GitHub release `v<version>` on
+`Soflutionltd/Slate`. The auto-updater configured in `tauri.conf.json` reads
+`releases/latest/download/latest.json` from that repository and picks the new
+version up on next launch of any installed Slate app.
 
 ## License
 AGPL v3 — © 2026 Soflution LTD
